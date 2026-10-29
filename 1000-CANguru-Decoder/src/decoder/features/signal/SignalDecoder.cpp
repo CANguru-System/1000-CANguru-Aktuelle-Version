@@ -124,10 +124,10 @@ void SignalDecoder::onFeatureFrame(uint8_t featureId,
                                    uint8_t payloadLen)
 {
     const uint8_t payloadLenExpected = 8;
-    if (featureId != FEATURE_brigde2Decoder && featureId != FEATURE_SIGNAL)
+    if (featureId != FEATURE_BRIDGE2DECODER && featureId != FEATURE_SIGNAL)
         return;
     // Hier können eingehende Daten verarbeitet werden, z.B. ACKs oder Statusupdates
-    if (featureId == FEATURE_brigde2Decoder)
+    if (featureId == FEATURE_BRIDGE2DECODER)
     {
         switch (commandId)
         {

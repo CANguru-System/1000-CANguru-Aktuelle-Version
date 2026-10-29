@@ -501,7 +501,7 @@ bool handleTypedFrame(uint8_t featureId, uint8_t commandId, const uint8_t *data,
 bool handleIdBoundFrame(uint8_t featureId, uint8_t commandId, const uint8_t *data, int len)
 {
     /*        FEATURE_ALIVE, FRAME_DECODER_ID_ASSIGN,
-    FEATURE_brigde2Decoder
+    FEATURE_BRIDGE2DECODER
     EATURE_SETTING, SETTING_CMD_RESET_TO_DEFAULTS*/
 
     // Hier z.B. GET_SETTINGS, SET_SETTINGS, etc.
