@@ -43,7 +43,7 @@ const char *CS_PATH = "/lokomotive.cs2";
 void handleFirmware();
 
 // Forward für Routing-Funktionen
-void sendSwitchSignalSettingsToDecoder(uint8_t commandId, const uint8_t *payload, int payloadLen);
+void sendSwitchSignalSettingsToDecoder(uint8_t featureId, uint8_t commandId, const uint8_t *payload, int payloadLen);
 
 void initLittleFS()
 {
@@ -169,7 +169,7 @@ void handleGuiPacket(uint8_t featureId, uint8_t commandId, const uint8_t *payloa
     case SIGNAL_CMD_SET_END:
     case SIGNAL_CMD_TEST_RUN:
     case SIGNAL_CMD_STOP_ALL:
-      sendSwitchSignalSettingsToDecoder(commandId, payload, payloadLen);
+      sendSwitchSignalSettingsToDecoder(featureId, commandId, payload, payloadLen);
       break;
 
       // andere Features …
@@ -370,21 +370,24 @@ void readGUI()
 // SWITCH-Frames an Decoder senden (ESP-NOW)
 // ----------------------------------------------------
 
-void sendSwitchSignalSettingsToDecoder(uint8_t commandId, const uint8_t *payload, int payloadLen)
+void sendSwitchSignalSettingsToDecoder(uint8_t featureId, uint8_t commandId, const uint8_t *payload, int payloadLen)
 {
   if (payloadLen == 0)
   {
-    Serial.println("ERROR: SWITCH packet without payload");
+    Serial.println("ERROR: SWITCH/SIGNAL packet without payload");
     sendGuiOtaError(0x05);
     return;
   }
 
+  // Signal-Kommandos gehen an die Signaldecoder, alle anderen an die Weichendecoder
+  const uint8_t decoderType = (featureId == FEATURE_SIGNAL) ? DEVTYPE_SIGNAL : DEVTYPE_SWITCH;
+
   auto bytes = buildPacket(
-      FEATURE_SWITCH,
+      featureId,
       commandId,
       payload,
       payloadLen);
-  sendTheData(SendMode::TYPE, DEVTYPE_SWITCH, bytes.data(), bytes.size());
+  sendTheData(SendMode::TYPE, decoderType, bytes.data(), bytes.size());
 }
 
 // ----------------------------------------------------
