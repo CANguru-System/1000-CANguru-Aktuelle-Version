@@ -121,6 +121,9 @@ void handlePowerPacket(const uint8_t *mac, uint8_t commandId, const uint8_t *pay
         // Überstrom-Abschaltung: [Kanal, Strom_hi, Strom_lo]
         if (payloadLen < 3)
             return;
+        // Nothalt an die Gleisbox, damit auch WDP und alle Loks den Halt mitbekommen.
+        // Beim Senden meldet processCANFrames2CAN() den STOPP an GUI und Stromdecoder.
+        enqueueCANFrame2CAN(SysSTOPP, hashEnabled);
         p.commandId = POWER_CMD_SHUTDOWN;
         p.payload = {payload[0], payload[1], payload[2]};
         p.valid = true;
