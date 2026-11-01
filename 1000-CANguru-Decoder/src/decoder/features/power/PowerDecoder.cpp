@@ -156,14 +156,15 @@ void PowerDecoder::readCurrent()
 // auf der seriellen Schnittstelle aus, um sie mit einem Messgerät zu vergleichen.
 void PowerDecoder::diagSample()
 {
-    static float shuntMin[2] = {1e9f, 1e9f};
-    static float shuntMax[2] = {-1e9f, -1e9f};
-    static float shuntSum[2] = {0, 0};
-    static float busSum[2] = {0, 0};
+    static float shuntMin[3] = {1e9f, 1e9f, 1e9f};
+    static float shuntMax[3] = {-1e9f, -1e9f, -1e9f};
+    static float shuntSum[3] = {0, 0, 0};
+    static float busSum[3] = {0, 0, 0};
     static uint32_t samples = 0;
     static unsigned long lastPrint = 0;
 
-    for (uint8_t ch = 0; ch < 2; ch++)
+    // Alle drei INA-Kanaele, um die Verdrahtung (Modul CH1..CH3) zu erkennen
+    for (uint8_t ch = 0; ch < 3; ch++)
     {
         float shunt_mV = ina3221.getShuntVoltage(ch) * 1000.0f;
         shuntMin[ch] = min(shuntMin[ch], shunt_mV);
@@ -178,14 +179,14 @@ void PowerDecoder::diagSample()
         return;
     lastPrint = now;
 
-    for (uint8_t ch = 0; ch < 2; ch++)
+    for (uint8_t ch = 0; ch < 3; ch++)
     {
         float avg_mV = shuntSum[ch] / samples;
-        Serial.printf("DIAG K%u: Shunt min/mittel/max = %7.2f / %7.2f / %7.2f mV | "
+        Serial.printf("DIAG Modul-CH%u (Code-Kanal %u): Shunt min/mittel/max = %7.2f / %7.2f / %7.2f mV | "
                       "Bus = %5.2f V | I(mittel) = %5.0f mA bei %.3f Ohm | gemeldet = %u mA | Proben = %u\r\n",
-                      ch, shuntMin[ch], avg_mV, shuntMax[ch],
+                      ch + 1, ch, shuntMin[ch], avg_mV, shuntMax[ch],
                       busSum[ch] / samples, avg_mV / SHUNT_OHM, SHUNT_OHM,
-                      current_mA[ch], samples);
+                      (ch < 2) ? current_mA[ch] : 0, samples);
         shuntMin[ch] = 1e9f;
         shuntMax[ch] = -1e9f;
         shuntSum[ch] = 0;
