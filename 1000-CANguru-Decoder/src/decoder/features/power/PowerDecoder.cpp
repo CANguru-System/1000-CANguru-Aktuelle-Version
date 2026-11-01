@@ -179,21 +179,36 @@ void PowerDecoder::diagSample()
         return;
     lastPrint = now;
 
+    // Nur angeschlossene Kanäle (Busspannung > 5 V) ausführlich ausgeben,
+    // die übrigen in einer kurzen Zeile zusammenfassen.
+    const float connectedMinVolt = 5.0f;
+    char offen[64] = "";
     for (uint8_t ch = 0; ch < 3; ch++)
     {
-        float avg_mV = shuntSum[ch] / samples;
-        Serial.printf("DIAG Modul-CH%u (Code-Kanal %u): Shunt min/mittel/max = %7.2f / %7.2f / %7.2f mV | "
-                      "Bus = %5.2f V | I(mittel) = %5.0f mA bei %.3f Ohm | gemeldet = %u mA | Proben = %u\r\n",
-                      ch + 1, ch, shuntMin[ch], avg_mV, shuntMax[ch],
-                      busSum[ch] / samples, avg_mV / SHUNT_OHM, SHUNT_OHM,
-                      (ch < 2) ? current_mA[ch] : 0, samples);
+        float bus_V = busSum[ch] / samples;
+        if (bus_V > connectedMinVolt)
+        {
+            Serial.printf("DIAG CH%u: I = %5.0f mA (min %5.0f / max %5.0f) | %5.2f V | gemeldet %u mA\r\n",
+                          ch + 1,
+                          shuntSum[ch] / samples / SHUNT_OHM,
+                          shuntMin[ch] / SHUNT_OHM,
+                          shuntMax[ch] / SHUNT_OHM,
+                          bus_V,
+                          (ch < 2) ? current_mA[ch] : 0);
+        }
+        else
+        {
+            char teil[24];
+            snprintf(teil, sizeof(teil), " CH%u (%.2f V, %.0f mA)", ch + 1, bus_V, shuntSum[ch] / samples / SHUNT_OHM);
+            strncat(offen, teil, sizeof(offen) - strlen(offen) - 1);
+        }
         shuntMin[ch] = 1e9f;
         shuntMax[ch] = -1e9f;
         shuntSum[ch] = 0;
         busSum[ch] = 0;
     }
-    Serial.printf("DIAG Grenzwert = %u mA, Abschaltung K0/K1 = %d/%d\r\n",
-                  threshold_mA, shutdownActive[0], shutdownActive[1]);
+    Serial.printf("DIAG Grenzwert %u mA | Abschaltung CH1/CH2 = %d/%d | nicht angeschlossen:%s\r\n",
+                  threshold_mA, shutdownActive[0], shutdownActive[1], offen[0] ? offen : " -");
     samples = 0;
 }
 #endif
