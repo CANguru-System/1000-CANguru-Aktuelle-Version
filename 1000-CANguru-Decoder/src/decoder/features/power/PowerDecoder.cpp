@@ -196,17 +196,27 @@ void PowerDecoder::onFeatureFrame(uint8_t featureId,
     {
         // Shutdown kommt normalerweise vom Decoder selbst,
         // aber falls die Bridge es sendet:
-        uint8_t channel = payload[0];
-        shutdown(channel);
+        if (payloadLen < 1 || payload[0] > 1)
+            return;
+        shutdown(payload[0]);
         break;
     }
 
     case POWER_CHG_TRACK_CURRENT:
     {
-        // Shutdown kommt normalerweise vom Decoder selbst,
-        // aber falls die Bridge es sendet:
-        uint8_t state = payload[0];
-        setTrackPower(state == 1);
+        // STOPP/GO von GUI oder WDP
+        if (payloadLen < 1)
+            return;
+        bool on = (payload[0] == 1);
+        if (on)
+        {
+            // Beim Wiedereinschalten die Überstromüberwachung neu scharf schalten,
+            // sonst würde nach der ersten Abschaltung nie wieder abgeschaltet.
+            shutdownActive[0] = false;
+            shutdownActive[1] = false;
+            currentStatus = DecoderBase::AliveState::Online;
+        }
+        setTrackPower(on);
         break;
     }
 
