@@ -24,8 +24,8 @@ static const gpio_num_t shutdownPin = GPIO_NUM_20; // Define the GPIO pin for sh
 static const char *key_power_threshold = "pwrThreshold";
 
 // Widerstand der Shunts auf dem INA3221-Modul in Ohm.
-// 0,05 Ohm ist der Standardwert der Adafruit-Bibliothek – muss zur Hardware passen!
-static const float SHUNT_OHM = 0.05f;
+// Booster V2.0: INA3221-Modul mit Aufdruck R100 = 0,1 Ohm (Bibliothek nimmt 0,05 Ohm an).
+static const float SHUNT_OHM = 0.1f;
 
 static const char *power_getLine0()
 {
