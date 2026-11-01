@@ -23,6 +23,10 @@ static const gpio_num_t shutdownPin = GPIO_NUM_20; // Define the GPIO pin for sh
 // Keys für NVS
 static const char *key_power_threshold = "pwrThreshold";
 
+// Widerstand der Shunts auf dem INA3221-Modul in Ohm.
+// 0,05 Ohm ist der Standardwert der Adafruit-Bibliothek – muss zur Hardware passen!
+static const float SHUNT_OHM = 0.05f;
+
 static const char *power_getLine0()
 {
     return "CANguru-";
@@ -119,6 +123,8 @@ void PowerDecoder::setup()
             delay(1000);
         }
     }
+    for (uint8_t ch = 0; ch < 2; ch++)
+        ina3221.setShuntResistance(ch, SHUNT_OHM);
     // Grenzwert aus NVS laden
     beforeRestartCallback = PowerDecoderBeforeRestart;
     afterstartCallback = PowerDecoderAfterStart;
@@ -134,13 +140,62 @@ void PowerDecoder::setup()
 
 void PowerDecoder::readCurrent()
 {
-    static int addon = 0;
     for (uint8_t ch = 0; ch < 2; ch++)
     {
         float amps = ina3221.getCurrentAmps(ch);
-        current_mA[ch] = (uint16_t)(amps * 1000.0f); // mA
+        // Negative Werte (Stromrichtung umgekehrt) explizit auf 0 begrenzen
+        current_mA[ch] = (amps > 0.0f) ? (uint16_t)(amps * 1000.0f) : 0; // mA
     }
+#if POWER_DIAG
+    diagSample();
+#endif
 }
+
+#if POWER_DIAG
+// Diagnose: sammelt die Rohwerte des INA3221 und gibt sie einmal pro Sekunde
+// auf der seriellen Schnittstelle aus, um sie mit einem Messgerät zu vergleichen.
+void PowerDecoder::diagSample()
+{
+    static float shuntMin[2] = {1e9f, 1e9f};
+    static float shuntMax[2] = {-1e9f, -1e9f};
+    static float shuntSum[2] = {0, 0};
+    static float busSum[2] = {0, 0};
+    static uint32_t samples = 0;
+    static unsigned long lastPrint = 0;
+
+    for (uint8_t ch = 0; ch < 2; ch++)
+    {
+        float shunt_mV = ina3221.getShuntVoltage(ch) * 1000.0f;
+        shuntMin[ch] = min(shuntMin[ch], shunt_mV);
+        shuntMax[ch] = max(shuntMax[ch], shunt_mV);
+        shuntSum[ch] += shunt_mV;
+        busSum[ch] += ina3221.getBusVoltage(ch);
+    }
+    samples++;
+
+    unsigned long now = millis();
+    if (now - lastPrint < 1000)
+        return;
+    lastPrint = now;
+
+    for (uint8_t ch = 0; ch < 2; ch++)
+    {
+        float avg_mV = shuntSum[ch] / samples;
+        Serial.printf("DIAG K%u: Shunt min/mittel/max = %7.2f / %7.2f / %7.2f mV | "
+                      "Bus = %5.2f V | I(mittel) = %5.0f mA bei %.3f Ohm | gemeldet = %u mA | Proben = %u\r\n",
+                      ch, shuntMin[ch], avg_mV, shuntMax[ch],
+                      busSum[ch] / samples, avg_mV / SHUNT_OHM, SHUNT_OHM,
+                      current_mA[ch], samples);
+        shuntMin[ch] = 1e9f;
+        shuntMax[ch] = -1e9f;
+        shuntSum[ch] = 0;
+        busSum[ch] = 0;
+    }
+    Serial.printf("DIAG Grenzwert = %u mA, Abschaltung K0/K1 = %d/%d\r\n",
+                  threshold_mA, shutdownActive[0], shutdownActive[1]);
+    samples = 0;
+}
+#endif
 
 void PowerDecoder::shutdown(uint8_t channel)
 {

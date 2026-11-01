@@ -4,6 +4,11 @@
 #include <Wire.h>
 #include "protocol_constants_core.h"
 
+// 1 = Rohwerte des INA3221 einmal pro Sekunde seriell ausgeben (Diagnose)
+#ifndef POWER_DIAG
+#define POWER_DIAG 1
+#endif
+
 class PowerDecoder : public DecoderBase
 {
 public:
@@ -21,6 +26,9 @@ void onFeatureFrame(uint8_t featureId,
 
 private:
     void readCurrent();
+#if POWER_DIAG
+    void diagSample();
+#endif
     void shutdown(uint8_t channel);
 
     uint16_t current_mA[2] = {0, 0};
