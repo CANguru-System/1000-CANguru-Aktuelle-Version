@@ -115,6 +115,19 @@ void handlePowerPacket(const uint8_t *mac, uint8_t commandId, const uint8_t *pay
         sendPacketToGUI(p);
         return;
     }
+
+    case POWER_CMD_SHUTDOWN:
+    {
+        // Überstrom-Abschaltung: [Kanal, Strom_hi, Strom_lo]
+        if (payloadLen < 3)
+            return;
+        p.commandId = POWER_CMD_SHUTDOWN;
+        p.payload = {payload[0], payload[1], payload[2]};
+        p.valid = true;
+
+        sendPacketToGUI(p);
+        return;
+    }
     }
 }
 void sendGuiFeedbackSettings(const uint8_t *values)

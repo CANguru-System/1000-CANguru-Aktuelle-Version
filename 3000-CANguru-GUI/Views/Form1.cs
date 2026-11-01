@@ -766,9 +766,16 @@ namespace CANguru.Views
                                 // ⭐ NEU: PowerDecoder – Shutdown
                                 case ProtocolConstants.POWER_CMD_SHUTDOWN:
                                     {
-                                        ushort mA = (ushort)((payload[0] << 8) | payload[1]);
-                                        PowerCtrl.UpdateCurrent(0, mA);
-                                        PowerCtrl.TriggerShutdown(0);
+                                        // payload: [Kanal, Strom_hi, Strom_lo]
+                                        if (payload.Length < 3)
+                                            break;
+                                        int channel = payload[0];
+                                        ushort mA = (ushort)((payload[1] << 8) | payload[2]);
+                                        PowerCtrl.UpdateCurrent(channel, mA);
+                                        PowerCtrl.TriggerShutdown(channel);
+                                        Log($"ÜBERSTROM auf Kanal {channel}: {mA} mA – Gleisspannung abgeschaltet.");
+                                        // Knopf auf GO stellen, damit ein Klick wieder einschaltet
+                                        UiInvoke(() => btnStopGo.SetMode(false));
                                     }
                                     break;
                                 // ⭐ NEU: PowerDecoder – Track Current
