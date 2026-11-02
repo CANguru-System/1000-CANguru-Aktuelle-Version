@@ -520,8 +520,30 @@ namespace CANguru.Views
                 Log($"OTA FEHLER für Decoder {f.decoderId}, Code {f.errorCode}");
             }
         }
-        // ProcessIncomingPacket ersetzen, um den fehlenden Switch-Block zu beheben
-        private async void ProcessIncomingPacket(byte[] data, IPEndPoint remote)
+        // Ein fehlerhaftes Paket von der Bridge darf die GUI nicht beenden:
+        // die Auswertung läuft im UDP-Thread, eine Ausnahme dort beendet sonst den Prozess.
+        private void ProcessIncomingPacket(byte[] data, IPEndPoint remote)
+        {
+            try
+            {
+                ProcessIncomingPacketCore(data, remote);
+            }
+            catch (Exception ex)
+            {
+                if (guiClosing)
+                    return;
+                try
+                {
+                    Log($"Fehlerhaftes Paket von der Bridge ignoriert ({ex.GetType().Name}): {BitConverter.ToString(data)}");
+                }
+                catch
+                {
+                    // Fenster wird gerade geschlossen
+                }
+            }
+        }
+
+        private void ProcessIncomingPacketCore(byte[] data, IPEndPoint remote)
         {
             if (guiClosing)
                 return;
@@ -536,6 +558,8 @@ namespace CANguru.Views
                             {
                                 case ProtocolConstants.FRAME_DECODER_ADDED:
                                     {
+                                        if (payload.Length < 10)
+                                            break;
                                         byte id = payload[0];
                                         DecoderType type = (DecoderType)payload[1];
                                         byte[] mac = payload.Skip(2).Take(6).ToArray();
@@ -554,6 +578,8 @@ namespace CANguru.Views
                             {
                                 case ProtocolConstants.DECODER_UPLOAD_START:
                                     {
+                                        if (data.Length < 3)
+                                            break;
                                         totalBlocks = (data[1] << 8) | data[2];
                                         UiInvoke(() => dualBar.CurrentValue = 1);
                                         UiInvoke(() => dualBar.CurrentText = $"1%");
@@ -562,6 +588,8 @@ namespace CANguru.Views
 
                                 case ProtocolConstants.DECODER_UPLOAD_BLOCK:
                                     {
+                                        if (payload.Length < 2)
+                                            break;
                                         int percent = payload[0];
                                         int id = payload[1];
                                         if (percent == 0)
@@ -600,6 +628,8 @@ namespace CANguru.Views
                             switch (commandId)
                             {
                                 case ProtocolConstants.FRAME_GUI_OTA_CURRENT_DECODER:
+                                    if (payload.Length < 1)
+                                        break;
                                     byte decoderIdchg = payload[0];
                                     Log("Aktueller Decoder: " + decoderIdchg);
                                     this.Invoke(new Action(() =>
@@ -610,6 +640,8 @@ namespace CANguru.Views
                                     break;
 
                                 case ProtocolConstants.FRAME_GUI_OTA_OVERALL:
+                                    if (payload.Length < 1)
+                                        break;
                                     byte percentOverall = payload[0];
                                     if (percentOverall > 100)
                                         percentOverall = 100;
@@ -656,6 +688,8 @@ namespace CANguru.Views
                                     break;
                                 case ProtocolConstants.FRAME_DECODER_ALIVE:
                                     {
+                                        if (payload.Length < 9)
+                                            break;
                                         if (firstAliveReceived)
                                             HandleAlivePacket(remote.Address, payload);
                                         int decoderId = payload[0];
