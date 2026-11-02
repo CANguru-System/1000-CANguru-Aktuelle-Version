@@ -96,8 +96,11 @@ namespace CANguru.Controllers
                         switch (subCMD)
                         {
                             case CANFrames.SYS_STOPP_CMD:
-                                // System MFX Neuanmeldezähler setzen
-                                setNeuanmeldezaehler();
+                                // System MFX Neuanmeldezähler setzen – nur während einer mfx-Anmeldung
+                                // ("CANguru-Loks"). Bei einem normalen STOPP würde ein abweichender
+                                // Zähler alle mfx-Loks zur Neuanmeldung zwingen, danach kennt WDP sie nicht mehr.
+                                if (bLokDiscovery)
+                                    setNeuanmeldezaehler();
                                 break;
                             case CANFrames.Gleis_Prot_CMD:
                                 break;
