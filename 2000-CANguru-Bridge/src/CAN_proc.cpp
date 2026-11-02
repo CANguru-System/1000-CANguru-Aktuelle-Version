@@ -182,9 +182,17 @@ void sendCanFrame(uint8_t *data, bool hash)
     data[hash1] = hasharr[1];
   }
 
+  // Ein CAN-Frame hat höchstens 8 Datenbytes; ein größerer DLC (z. B. aus einem
+  // fehlerhaften UDP-Paket) würde über Message2Send.data hinaus schreiben.
+  if (data[4] > 8)
+  {
+    Serial.printf("CAN: invalid DLC %u, frame dropped\r\n", data[4]);
+    return;
+  }
+
   // 1. CAN senden
 
-  memset(&Message2Send, 0, CAN_FRAME_SIZE);
+  memset(&Message2Send, 0, sizeof(Message2Send));
   Message2Send.rtr = CAN_MSG_FLAG_RTR_;
   Message2Send.ss = CAN_MSG_FLAG_SS_;
   Message2Send.extd = CAN_MSG_FLAG_EXTD_;
