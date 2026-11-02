@@ -57,6 +57,10 @@ namespace CANguru.Controllers
 
         public event Action<string>? LogMessage;
         public event Action<byte[]>? SendFrameRequested;
+
+        // Liefert die bisherige Adresse (SID) einer bereits bekannten mfx-Lok, sonst null.
+        // Damit behält eine Lok bei einer Neuanmeldung ihre Adresse und WDP findet sie weiter.
+        public Func<uint, byte?>? FindKnownSid;
         public event Action<byte>? incnextLocid;
 
         private readonly CANFrames canFrames;
@@ -232,9 +236,17 @@ namespace CANguru.Controllers
             //Buffer.BlockCopy(source, 0, destination, 0, source.Length);
             Buffer.BlockCopy(buffer, 5, canFrames.lastmfxUID, 0, canFrames.lastmfxUID.Length);
             Buffer.BlockCopy(canFrames.lastmfxUID, 0, canFrames.M_BIND, 5, canFrames.lastmfxUID.Length);
-            canFrames.M_BIND[10] = canFrames.nextLokAddress;
+
+            // Bekannte Lok: bisherige Adresse wiederverwenden, neue Lok: nächste freie Adresse
+            uint uid = BitConverter.ToUInt32(canFrames.lastmfxUID, 0);
+            byte? knownSid = FindKnownSid?.Invoke(uid);
+            byte sid = knownSid ?? canFrames.nextLokAddress;
+            if (knownSid.HasValue)
+                LogMessage?.Invoke($"Bekannte mfx-Lok, behält Adresse {sid}");
+
+            canFrames.M_BIND[10] = sid;
             SendFrameRequested?.Invoke(canFrames.M_BIND);
-            canFrames.M_VERIFY[10] = canFrames.nextLokAddress;
+            canFrames.M_VERIFY[10] = sid;
             // MFX-UID
             Buffer.BlockCopy(canFrames.lastmfxUID, 0, canFrames.M_VERIFY, 5, canFrames.lastmfxUID.Length);
             canFrames.M_VERIFY[0x01] = 0x06;

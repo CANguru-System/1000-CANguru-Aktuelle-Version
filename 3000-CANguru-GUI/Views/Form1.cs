@@ -193,6 +193,7 @@ namespace CANguru.Views
             mfxParser.incnextLocid += OnincnextLocid;
             mfxParser.LokCompleted += OnLokCompleted;
             mfxParser.SendFrameRequested += OnSendFrameRequested;
+            mfxParser.FindKnownSid = FindKnownMfxSid;
 
             generateHash();
 
@@ -1147,6 +1148,7 @@ namespace CANguru.Views
             mfxParser.incnextLocid += OnincnextLocid;
             mfxParser.LokCompleted += OnLokCompleted;
             mfxParser.SendFrameRequested += OnSendFrameRequested;
+            mfxParser.FindKnownSid = FindKnownMfxSid;
 
             // 3. UDP neu starten
             try
@@ -1945,6 +1947,16 @@ namespace CANguru.Views
         {
             CANFrames.nextLokAddress++;
             UpDnnextLokAddress.Value = CANFrames.nextLokAddress;
+        }
+
+        // Parser: bisherige Adresse einer bereits bekannten mfx-Lok (null = neue Lok)
+        private byte? FindKnownMfxSid(uint uid)
+        {
+            if (lokstorage != null &&
+                lokstorage.Loks.TryGetValue(uid, out var lok) &&
+                !lok.IsManual && lok.MfxSID != 0)
+                return lok.MfxSID;
+            return null;
         }
 
         // Parser: Log-Meldung
