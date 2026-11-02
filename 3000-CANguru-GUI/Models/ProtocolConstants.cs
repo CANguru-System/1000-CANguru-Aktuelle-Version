@@ -72,6 +72,7 @@ public static class ProtocolConstants
     public const int CMD_FILE_BLOCK_CS2 = 0x82;
     public const int FRAME_CAN_2DEC = 0x83;
     public const int FRAME_CAN_2BRIDGE = 0x84;
+    public const int FRAME_CAN_2GUI = 0x85;
     public const int FEATURE_SHOW_BAR = 0x90;
     public const int FRAME_GUI_OTA_CURRENT_DECODER = 0x91;
     public const int FRAME_GUI_OTA_OVERALL = 0x92;
@@ -101,7 +102,7 @@ public static class ProtocolConstants
     public const int FRAME_DECODER_ADDED = 0xD4;
     public const int CMD_ACK = 0xF0;
     public const int BlockSizeGUI = 1024;
-    public const int BlockSizeBridge = BlockSizeGUI + 100;
+    public const int BlockSizeBridge = BlockSizeGUI+100;
     public const int BlockSizeDecoder = BlockSizeGUI;
     public const int BRIDGE_AP_CHANNEL = 1;
     public const int BRIDGE_PORT = 5000;

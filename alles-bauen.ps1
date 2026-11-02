@@ -4,6 +4,8 @@
 
 .DESCRIPTION
     Uses the PlatformIO installation of the VS Code extension and the .NET SDK.
+    Before building, the generated protocol constants from 0300-Constants are
+    copied into all projects (run constants_manager.py first after changes).
     The finished firmware files are copied to _build\ with clear names
     (e.g. decoder-switch.bin, bridge.bin) so they can be used for OTA directly.
 
@@ -74,7 +76,23 @@ function Baue-GUI {
     })
 }
 
+# Copies the generated protocol constants from 0300-Constants into all projects,
+# so the copies can never drift apart from the single source.
+function Verteile-Konstanten {
+    $quelle = Join-Path $wurzel '0300-Constants'
+    $kopien = @(
+        @{ Von = 'generated_constants\protocol_constants_core.h'; Nach = '1000-CANguru-Decoder\src\decoder\core\generated_constants\protocol_constants_core.h' },
+        @{ Von = 'generated_constants\protocol_constants_core.h'; Nach = '2000-CANguru-Bridge\include\generated_constants\protocol_constants_core.h' },
+        @{ Von = 'ProtocolConstants.cs';                          Nach = '3000-CANguru-GUI\Models\ProtocolConstants.cs' }
+    )
+    foreach ($k in $kopien) {
+        Copy-Item (Join-Path $quelle $k.Von) (Join-Path $wurzel $k.Nach) -Force
+    }
+    Write-Host 'Protokollkonstanten aus 0300-Constants in alle Projekte kopiert.'
+}
+
 Pruefe-Werkzeuge
+Verteile-Konstanten
 New-Item -ItemType Directory -Force $ausgabe | Out-Null
 
 if (-not $Nur -or $Nur -eq 'Decoder') {
