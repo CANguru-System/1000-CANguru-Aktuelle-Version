@@ -309,6 +309,11 @@ void FeedbackDecoder::onFeatureFrame(uint8_t featureId,
 
     if (featureId == FEATURE_FEEDBACK)
     {
+        // Die Bridge sendet an alle Rückmelder; payload[0] enthält die ID des gemeinten Decoders.
+        // Ohne diese Prüfung würden alle Rückmelder dieselbe Kanalzuordnung übernehmen.
+        if (payloadLen < 1 || payload[0] != aliveGetDecoderID())
+            return;
+
         switch (commandId)
         {
         case FEEDBACK_CMD_GET_SETTINGS:
