@@ -8,6 +8,7 @@
 const char *key_id = "id";
 const char *key_otaPending = "otaPending";
 const char *key_bridgeMac = "bridge_mac";
+const char *key_otaFailed = "otaFailed";
 
 void coreConfigInit()
 {
@@ -24,6 +25,9 @@ void coreConfigInit()
         prefs.getBytes(key_bridgeMac, Bridge_Mac, 6);
         bridge_is_known = true;
         logMac("Loaded bridge MAC from preferences: ", Bridge_Mac);
+        // Die ID gilt nur für diesen einen Neustart nach dem OTA (REJOIN).
+        // Bei einem späteren normalen Start soll wieder die Hello-Sequenz laufen.
+        prefs.putByte(key_id, INVALID_ASSIGNED_ID);
     }
 }
 

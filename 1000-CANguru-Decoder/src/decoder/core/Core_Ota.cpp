@@ -68,21 +68,20 @@ void sendOtaError(uint8_t errorCode)
         gDecoder->sendToBridge(FEATURE_OTA, OTA_ERROR, pkt, len);
 }
 
-static void finishOtaFailure()
+// Nach einem OTA-Fehler ist ESP-NOW abgebaut und das WLAN im Station-Modus.
+// Ein Wiederaufbau im laufenden Betrieb hat sich als unzuverlässig erwiesen
+// (Callbacks und Peer fehlten, der Decoder war danach taub). Deshalb sauber neu
+// starten: ID und Bridge-MAC bleiben erhalten, der Decoder meldet sich per REJOIN
+// zurück und teilt dabei mit, dass das Update fehlgeschlagen ist.
+static void restartAfterOtaFailure(const char *reason)
 {
-    Serial.println("OTA: Failure, restoring ESP-NOW");
-
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
-    delay(150);
-
-    WiFi.mode(WIFI_STA);
-    esp_err_t r = esp_now_init();
-    if (r != ESP_OK)
-        Serial.printf("DECODER in finishOtaFailure: ESP-NOW init failed! err=%d\r\n", r);
-
-    otaInProgress = false;
-    otaRunning = false;
+    Serial.printf("DECODER: OTA fehlgeschlagen (%s) - Neustart, Firmware bleibt unverändert\r\n", reason);
+    Update.abort();
+    prefs.putByte(key_id, aliveGetDecoderID());
+    prefs.putBool(key_otaFailed, true);
+    coreConfigSetOtaPending(true);
+    delay(500);
+    ESP.restart();
 }
 
 
@@ -98,7 +97,7 @@ void sendOtaErrorFrame()
 bool coreOtaStartFromBridge() {
 
     if (!connectToBridgeAP()) {
-        Serial.println("DECODER: OTA abgebrochen (keine AP-Verbindung)");
+        restartAfterOtaFailure("keine Verbindung zum WLAN der Bridge");
         return false;
     }
 
@@ -109,28 +108,28 @@ bool coreOtaStartFromBridge() {
     HTTPClient http;
 
     if (!http.begin(client, OTA_URL)) {
-        Serial.println("DECODER: HTTP begin fehlgeschlagen");
+        restartAfterOtaFailure("HTTP begin");
         return false;
     }
 
     int httpCode = http.GET();
     if (httpCode != HTTP_CODE_OK) {
-        Serial.print("DECODER: HTTP GET fehlgeschlagen, Code: ");
-        Serial.println(httpCode);
+        Serial.printf("DECODER: HTTP GET Code %d\r\n", httpCode);
         http.end();
+        restartAfterOtaFailure("HTTP GET");
         return false;
     }
 
     int contentLength = http.getSize();
     if (contentLength <= 0) {
-        Serial.println("DECODER: Ungültige Content-Length");
         http.end();
+        restartAfterOtaFailure("ungültige Content-Length");
         return false;
     }
 
     if (!Update.begin(contentLength)) {
-        Serial.println("DECODER: Update.begin() fehlgeschlagen");
         http.end();
+        restartAfterOtaFailure("Update.begin");
         return false;
     }
 
@@ -139,6 +138,10 @@ bool coreOtaStartFromBridge() {
     uint8_t buff[BlockSizeDecoder];
 
     otaInProgress = true;
+
+    // Abbruch, wenn so lange keine Daten mehr kommen
+    const unsigned long stallTimeoutMs = 10000;
+    unsigned long lastData = millis();
 
     while (http.connected() && written < (size_t)contentLength) {
         size_t available = stream->available();
@@ -150,8 +153,13 @@ bool coreOtaStartFromBridge() {
             if (read > 0) {
                 size_t w = Update.write(buff, read);
                 written += w;
+                lastData = millis();
             //    Serial.print(".");
             }
+        }
+        else if (millis() - lastData > stallTimeoutMs) {
+            Serial.println("DECODER: keine Daten mehr vom Server");
+            break;
         }
         delay(1);
     }
@@ -164,14 +172,13 @@ bool coreOtaStartFromBridge() {
         Serial.print("DECODER: Update.end() Fehler: ");
         Serial.println(Update.getError());
         http.end();
-        finishOtaFailure();
+        restartAfterOtaFailure("Update.end");
         return false;
     }
 
     if (!Update.isFinished()) {
-        Serial.println("DECODER: Update nicht vollständig");
         http.end();
-        finishOtaFailure();
+        restartAfterOtaFailure("Update nicht vollständig");
         return false;
     }
 

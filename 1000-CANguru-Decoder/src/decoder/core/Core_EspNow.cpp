@@ -353,11 +353,17 @@ void startHelloSequence()
 
 void sendRejoin()
 {
-    const uint8_t len = 1;
+    // [0] ID, [1] 1 = das OTA-Update vor diesem Neustart ist fehlgeschlagen
+    bool otaFailed = prefs.getBool(key_otaFailed, false);
+    if (otaFailed)
+        prefs.putBool(key_otaFailed, false);
+
+    const uint8_t len = 2;
     uint8_t pkt[len];
     pkt[0] = aliveGetDecoderID();
+    pkt[1] = otaFailed ? 1 : 0;
 
-Serial.printf("Sending REJOIN with ID=%d\r\n", pkt[0]);
+    Serial.printf("Sending REJOIN with ID=%d, OTA %s\r\n", pkt[0], otaFailed ? "fehlgeschlagen" : "ok");
     gDecoder->sendToBridge(FEATURE_DECODER, FRAME_DECODER_REJOIN, pkt, len);
 }
 
