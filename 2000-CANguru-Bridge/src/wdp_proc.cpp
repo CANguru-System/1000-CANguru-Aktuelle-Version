@@ -12,7 +12,9 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
-#define WDP_FRAME_SIZE 64 // oder was du brauchst
+// WDP erwartet das Märklin-UDP-Format: genau ein CAN-Frame mit 13 Byte je Paket.
+// Alle Aufrufer von sendToWDP() übergeben Puffer dieser Größe.
+#define WDP_FRAME_SIZE CAN_FRAME_SIZE
 
 QueueHandle_t wdpQueue = NULL;
 

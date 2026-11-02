@@ -222,8 +222,9 @@ void onDecoderReceivedPacketFromDecoder(const uint8_t *mac,
         switch (commandId)
         {
         case FRAME_CAN_2BRIDGE:
-            // GUI → Bridge → Decoder
-            // einfach an GUI und WDP weiterleiten
+            // Decoder → Bridge: CAN-Frame (13 Byte) an GUI und WDP weiterleiten
+            if (payloadLen < CAN_FRAME_SIZE)
+                return;
             sendToWDP(payload);
             enqueueCanToFifo(payload, 'D');
             return;
