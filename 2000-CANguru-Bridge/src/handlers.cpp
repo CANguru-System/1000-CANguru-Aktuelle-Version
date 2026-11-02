@@ -113,6 +113,11 @@ void sendFeedbackSetSettingsToDecoder(uint8_t assignedId, const uint8_t *values,
 
 void handleFeedbackGuiCommand(uint8_t cmd, const uint8_t *payload, int len)
 {
+  if (len < 1)
+  {
+    Serial.println("Feedback: GUI packet without assigned ID");
+    return;
+  }
   uint8_t assignedId = payload[0];
 
   switch (cmd)
@@ -123,6 +128,12 @@ void handleFeedbackGuiCommand(uint8_t cmd, const uint8_t *payload, int len)
     break;
 
   case FEEDBACK_CMD_SET_SETTINGS:
+    // ID + 16 Kanalwerte
+    if (len < 1 + EXP_LNG_FEEDBACK_SETTINGS)
+    {
+      Serial.printf("Feedback: SET_SETTINGS too short (%d)\r\n", len);
+      return;
+    }
     sendFeedbackSetSettingsToDecoder(assignedId, &payload[1], len - 1);
     break;
   }
