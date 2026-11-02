@@ -128,6 +128,7 @@ dict(name="CMD_FILE_ACK_CS2",   value="0x81", arch="core"),
 dict(name="CMD_FILE_BLOCK_CS2", value="0x82", arch="core"),
 dict(name="FRAME_CAN_2DEC",     value="0x83", arch="core"),
 dict(name="FRAME_CAN_2BRIDGE",  value="0x84", arch="core"),
+dict(name="FRAME_CAN_2GUI",     value="0x85", arch="core"),
 
 
 # ============================================================

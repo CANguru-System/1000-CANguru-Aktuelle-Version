@@ -212,6 +212,9 @@ constants:
   FRAME_CAN_2BRIDGE:
     value: '0x84'
     architecture: core
+  FRAME_CAN_2GUI:
+    value: '0x85'
+    architecture: core
   FEATURE_SHOW_BAR:
     value: '0x90'
     architecture: core

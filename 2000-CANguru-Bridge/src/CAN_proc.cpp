@@ -249,7 +249,11 @@ void sendFiFoFromCANToGUI()
   {
     //    if (item.data[0x00] == 0x0a)
     udp.beginPacket(guiIP, GUI_PORT);
-    // zuerst die DSortiernummer
+    // Kennung, damit die GUI CAN-Frames sicher von anderen Paketen unterscheidet:
+    // FEATURE_CS2 | FRAME_CAN_2GUI | Sortiernummer (4) | CAN-Frame (13) | Quelle (1)
+    const uint8_t kennung[2] = {FEATURE_CS2, FRAME_CAN_2GUI};
+    udp.write(kennung, sizeof(kennung));
+    // zuerst die Sortiernummer
     udp.write((uint8_t *)&item.seq, sizeof(item.seq));
     // dann die Daten
     udp.write(item.data, CAN_FRAME_SIZE); // oder len, wenn du sie mitführst

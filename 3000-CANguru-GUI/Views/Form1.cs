@@ -696,6 +696,16 @@ namespace CANguru.Views
                                 case ProtocolConstants.CMD_FILE_ACK_CS2:
                                     uploader.HandleAck(data);
                                     break;
+
+                                // CAN-Frame von der Bridge:
+                                // Sortiernummer (4) | CAN-Frame (13) | Quelle (1)
+                                case ProtocolConstants.FRAME_CAN_2GUI:
+                                    if (payload.Length < 4 + ProtocolConstants.CAN_FRAME_SIZE + 1)
+                                        break;
+                                    uint seq = BitConverter.ToUInt32(payload, 0);
+                                    byte[] canFrame = payload.Skip(4).ToArray();
+                                    incomingFrames.Enqueue((seq, canFrame));
+                                    break;
                             }
                             return;
                         }
@@ -838,14 +848,6 @@ namespace CANguru.Views
                             return;
                         }
                 }
-            }
-            // CAN-Frame (seq + payload)
-            if (data.Length > ProtocolConstants.CAN_FRAME_SIZE)
-            {
-                uint seq = BitConverter.ToUInt32(data, 0);
-                byte[] canFrame = data.Skip(4).ToArray();
-                incomingFrames.Enqueue((seq, canFrame));
-                return;
             }
         }
 
