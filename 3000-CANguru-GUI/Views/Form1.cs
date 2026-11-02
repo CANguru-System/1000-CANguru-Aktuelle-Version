@@ -676,10 +676,11 @@ namespace CANguru.Views
                                         dec.IsReady = status;
                                         if (decoderType == DecoderType.Power)
                                         {
+                                            // 0xFFFF = Kanal nicht angeschlossen → -1
                                             int mA0 = (current01 << 8) | current02;
-                                            PowerCtrl.UpdateCurrent(0, mA0);
+                                            PowerCtrl.UpdateCurrent(0, mA0 == 0xFFFF ? -1 : mA0);
                                             int mA1 = (current11 << 8) | current12;
-                                            PowerCtrl.UpdateCurrent(1, mA1);
+                                            PowerCtrl.UpdateCurrent(1, mA1 == 0xFFFF ? -1 : mA1);
                                         }
                                         dec.LastSeen = DateTime.Now;
                                         //                            UpdateDecoderRow(id);
@@ -865,17 +866,23 @@ namespace CANguru.Views
             if (guiClosing) return;
             this.BeginInvoke(new Action(() =>
             {
-                labelCurrent0.Text = $"{PowerCtrl.Current0_mA} mA";
-                labelCurrent1.Text = $"{PowerCtrl.Current1_mA} mA";
-
-
-                panelCurrent0.BackColor =
-                    PowerCtrl.Current0_mA > PowerCtrl.Threshold_mA ? Color.Red : Color.LightGreen;
-
-                panelCurrent1.BackColor =
-                    PowerCtrl.Current1_mA > PowerCtrl.Threshold_mA ? Color.Red : Color.LightGreen;
+                ShowCurrent(labelCurrent0, panelCurrent0, PowerCtrl.Current0_mA);
+                ShowCurrent(labelCurrent1, panelCurrent1, PowerCtrl.Current1_mA);
             }));
 
+        }
+
+        // Stromwert anzeigen; negativ = Kanal nicht angeschlossen
+        private void ShowCurrent(Control label, Panel panel, int mA)
+        {
+            if (mA < 0)
+            {
+                label.Text = "–";
+                panel.BackColor = SystemColors.Control;
+                return;
+            }
+            label.Text = $"{mA} mA";
+            panel.BackColor = mA > PowerCtrl.Threshold_mA ? Color.Red : Color.LightGreen;
         }
 
         private void PowerShutdownUI(int channel)
