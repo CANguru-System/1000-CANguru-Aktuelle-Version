@@ -131,6 +131,19 @@ void sendGuiOtaFinished()
   udpSendToGui(pkt.data(), pkt.size());
 }
 
+// payload: [decoderId, result]
+void sendGuiOtaResult(uint8_t decoderId, OtaResult result)
+{
+  uint8_t payload[2] = {decoderId, (uint8_t)result};
+  auto pkt = buildPacket(
+      FEATURE_FIRMWARE,
+      FRAME_GUI_OTA_RESULT,
+      payload,
+      sizeof(payload)
+  );
+  udpSendToGui(pkt.data(), pkt.size());
+}
+
 void sendGuiOtaCurrentDecoder(uint8_t decoderId)
 {
   uint8_t payload[1] = {decoderId};

@@ -224,6 +224,7 @@ void onDecoderReceivedPacketFromDecoder(const uint8_t *mac,
                 if (otaFailed)
                 {
                     Serial.printf("OTA FAILED for decoder ID %d, firmware unchanged\r\n", id);
+                    sendGuiOtaResult(id, OTA_RESULT_REJECTED);
                     otaState = OTA_NEXT;
                 }
                 else

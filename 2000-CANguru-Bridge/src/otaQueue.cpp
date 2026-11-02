@@ -129,6 +129,7 @@ void processOta()
         if (otaSuccessReceived)
         {
             Serial.printf("OTA SUCCESS for decoder ID %d\r\n", currentOta.decoderId);
+            sendGuiOtaResult(currentOta.decoderId, OTA_RESULT_OK);
             otaSuccessReceived = false;
             otaState = OTA_NEXT;
             break;
@@ -137,6 +138,7 @@ void processOta()
         if (millis() - otaTimer > OTA_TIMEOUT_MS)
         {
             Serial.printf("OTA TIMEOUT for decoder ID %d\r\n", currentOta.decoderId);
+            sendGuiOtaResult(currentOta.decoderId, OTA_RESULT_TIMEOUT);
             otaState = OTA_NEXT;
         }
         break;

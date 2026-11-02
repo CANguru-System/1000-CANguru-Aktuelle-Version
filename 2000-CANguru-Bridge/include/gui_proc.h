@@ -17,6 +17,15 @@ void sendGuiOtaError(uint8_t err);
 void sendGuiOtaOverallProgress(uint8_t percent);
 void sendFirmwareAck(uint16_t seq, uint8_t status);
 void sendGuiOtaFinished();
+
+// Ergebnis des OTA-Updates eines Decoders an die GUI
+enum OtaResult : uint8_t
+{
+    OTA_RESULT_OK = 0,       // neue Firmware läuft
+    OTA_RESULT_REJECTED = 1, // Decoder hat die Datei abgelehnt, alte Firmware läuft weiter
+    OTA_RESULT_TIMEOUT = 2   // keine Rückmeldung des Decoders
+};
+void sendGuiOtaResult(uint8_t decoderId, OtaResult result);
 void sendGuiOtaCurrentDecoder(uint8_t decoderId);
 void sendPacketToGUI(const std::vector<uint8_t> &bytes);
 void sendPacketToGUI(const ParsedPacket &p);

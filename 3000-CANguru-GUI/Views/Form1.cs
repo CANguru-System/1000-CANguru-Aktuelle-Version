@@ -497,28 +497,35 @@ namespace CANguru.Views
             canguruStatus = enum_canguruStatus.startGleisbox;
         }
 
-        void HandleOtaResultFromBridge(byte[] data)
+        // Ergebnis des OTA-Updates eines Decoders
+        // payload: [decoderId, result]  result: 0 = ok, 1 = Datei abgelehnt, 2 = keine Rückmeldung
+        void HandleOtaResultFromBridge(byte[] payload)
         {
-            if (data.Length < 4) return;
+            if (payload.Length < 2) return;
 
-            var f = new GuiOtaResultFrame
-            {
-                type = data[0],
-                decoderId = data[1],
-                result = data[2],
-                errorCode = data[3]
-            };
+            byte decoderId = payload[0];
+            byte result = payload[1];
 
-            if (f.result == 0)
+            if (result == 0)
             {
-                // Erfolg
-                Log($"OTA erfolgreich für Decoder {f.decoderId}");
+                Log($"OTA erfolgreich für Decoder {decoderId}.");
+                return;
             }
-            else
-            {
-                // Fehler
-                Log($"OTA FEHLER für Decoder {f.decoderId}, Code {f.errorCode}");
-            }
+
+            string grund = result == 1
+                ? "Der Decoder hat die Datei abgelehnt (keine gültige Firmware)."
+                : "Der Decoder hat sich nicht zurückgemeldet.";
+            Log($"OTA FEHLGESCHLAGEN für Decoder {decoderId}: {grund}");
+
+            UiInvoke(() => MessageBox.Show(
+                this,
+                $"Das Update für Decoder {decoderId} ist fehlgeschlagen.\r\n\r\n{grund}\r\n\r\n" +
+                (result == 1
+                    ? "Der Decoder arbeitet mit der bisherigen Firmware weiter."
+                    : "Bitte prüfen, ob der Decoder in der Liste wieder erscheint; sonst kurz stromlos machen."),
+                "Firmware-Update",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning));
         }
         // Ein fehlerhaftes Paket von der Bridge darf die GUI nicht beenden:
         // die Auswertung läuft im UDP-Thread, eine Ausnahme dort beendet sonst den Prozess.
@@ -606,7 +613,9 @@ namespace CANguru.Views
                                         if (percent == 100)
                                         {
                                             UiInvoke(() => dualBar.Visible = false);
-                                            Log("Decoder-Update erfolgreich.");
+                                            // Ob das Update gelungen ist, steht erst nach Prüfung
+                                            // und Neustart des Decoders fest (FRAME_GUI_OTA_RESULT).
+                                            Log("Firmware an den Decoder übertragen – Decoder prüft und startet neu ...");
                                         }
                                     }
                                     break;
@@ -865,7 +874,7 @@ namespace CANguru.Views
                             switch (commandId)
                             {
                                 case ProtocolConstants.FRAME_GUI_OTA_RESULT:
-                                    HandleOtaResultFromBridge(data);
+                                    HandleOtaResultFromBridge(payload);
                                     break;
 
                                 case ProtocolConstants.FRAME_GUI_OTA_CURRENT_FINISHED:
