@@ -333,27 +333,50 @@ void onDecoderReceivedPacketFromDecoder(const uint8_t *mac,
     return;
 }
 
-// Eingehende Nachrichten von den Decodern (über ESP-NOW) werden hier empfangen und verarbeitet. Je nach FeatureID und CommandID werden sie an die entsprechenden Handler weitergeleitet oder an die GUI gesendet.
+// Eingehende ESP-NOW-Pakete der Decoder.
+// Der Empfangs-Callback läuft im WLAN-Task. Würde er die Pakete direkt verarbeiten,
+// griffen zwei Tasks gleichzeitig auf UDP, die Decoder-Liste und die CAN-Puffer zu
+// (zerstückelte UDP-Pakete an die GUI, sporadische Abstürze). Deshalb legt er die
+// Pakete nur in eine Warteschlange; verarbeitet werden sie in loop().
+struct EspNowRxItem
+{
+    uint8_t mac[6];
+    uint8_t len;
+    uint8_t data[ESP_NOW_MAX_DATA_LEN];
+};
+
+static QueueHandle_t espNowRxQueue = NULL;
+
 static void onBridgeDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
-    // ------------------------------------------------------------
-    // 1) Feature | Frame | Payload
-    // ------------------------------------------------------------
-    if (len < 2)
-    {
+    if (espNowRxQueue == NULL || len < 2 || len > ESP_NOW_MAX_DATA_LEN)
         return;
+
+    EspNowRxItem item;
+    memcpy(item.mac, mac, 6);
+    item.len = (uint8_t)len;
+    memcpy(item.data, incomingData, len);
+    // nicht blockieren: ist die Warteschlange voll, geht das Paket verloren
+    xQueueSend(espNowRxQueue, &item, 0);
+}
+
+// Aus loop() aufrufen: verarbeitet alle wartenden Decoder-Pakete
+void processEspNowRx()
+{
+    if (espNowRxQueue == NULL)
+        return;
+
+    EspNowRxItem item;
+    while (xQueueReceive(espNowRxQueue, &item, 0) == pdTRUE)
+    {
+        // Feature | Frame | Payload
+        uint8_t featureID = item.data[0];
+        uint8_t commandID = item.data[1];
+        int payloadLen = item.len - 2;
+        const uint8_t *payload = (payloadLen > 0) ? &item.data[2] : nullptr;
+
+        onDecoderReceivedPacketFromDecoder(item.mac, featureID, commandID, payload, payloadLen);
     }
-
-    uint8_t featureID = incomingData[0];
-    uint8_t commandID = incomingData[1];
-    const uint8_t *payload = nullptr;
-    int payloadLen = len - 2;
-
-    if (payloadLen > 0)
-        payload = &incomingData[2];
-
-    // Weiterreichen an deine Bridge-Logik
-    onDecoderReceivedPacketFromDecoder(mac, featureID, commandID, payload, payloadLen);
 }
 
 // Fehlermeldungen
@@ -512,6 +535,8 @@ void initBridgeEspNow()
     if (r != ESP_OK)
         Serial.printf("BRIDGE: ESP-NOW ADD PEER ERROR: %s\n\r", esp_err_to_name(r));
 
+    if (espNowRxQueue == NULL)
+        espNowRxQueue = xQueueCreate(32, sizeof(EspNowRxItem));
     esp_now_register_recv_cb(onBridgeDataRecv);
     esp_now_register_send_cb(onBridgeDataSent);
 }

@@ -9,6 +9,7 @@ extern bool otaRunning;
 bool findDecoderByAssignedId(uint8_t id, DecoderInfo &out);
 bool findDecoderByDecoderType(uint8_t type, DecoderInfo &out);
 void initBridgeEspNow();
+void processEspNowRx(); // in loop() aufrufen: verarbeitet empfangene Decoder-Pakete
 void sendFrame2allDecoders(uint8_t *data, int len);
 void sendFrame2TypeDecoders(uint8_t *data, int len, uint8_t decoderType);
 void sendConfigData(const uint8_t *data);

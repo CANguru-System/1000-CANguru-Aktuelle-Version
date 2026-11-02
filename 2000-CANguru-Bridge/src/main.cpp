@@ -421,6 +421,8 @@ void loop()
 {
   processAssignRetries();
   cleanupFinishedAssigns();
+  // Pakete der Decoder (ESP-NOW) verarbeiten
+  processEspNowRx();
   // 0. Nachrichten von GUI lesen
   readGUI();
 
