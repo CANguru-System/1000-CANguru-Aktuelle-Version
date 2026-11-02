@@ -197,20 +197,40 @@ void onDecoderReceivedPacketFromDecoder(const uint8_t *mac,
             sendTheData(SendMode::GLOBAL, 0, payload, payloadLen);
             return;
         case FRAME_DECODER_REJOIN:
+        {
+            // [0] ID, [1] 1 = OTA fehlgeschlagen (ältere Decoder senden nur die ID)
+            if (payloadLen < 1)
+                return;
             uint8_t id = payload[0];
+            bool otaFailed = (payloadLen >= 2 && payload[1] != 0);
 
             for (size_t i = 0; i < decoders.size(); i++)
             {
                 DecoderInfo &d = decoders[i];
                 if (d.assignedId == id)
                 {
-                    Serial.printf("Decoder with ID %d has REJOINED\r\n", id);
+                    Serial.printf("Decoder with ID %d has REJOINED%s\r\n", id, otaFailed ? " after FAILED OTA" : "");
                     otaRunning = false;
                     d.isReady = true;
-                    otaSuccessReceived = true;
+                    d.lastSeen = millis();
                     break;
                 }
             }
+
+            // Nur der Decoder, der gerade aktualisiert wird, beendet den OTA-Schritt.
+            // Sonst könnte ein verspäteter REJOIN den nächsten Decoder als fertig markieren.
+            if (otaState == OTA_WAIT_FOR_FINISH && id == currentOta.decoderId)
+            {
+                if (otaFailed)
+                {
+                    Serial.printf("OTA FAILED for decoder ID %d, firmware unchanged\r\n", id);
+                    otaState = OTA_NEXT;
+                }
+                else
+                    otaSuccessReceived = true;
+            }
+            break;
+        }
         }
     }
 

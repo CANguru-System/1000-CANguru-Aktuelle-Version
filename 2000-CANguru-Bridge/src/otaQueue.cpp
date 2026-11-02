@@ -21,7 +21,9 @@ bool firmwareReady = false;
 size_t firmwareSizeOnFs = 0;
 
 unsigned long otaTimer = 0;
-const unsigned long OTA_TIMEOUT_MS = 15000;
+// Der Decoder braucht bis zu 15 s für die WLAN-Verbindung, dazu Download und Neustart.
+// Mit 15 s lief die Bridge oft schon zum nächsten Decoder, während der erste noch lud.
+const unsigned long OTA_TIMEOUT_MS = 60000;
 
 std::vector<OtaEntry> otaQueue;
 OtaEntry currentOta;
@@ -85,6 +87,7 @@ void processOta()
             httpServerRunning = true;
         }
 
+        otaSuccessReceived = false;
         sendOtaStartWifiToDecoder(currentOta.decoderId, 0, 0);
         sendGuiOtaCurrentDecoder(currentOta.decoderId);
 
@@ -130,8 +133,9 @@ void processOta()
         break;
 
     case OTA_DONE:
-        stopOtaHttpServer();
-        httpServerRunning = false;
+        // Den Webserver NICHT beenden: er liefert auch lokomotive.cs2 an WDP, und
+        // otaServer.end() ohne erneutes begin() machte jedes weitere OTA unmöglich.
+        // Die Route für firmware.bin bleibt registriert (httpServerRunning bleibt true).
         otaState = OTA_IDLE;
         break;
     }
