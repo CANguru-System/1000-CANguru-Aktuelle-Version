@@ -278,7 +278,8 @@ void Attach()
     SetDirection();
     phase = phase0;
     runningsteps = 0;
-    stepsToEnd = 0;
+    // stepsToEnd NICHT zurücksetzen: der Wert wurde direkt vorher in loadDefaults()
+    // aus dem NVS geladen. Mit 0 würde der Stepper nach einem Neustart nicht fahren.
     readyToStep = false;
     direction = any_pos;
 
