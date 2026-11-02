@@ -37,6 +37,11 @@ extern unsigned long otaTimer;
 
 extern bool otaSuccessReceived;
 
+// Fortschritt des laufenden Firmware-Downloads: gesetzt vom Webserver-Task,
+// an die GUI gesendet von processOta() aus loop()
+extern volatile uint8_t otaProgressPercent;
+extern volatile bool otaProgressPending;
+
 void startGroupOtaForType(uint8_t targetType);
 void processOta();
 void processFirmwareQueue();

@@ -60,18 +60,13 @@ void startOtaHttpServer()
             {
                 size_t n = fp->read(buffer, maxLen);
 
-                // Fortschritt berechnen
+                // Fortschritt nur merken: dieser Callback läuft im Task des Webservers.
+                // Gesendet wird in processOta() aus loop(), denn das UDP-Objekt darf nicht
+                // gleichzeitig aus zwei Tasks benutzt werden (sonst kommen zerstückelte
+                // Pakete bei der GUI an).
                 size_t sent = index + n;
-                uint8_t percent = (uint8_t)((sent * 100.0f) / total);
-
-                // GUI informieren
-                sendGuiOtaProgress(currentOta.decoderId, percent);
-
-                // Gesamtfortschritt
-                uint8_t overall = (uint8_t)(
-                    ((otaFinishedCount * 100.0f) + percent) / otaTotalCount
-                );
-                sendGuiOtaOverallProgress(overall);
+                otaProgressPercent = (uint8_t)((sent * 100.0f) / total);
+                otaProgressPending = true;
 
                 // Datei am Ende schließen
                 if (n == 0)

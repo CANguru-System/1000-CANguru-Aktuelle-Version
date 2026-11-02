@@ -30,6 +30,30 @@ OtaEntry currentOta;
 
 bool otaSuccessReceived = false;
 
+volatile uint8_t otaProgressPercent = 0;
+volatile bool otaProgressPending = false;
+static uint8_t lastSentPercent = 255;
+
+// Download-Fortschritt an die GUI melden - nur aus loop() und nur bei Änderung
+static void sendOtaProgressIfChanged()
+{
+    if (!otaProgressPending)
+        return;
+    otaProgressPending = false;
+
+    uint8_t percent = otaProgressPercent;
+    if (percent == lastSentPercent)
+        return;
+    lastSentPercent = percent;
+
+    sendGuiOtaProgress(currentOta.decoderId, percent);
+    if (otaTotalCount > 0)
+    {
+        uint8_t overall = (uint8_t)(((otaFinishedCount * 100.0f) + percent) / otaTotalCount);
+        sendGuiOtaOverallProgress(overall);
+    }
+}
+
 uint32_t otaExpectedSize = 0;
 uint32_t otaReceivedSize = 0;
 
@@ -59,6 +83,8 @@ void startGroupOtaForType(uint8_t targetType)
 // OTA‑Zustandsmaschine (läuft in loop() der Bridge)
 void processOta()
 {
+    sendOtaProgressIfChanged();
+
     switch (otaState)
     {
     case OTA_IDLE:
@@ -88,6 +114,7 @@ void processOta()
         }
 
         otaSuccessReceived = false;
+        lastSentPercent = 255;
         sendOtaStartWifiToDecoder(currentOta.decoderId, 0, 0);
         sendGuiOtaCurrentDecoder(currentOta.decoderId);
 
