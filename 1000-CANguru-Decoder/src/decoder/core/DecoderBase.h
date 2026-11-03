@@ -1,14 +1,11 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
+#include "canguru_protocol.h"
 
-enum class SendMode : uint8_t
-{
-    GLOBAL,      // an alle Decoder
-    TYPE,        // an alle Decoder eines Typs
-    ASSIGNED_ID, // an genau einen Decoder
-    MAC_DIRECT   // nur für ID_ASSIGN
-};
-
+// Basisklasse aller Decoder. Der Kern (Core_*) übernimmt Funk, Anmeldung, Alive,
+// OTA und Konfiguration; ein Decodertyp implementiert nur die Hooks unten.
+// Nachrichtenformat: CANguru-Protokoll Version 2 (0400-Protocol/PROTOKOLL.md).
 class DecoderBase
 {
 public:
@@ -21,43 +18,39 @@ public:
 
     virtual ~DecoderBase() {}
 
-    virtual void setup() = 0;
-    virtual void loop() = 0;
+    // Abgeleitete Klassen rufen zuerst DecoderBase::setup() bzw. DecoderBase::loop() auf
+    virtual void setup();
+    virtual void loop();
 
-    // Wird von Core_EspNow aufgerufen
-    void onEspNowDataReceived(const uint8_t *data, int len);
-    bool coreEspNowHandleInComingData(const uint8_t *data, int len);
+    // ---- Hooks für die Decodertypen ----
 
-    bool dispatchInComingData(
-        SendMode mode,
-        uint8_t selector,
-        uint8_t feature,
-        uint8_t frame,
-        const uint8_t *data,
-        int len);
+    // Typeigene Nachricht (z. B. CG2_F_STEPPER). true = verarbeitet.
+    // Bei h.ackRequested() muss der Decoder mit reply() antworten.
+    virtual bool onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t len) { return false; }
 
-    void sendToBridge(uint8_t feature, uint8_t frame,
-                      const uint8_t *payload, uint8_t len);
+    // Märklin-CAN-Frame (13 Byte), z. B. Weichenbefehl oder S88-Abfrage aus WDP
+    virtual void onCanFrame(const uint8_t *frame) {}
 
-    // Hooks für spezialisierte Decoder
-    virtual void onConfigLoaded() {}
-    virtual void onOtaFinished() {}
-    virtual void onFeatureFrame(uint8_t featureId,
-                                uint8_t commandId,
-                                const uint8_t *payload,
-                                uint8_t payloadLen)
-    {
-        // Default: nichts tun
-    }
+    // Messwerte für das Alive (z. B. Strom je Kanal); Rückgabe = Anzahl
+    virtual uint8_t getAliveValues(uint16_t *values, uint8_t maxValues) { return 0; }
 
-    virtual uint8_t getAliveFeatureData(uint8_t *buf)
-    {
-        return 0; // Default: keine Zusatzdaten
-    }
+    virtual AliveState getStatus() const { return AliveState::Online; }
 
-    virtual AliveState getStatus() const { return AliveState::Offline; }
+    // Werkseinstellungen: eigene Einstellungen löschen und Standardwerte laden,
+    // die Zubehöradresse bleibt erhalten. true = erfolgreich.
+    virtual bool factoryReset() { return false; }
 
-protected:
-    virtual void featureSetup() {}
-    virtual void featureLoop() {}
+    // ---- Senden an die Bridge ----
+
+    // Antwort auf eine Anfrage; errorCode != 0 meldet einen Fehler (CG2_ERR_*)
+    void reply(const Cg2Header &request, const uint8_t *payload, size_t len, uint8_t errorCode = 0);
+    void reply(const Cg2Header &request) { reply(request, nullptr, 0); }
+
+    // Eigene Nachricht ohne Anfrage (z. B. Stellung geändert, Überstrom)
+    void sendMessage(uint8_t feature, uint8_t command, const uint8_t *payload, size_t len);
+
+    // Märklin-CAN-Frame (13 Byte) an die Bridge, die ihn an WDP und GUI weitergibt
+    void sendCanFrame(const uint8_t *frame);
 };
+
+extern DecoderBase *gDecoder;

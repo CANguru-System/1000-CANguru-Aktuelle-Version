@@ -9,6 +9,7 @@
 #include "core_globals.h"
 #include "Core_Config.h"
 #include "DecoderBase.h"
+#include "DecoderResetUtility.h"
 #include "Stepper_signal.h"
 
 /*
@@ -115,174 +116,152 @@ void acc_report()
     // Meldung der Lage
     opFrame[data4] = (uint8_t)readValfromPreferences8(prefsSignal, key_curr_pos, position::nullpkt, position::nullpkt, position::endpkt);
     coreEspNowSendCAN2Bridge(opFrame);
-    //%
 }
 
-void SignalDecoder::onFeatureFrame(uint8_t featureId,
-                                   uint8_t commandId,
-                                   const uint8_t *payload,
-                                   uint8_t payloadLen)
+// Märklin-Weichenbefehl (aus WDP, über die Bridge)
+void SignalDecoder::onCanFrame(const uint8_t *frame)
 {
-    const uint8_t payloadLenExpected = 8;
-    if (featureId != FEATURE_BRIDGE2DECODER && featureId != FEATURE_SIGNAL)
+    if (frame[CANcmd] != SWITCH_ACC)
         return;
-    // Hier können eingehende Daten verarbeitet werden, z.B. ACKs oder Statusupdates
-    if (featureId == FEATURE_BRIDGE2DECODER)
+
+    uint8_t _to_address = (uint16_t)((frame[data2] << 8) | frame[data3]) - MM_ACC + 1;
+    // Umsetzung nur bei gültiger Weichenadresse
+    if (_to_address != decoderadr)
+        return;
+
+    // 1 - gerade       endpkt  nahe am Motor
+    // 0 - abzweigend   nullpkt   weit weg vom Motor
+    //  muss Artikel geändert werden?
+    if (PosChg(any_pos))
     {
-        switch (commandId)
-        {
-        case SWITCH_ACC:
-        {
-            uint8_t _to_address = (uint16_t)((payload[data2] << 8) | payload[data3]) - MM_ACC + 1;
-            // Umsetzung nur bei gültiger Weichenadresse
-            // Auf benutzte Adresse überprüfen
-            if (_to_address == decoderadr)
-            {
-                position dir = any_pos;
-                // 1 - gerade       endpkt  nahe am Motor
-                // 0 - abzweigend   nullpkt   weit weg vom Motor
-                //  muss Artikel geändert werden?
-                if (PosChg(dir))
-                {
-                    Start2Run((position)payload[data4]);
-                    acc_report();
-                }
-                break;
-            }
-            break;
-        }
-        }
-    }
-    if (featureId == FEATURE_SIGNAL)
-    {
-        // Globale Mindestlänge prüfen
-        if (payloadLen < 1)
-        {
-            Serial.println("ERROR: SIGNAL frame without payload");
-            return;
-        }
-
-        if (payload[0] != aliveGetDecoderID())
-        {
-            Serial.printf("ERROR: GET_SETTINGS for assignedId %d does not match this decoder's ID %d\r\n",
-                          payload[0], aliveGetDecoderID());
-            return;
-        }
-
-        switch (commandId)
-        {
-        case SIGNAL_CMD_SET_SETTINGS:
-            // Empfangen der Einstellungen von der GUI, z.B. nach Änderung in den Eingabefeldern und Klick auf "Senden"
-            if (payloadLen < EXP_LNG_SIGNAL_SETTINGS)
-            {
-                Serial.printf("ERROR: SET_SETTINGS payload too short (%d)\r\n", payloadLen);
-                return;
-            }
-            // Decoderadresse
-            prefsSignal.putByte(key_Adr, payload[1]);
-            decoderadr = readValfromPreferences8(prefsSignal, key_Adr, decoderadr, 1, 0xFF);
-
-            // Verzögerung
-            prefsSignal.putUInt(key_SrvDel, (payload[2] << 8) | payload[3]);
-            step_delay = readValfromPreferences16(prefsSignal, key_SrvDel, step_delay_std, step_delay_min, step_delay_max);
-            // Gesamtumdrehung
-            prefsSignal.putUInt(key_stepsToEnd, (payload[4] << 8) | payload[5]);
-            stepsToEnd = readValfromPreferences16(prefsSignal, key_stepsToEnd, stepsToEnd_std, stepsToEnd_min, stepsToEnd_max);
-
-            // Position
-            prefsSignal.putByte(key_curr_pos, (uint8_t)payload[6]);
-            current_position = (position)readValfromPreferences8(prefsSignal, key_curr_pos, position::nullpkt, position::nullpkt, position::endpkt);
-
-            // Stepper‑Richtung
-            prefsSignal.putByte(key_s_d, payload[7]);
-            stepDirection = (stepDirections)readValfromPreferences8(prefsSignal, key_s_d, A_dir, A_dir, B_dir);
-
-            SetDirection();
-            break;
-
-        case SIGNAL_CMD_GET_SETTINGS:
-            // GET_SETTINGS braucht genau 1 Byte Payload (assignedId)
-            // sendet die aktuellen Einstellungen zurück an die GUI, damit die GUI die Werte in den Eingabefeldern korrekt anzeigen kann
-            if (payloadLen < 1)
-            {
-                Serial.println("ERROR: GET_SETTINGS without assignedId");
-                return;
-            }
-
-            uint8_t p[payloadLenExpected];
-            p[0] = aliveGetDecoderID();
-
-            decoderadr = readValfromPreferences8(prefsSignal, key_Adr, decoderadr, 1, 0xFF);
-            p[1] = decoderadr;
-
-            step_delay = readValfromPreferences16(prefsSignal, key_SrvDel, step_delay_std, step_delay_min, step_delay_max);
-            p[2] = step_delay >> 8;
-            p[3] = step_delay & 0xFF;
-
-            stepsToEnd = readValfromPreferences16(prefsSignal, key_stepsToEnd, stepsToEnd_std, stepsToEnd_min, stepsToEnd_max);
-            p[4] = stepsToEnd >> 8;
-            p[5] = stepsToEnd & 0xFF;
-
-            p[6] = (uint8_t)readValfromPreferences8(prefsSignal, key_curr_pos, position::nullpkt, position::nullpkt, position::endpkt);
-
-            stepDirection = (stepDirections)readValfromPreferences8(prefsSignal, key_s_d, A_dir, A_dir, B_dir);
-            p[7] = stepDirection;
-
-            gDecoder->sendToBridge(featureId, SIGNAL_CMD_GET_SETTINGS, p, payloadLenExpected);
-            break;
-
-        case SIGNAL_CMD_MOVE2START:
-            if (payloadLen < 2)
-            {
-                Serial.println("ERROR: MOVE2START payload too short");
-                return;
-            }
-            StartSlowMove2Start((position)payload[1]);
-            break;
-
-        case SIGNAL_CMD_SET_ZERO:
-            // kein payload[1] nötig
-            SetZeroPoint();
-            break;
-
-        case SIGNAL_CMD_MOVE2END:
-            if (payloadLen < 2)
-            {
-                Serial.println("ERROR: MOVE2END payload too short");
-                return;
-            }
-            StartEndPointMove((position)payload[1]);
-            break;
-
-        case SIGNAL_CMD_SET_END:
-            SetEndPoint();
-            break;
-
-        case SIGNAL_CMD_TEST_RUN:
-            if (payloadLen < 2)
-            {
-                Serial.println("ERROR: TEST_RUN payload too short");
-                return;
-            }
-            Start2Run((position)payload[1]);
-            break;
-
-        case SIGNAL_CMD_STOP_ALL:
-            Serial.println("SignalDecoder: STOP_ALL empfangen.");
-            StopAll();
-            break;
-        }
+        Start2Run((position)frame[data4]);
+        acc_report();
     }
 }
 
-uint8_t SignalDecoder::getAliveFeatureData(uint8_t *buf)
+// Befehle aus der GUI (Feature Stepper, Kommandos SWITCH_CMD_*, Nutzdaten wie bisher:
+// Nutzdaten[0] = Decoder-ID). Jede Anfrage wird quittiert.
+bool SignalDecoder::onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen)
 {
-    buf[0] = 0x00;
-    buf[1] = 0x00;
-    buf[2] = 0x00;
-    buf[3] = 0x00;
+    if (h.feature != CG2_F_STEPPER)
+        return false;
 
-    return 4; // zwei Bytes Feature-Daten
+    if (payloadLen < 1 || payload[0] != aliveGetDecoderID())
+    {
+        reply(h, nullptr, 0, CG2_ERR_BAD_VALUE);
+        return true;
+    }
+
+    switch (h.command)
+    {
+    case SWITCH_CMD_SET_SETTINGS:
+        // Empfangen der Einstellungen von der GUI, z.B. nach Änderung in den Eingabefeldern und Klick auf "Senden"
+        if (payloadLen < EXP_LNG_SIGNAL_SETTINGS)
+        {
+            reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
+            return true;
+        }
+        // Decoderadresse
+        prefsSignal.putByte(key_Adr, payload[1]);
+        decoderadr = readValfromPreferences8(prefsSignal, key_Adr, decoderadr, 1, 0xFF);
+
+        // Verzögerung
+        prefsSignal.putUInt(key_SrvDel, (payload[2] << 8) | payload[3]);
+        step_delay = readValfromPreferences16(prefsSignal, key_SrvDel, step_delay_std, step_delay_min, step_delay_max);
+        // Gesamtumdrehung
+        prefsSignal.putUInt(key_stepsToEnd, (payload[4] << 8) | payload[5]);
+        stepsToEnd = readValfromPreferences16(prefsSignal, key_stepsToEnd, stepsToEnd_std, stepsToEnd_min, stepsToEnd_max);
+
+        // Position
+        prefsSignal.putByte(key_curr_pos, (uint8_t)payload[6]);
+        current_position = (position)readValfromPreferences8(prefsSignal, key_curr_pos, position::nullpkt, position::nullpkt, position::endpkt);
+
+        // Stepper‑Richtung
+        prefsSignal.putByte(key_s_d, payload[7]);
+        stepDirection = (stepDirections)readValfromPreferences8(prefsSignal, key_s_d, A_dir, A_dir, B_dir);
+
+        SetDirection();
+        reply(h);
+        return true;
+
+    case SWITCH_CMD_GET_SETTINGS:
+    {
+        // sendet die aktuellen Einstellungen zurück an die GUI, damit die GUI die Werte in den Eingabefeldern korrekt anzeigen kann
+        uint8_t p[EXP_LNG_SIGNAL_SETTINGS];
+        p[0] = aliveGetDecoderID();
+
+        decoderadr = readValfromPreferences8(prefsSignal, key_Adr, decoderadr, 1, 0xFF);
+        p[1] = decoderadr;
+
+        step_delay = readValfromPreferences16(prefsSignal, key_SrvDel, step_delay_std, step_delay_min, step_delay_max);
+        p[2] = step_delay >> 8;
+        p[3] = step_delay & 0xFF;
+
+        stepsToEnd = readValfromPreferences16(prefsSignal, key_stepsToEnd, stepsToEnd_std, stepsToEnd_min, stepsToEnd_max);
+        p[4] = stepsToEnd >> 8;
+        p[5] = stepsToEnd & 0xFF;
+
+        p[6] = (uint8_t)readValfromPreferences8(prefsSignal, key_curr_pos, position::nullpkt, position::nullpkt, position::endpkt);
+
+        stepDirection = (stepDirections)readValfromPreferences8(prefsSignal, key_s_d, A_dir, A_dir, B_dir);
+        p[7] = stepDirection;
+
+        reply(h, p, sizeof(p));
+        return true;
+    }
+
+    case SWITCH_CMD_MOVE2START:
+        if (payloadLen < 2)
+        {
+            reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
+            return true;
+        }
+        StartSlowMove2Start((position)payload[1]);
+        reply(h);
+        return true;
+
+    case SWITCH_CMD_SET_ZERO:
+        SetZeroPoint();
+        reply(h);
+        return true;
+
+    case SWITCH_CMD_MOVE2END:
+        if (payloadLen < 2)
+        {
+            reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
+            return true;
+        }
+        StartEndPointMove((position)payload[1]);
+        reply(h);
+        return true;
+
+    case SWITCH_CMD_SET_END:
+        SetEndPoint(); // meldet Laufweg (SET_END_ACK) und Stellung (SET_DIR) zusätzlich
+        reply(h);
+        return true;
+
+    case SWITCH_CMD_TEST_RUN:
+        if (payloadLen < 2)
+        {
+            reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
+            return true;
+        }
+        Start2Run((position)payload[1]);
+        reply(h);
+        return true;
+
+    case SWITCH_CMD_STOP_ALL:
+        Serial.println("SignalDecoder: STOP_ALL empfangen.");
+        StopAll();
+        reply(h);
+        return true;
+    }
+    return false;
+}
+
+bool SignalDecoder::factoryReset()
+{
+    return DecoderReset::performReset(DECODER_NVS_NAMESPACE, loadDefaultsWithAddress);
 }
 
 DecoderBase::AliveState SignalDecoder::getStatus() const
@@ -292,7 +271,7 @@ DecoderBase::AliveState SignalDecoder::getStatus() const
 
 void SignalDecoder::loop()
 {
-    // 0. das Erben von DecoderBase::loop() aufrufen, damit Core_Alive und Core_Ota funktionieren
+    // 0. das Erben von DecoderBase::loop() aufrufen, damit Core_Link und Core_Ota funktionieren
     DecoderBase::loop();
     StepperTick();
     // Sehr kurze Pause, damit der Watchdog glücklich bleibt

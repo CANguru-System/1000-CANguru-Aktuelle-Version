@@ -25,17 +25,11 @@ public:
     void loop() override;
 
     // -----------------------------------------------------------------------
-    // Verarbeitung eingehender Feature-Frames
+    // Befehle aus der GUI, CAN-Frames aus WDP, Werkseinstellungen
     // -----------------------------------------------------------------------
-    void onFeatureFrame(uint8_t featureId,
-                        uint8_t commandId,
-                        const uint8_t *payload,
-                        uint8_t payloadLen) override;
-
-    // -----------------------------------------------------------------------
-    // Alive-Daten für die Bridge
-    // -----------------------------------------------------------------------
-    uint8_t getAliveFeatureData(uint8_t *buf) override;
+    bool onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen) override;
+    void onCanFrame(const uint8_t *frame) override;
+    bool factoryReset() override;
 
     // -----------------------------------------------------------------------
     // Status des Decoders (Alive / Offline / Error)

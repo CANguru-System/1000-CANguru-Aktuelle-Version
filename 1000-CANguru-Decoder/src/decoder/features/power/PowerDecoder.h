@@ -16,12 +16,9 @@ public:
     void setup() override;
     void loop() override;
 
-// Diese Methode existiert in DecoderBase und wird korrekt überschrieben
-void onFeatureFrame(uint8_t featureId,
-                    uint8_t commandId,
-                    const uint8_t* payload,
-                    uint8_t payloadLen) override;
-    uint8_t getAliveFeatureData(uint8_t *buf) override;
+    bool onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen) override;
+    uint8_t getAliveValues(uint16_t *values, uint8_t maxValues) override;
+    bool factoryReset() override;
     AliveState getStatus() const override;
 
 private:

@@ -57,17 +57,6 @@ static bool connectToBridgeAP()
     }
 }
 
-void sendOtaError(uint8_t errorCode)
-{
-    const uint8_t len = 2;
-    uint8_t pkt[len];
-    pkt[0] = aliveGetDecoderID();
-    pkt[1] = errorCode;
-
-    if (!otaInProgress)
-        gDecoder->sendToBridge(FEATURE_OTA, OTA_ERROR, pkt, len);
-}
-
 // Nach einem OTA-Fehler ist ESP-NOW abgebaut und das WLAN im Station-Modus.
 // Ein Wiederaufbau im laufenden Betrieb hat sich als unzuverlässig erwiesen
 // (Callbacks und Peer fehlten, der Decoder war danach taub). Deshalb sauber neu
@@ -82,16 +71,6 @@ static void restartAfterOtaFailure(const char *reason)
     coreConfigSetOtaPending(true);
     delay(500);
     ESP.restart();
-}
-
-
-void sendOtaErrorFrame()
-{
-    const uint8_t len = 1;
-    uint8_t pkt[len];
-    pkt[0] = aliveGetDecoderID();
-
-    gDecoder->sendToBridge(FEATURE_OTA, OTA_CURRENT_ERROR, pkt, len);
 }
 
 bool coreOtaStartFromBridge() {
@@ -195,11 +174,22 @@ void coreOtaInit()
     // Flags sind bereits in coreEspNowInit zurückgesetzt
 }
 
+// Aufruf bei CG2_OTA_DECODER_START (nach der Quittung an die Bridge)
+void coreOtaRequest()
+{
+    otaRequested = true;
+    otaRunning = true;
+}
+
 void coreOtaLoop()
 {
     if (otaRequested && !otaInProgress)
     {
         otaRequested = false;
+        // Der Quittung an die Bridge Zeit lassen, dann ESP-NOW abbauen und per WLAN laden
+        delay(100);
+        esp_now_deinit();
+        espNowReady = false;
         coreOtaStartFromBridge();
     }
 }

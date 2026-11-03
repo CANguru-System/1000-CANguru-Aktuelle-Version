@@ -3,28 +3,22 @@
 #include <nvs_flash.h>
 #include <esp_err.h>
 #include <Arduino.h>
-#include "Core_EspNow.h"
 
+// Hilfe für DecoderBase::factoryReset() der Decodertypen
 class DecoderReset
 {
 public:
-    // Löscht den NVS‑Namespace und ruft anschließend loadDefaults() auf.
-static bool performReset(const char* nvsNamespace,
-                         void (*loadDefaultsCallback)(),
-                         uint8_t featureId,
-                         uint8_t ackCommandId,
-                         uint8_t assignedId,
-                         uint8_t decoderType)
-{
-    if (!eraseNamespace(nvsNamespace))
-        return false;
+    // Löscht den NVS-Namensraum und ruft anschließend loadDefaults() auf.
+    // Die Quittung an die Bridge sendet der Kern (Core_Link).
+    static bool performReset(const char *nvsNamespace, void (*loadDefaultsCallback)())
+    {
+        if (!eraseNamespace(nvsNamespace))
+            return false;
 
-    if (loadDefaultsCallback)
-        loadDefaultsCallback();
-
-    sendAck(featureId, ackCommandId, assignedId, decoderType);
-    return true;
-}
+        if (loadDefaultsCallback)
+            loadDefaultsCallback();
+        return true;
+    }
 
 private:
     static bool eraseNamespace(const char *nvsNamespace)
@@ -44,21 +38,5 @@ private:
         nvs_commit(handle);
         nvs_close(handle);
         return true;
-    }
-
-    static void sendAck(uint8_t featureId,
-                        uint8_t ackCommandId,
-                        uint8_t assignedId,
-                        uint8_t decoderType)
-    {
-        uint8_t payload[2];
-        payload[0] = assignedId;
-        payload[1] = decoderType;
-
-        gDecoder->sendToBridge(
-            featureId,
-            ackCommandId,
-            payload,
-            sizeof(payload));
     }
 };

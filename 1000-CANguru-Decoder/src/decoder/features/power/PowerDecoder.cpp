@@ -10,6 +10,7 @@
 #include "Core_Alive.h"
 #include "Core_globals.h"
 #include "DecoderBase.h"
+#include "DecoderResetUtility.h"
 
 uint16_t threshold_mA = 1000;
 
@@ -275,67 +276,56 @@ void PowerDecoder::shutdown(uint8_t channel)
     currentStatus = DecoderBase::AliveState::Offline;
     setTrackPower(false);
 
-    // gemeldet wird der Strom der letzten Messung, die zur Abschaltung geführt hat
-    const uint8_t len = 3;
-    uint8_t payload[len];
-    payload[0] = channel;
-    payload[1] = lastRaw_mA[channel] >> 8;
-    payload[2] = lastRaw_mA[channel] & 0xFF;
-
-    gDecoder->sendToBridge(FEATURE_POWER, POWER_CMD_SHUTDOWN, payload, len);
+    // gemeldet wird der Strom der letzten Messung, die zur Abschaltung geführt hat:
+    // [kanal][strom mA u16]
+    uint8_t payload[3];
+    Cg2Writer w(payload, sizeof(payload));
+    w.u8(channel).u16(lastRaw_mA[channel]);
+    sendMessage(CG2_F_POWER, CG2_POWER_SHUTDOWN, payload, w.size());
 }
 
-void PowerDecoder::onFeatureFrame(uint8_t featureId,
-                                  uint8_t commandId,
-                                  const uint8_t *payload,
-                                  uint8_t payloadLen)
+// Befehle über Feature Strom (bis Phase 3). Zahlen in Little Endian.
+bool PowerDecoder::onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen)
 {
-    if (featureId != FEATURE_POWER)
-        return;
+    if (h.feature != CG2_F_POWER)
+        return false;
 
-    switch (commandId)
+    Cg2Reader r(payload, payloadLen);
+    switch (h.command)
     {
-    case POWER_CMD_SET_THRESHOLD:
+    case CG2_POWER_SET_THRESHOLD:
     {
-        if (payloadLen < 2)
-            return;
-
-        threshold_mA = limitThreshold((payload[0] << 8) | payload[1]);
+        uint16_t value = r.u16();
+        if (!r.ok())
+        {
+            reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
+            return true;
+        }
+        threshold_mA = limitThreshold(value);
         coreConfigSetUInt16(key_power_threshold, threshold_mA);
-
         Serial.printf("Threshold %u mA gespeichert\n", threshold_mA);
-        break;
+        // Antwort: tatsächlich gesetzter Wert (ggf. begrenzt)
+        uint8_t resp[2];
+        Cg2Writer(resp, sizeof(resp)).u16(threshold_mA);
+        reply(h, resp, sizeof(resp));
+        return true;
     }
 
-    case POWER_CMD_GET_THRESHOLD:
+    case CG2_POWER_GET_THRESHOLD:
     {
-        uint16_t thr = threshold_mA;
-
-        const uint8_t len = 2;
-        uint8_t resp[len] = {uint8_t(thr >> 8), uint8_t(thr & 0xFF)};
-
-        gDecoder->sendToBridge(FEATURE_POWER, POWER_CMD_GET_THRESHOLD, resp, len);
-
-        Serial.printf("Threshold %u mA gesendet\n", thr);
-        break;
+        uint8_t resp[2];
+        Cg2Writer(resp, sizeof(resp)).u16(threshold_mA);
+        reply(h, resp, sizeof(resp));
+        return true;
     }
 
-    case POWER_CMD_SHUTDOWN:
+    case CG2_POWER_TRACK:
     {
-        // Shutdown kommt normalerweise vom Decoder selbst,
-        // aber falls die Bridge es sendet:
-        if (payloadLen < 1 || payload[0] > 1)
-            return;
-        shutdown(payload[0]);
-        break;
-    }
-
-    case POWER_CHG_TRACK_CURRENT:
-    {
-        // STOPP/GO von GUI oder WDP
-        if (payloadLen < 1)
-            return;
-        bool on = (payload[0] == 1);
+        // STOPP/GO von GUI oder WDP (die Bridge leitet es vom CAN-Bus ab)
+        uint8_t state = r.u8();
+        if (!r.ok())
+            return true;
+        bool on = (state == 1);
         if (on)
         {
             // Beim Wiedereinschalten die Überstromüberwachung neu scharf schalten,
@@ -347,34 +337,27 @@ void PowerDecoder::onFeatureFrame(uint8_t featureId,
             currentStatus = DecoderBase::AliveState::Online;
         }
         setTrackPower(on);
-        break;
-    }
-
-    case POWER_CMD_GET_VERSION:
-    {
-
-        const uint8_t len = 2;
-        uint8_t resp[len] = {uint8_t(VERS_HIGH), uint8_t(VERS_LOW)};
-
-        gDecoder->sendToBridge(FEATURE_POWER, POWER_CMD_GET_VERSION, resp, len);
-
-        Serial.printf("Version %u.%u gesendet\n", VERS_HIGH, VERS_LOW);
-        break;
+        if (h.ackRequested())
+            reply(h);
+        return true;
     }
     }
+    return false;
 }
 
-uint8_t PowerDecoder::getAliveFeatureData(uint8_t *buf)
+bool PowerDecoder::factoryReset()
 {
-    uint16_t mA0 = current_mA[0]; // Assuming you want the first channel's current
-    uint16_t mA1 = current_mA[1]; // Assuming you want the second channel's current
+    return DecoderReset::performReset(DECODER_NVS_NAMESPACE, loadDefaultsWithAddress);
+}
 
-    buf[0] = mA0 >> 8;
-    buf[1] = mA0 & 0xFF;
-    buf[2] = mA1 >> 8;
-    buf[3] = mA1 & 0xFF;
-
-    return 4; // zwei Bytes Feature-Daten
+// Messwerte im Alive: geglätteter Strom je Kanal in mA, 0xFFFF = nicht angeschlossen
+uint8_t PowerDecoder::getAliveValues(uint16_t *values, uint8_t maxValues)
+{
+    if (maxValues < 2)
+        return 0;
+    values[0] = current_mA[0];
+    values[1] = current_mA[1];
+    return 2;
 }
 
 DecoderBase::AliveState PowerDecoder::getStatus() const

@@ -58,7 +58,7 @@ void sendCurrPos2GUI(position curr_pos)
     uint8_t p[len];
     p[0] = aliveGetDecoderID();
     p[1] = curr_pos; // RightOrLeft
-    gDecoder->sendToBridge(FEATURE_SIGNAL, SIGNAL_CMD_SET_DIR, p, len);
+    gDecoder->sendMessage(CG2_F_STEPPER, SWITCH_CMD_SET_DIR, p, len);
 }
 
 // Schritt ausführen (MX1508)
@@ -222,7 +222,7 @@ void SetEndPoint()
     prefsSignal.putUInt(key_stepsToEnd, stepsToEnd);
     const uint8_t len = 2;
     uint8_t p_ack[len] = {uint8_t(stepsToEnd >> 8), uint8_t(stepsToEnd & 0xFF)};
-    gDecoder->sendToBridge(FEATURE_SIGNAL, SIGNAL_CMD_SET_END_ACK, p_ack, len);
+    gDecoder->sendMessage(CG2_F_STEPPER, SWITCH_CMD_SET_END_ACK, p_ack, len);
     delay(100); // kurze Pause, damit die GUI die ACK-Nachricht verarbeiten kann, bevor die nächste Nachricht mit der neuen Position gesendet wird
     sendCurrPos2GUI(position::endpkt);
     step_delay = readValfromPreferences16(prefsSignal, key_SrvDel, step_delay_std, step_delay_min, step_delay_max);
@@ -296,4 +296,4 @@ bool PosChg(position newPos)
     return current_position != current_destination;
 }
 
-#endif // DECODER_TYPE == DEVTYPE_SWITCH
+#endif // DECODER_TYPE == DEVTYPE_SIGNAL

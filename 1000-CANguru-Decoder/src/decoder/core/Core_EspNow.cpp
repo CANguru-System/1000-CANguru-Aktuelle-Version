@@ -1,38 +1,22 @@
+// ESP-NOW: Initialisierung, Empfang (-> Core_Link), Senden von CAN-Frames an die
+// Bridge und die Märklin-Antworten des Kerns (PING, Gerätebeschreibung).
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
-#include <nvs.h>
-#include <nvs_flash.h>
-#include "Core_EspNow.h"
 #include "esp_wifi.h"
-#include "protocol_constants_core.h"
-#include "DecoderBase.h"
+#include "Core_EspNow.h"
+#include "Core_Link.h"
 #include "Core_Config.h"
-#include "Core_Logging.h"
+#include "Core_Alive.h"
+#include "core_globals.h"
 #include "DecoderBase.h"
-#include "Core_Feature.h"
-#include "Core_Alive.h" // für decoderID
-#include "Core_globals.h"
-#include "DecoderResetUtility.h"
-#if DECODER_TYPE == DEVTYPE_SIGNAL
-#include "SignalDecoder.h"
-#endif
-#if DECODER_TYPE == DEVTYPE_SWITCH
-#include "SwitchDecoder.h"
-#endif
-#if DECODER_TYPE == DEVTYPE_POWER
-#include "PowerDecoder.h"
-#endif
-#if DECODER_TYPE == DEVTYPE_RM
-#include "FeedbackDecoder.h"
-#endif
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
-QueueHandle_t espnowQueue;
+static QueueHandle_t canTxQueue = NULL;
 
-DecoderBase *gDecoder = nullptr;
 BeforeRestartCallback beforeRestartCallback = nullptr;
 AfterstartCallback afterstartCallback = nullptr;
 
@@ -40,7 +24,6 @@ uint8_t Bridge_Mac[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // wird beim ersten
 uint8_t Decoder_Mac[6];
 bool espNowReady = false;
 bool bridge_is_known = false;
-uint8_t nextType = MSG_START_DECODERS;
 
 uint8_t uid_device[uid_num];
 uint8_t hasharr[2];
@@ -49,23 +32,11 @@ uint8_t DEVTYPE = DEVTYPE_BASE;
 uint8_t VERS_HIGH = 0;
 uint8_t VERS_LOW = 0;
 
-extern volatile bool otaRequested;
-extern bool otaInProgress;
-extern bool otaRunning;
-extern uint8_t nextType;
-
-static bool startAllowed = false;
-
 static ConfigProvider_t configProvider;
 
 void registerConfigProvider(const ConfigProvider_t *provider)
 {
     configProvider = *provider;
-}
-
-static bool wrong_nextType(uint8_t type)
-{
-    return type != nextType;
 }
 
 void logMac(const char *prefix, const uint8_t *mac)
@@ -80,19 +51,19 @@ void logMac(const char *prefix, const uint8_t *mac)
     Serial.println();
 }
 
+// CAN-Frame (13 Byte) zur Bridge; gesendet vom Task espnowSendTask
 void coreEspNowSendCAN2Bridge(const uint8_t *data)
 {
-    if (!espNowReady || !bridge_is_known)
+    if (!espNowReady || !bridge_is_known || canTxQueue == NULL)
         return;
-
-    xQueueSend(espnowQueue, data, portMAX_DELAY);
+    // nicht blockieren: wird auch aus dem Timer des Rückmelders aufgerufen
+    xQueueSend(canTxQueue, data, 0);
 }
 
 void generateHash()
 {
 #define UID_BASE 0x45009195ULL // CAN-UID
-    //  uint32_t uid = UID_BASE + (DEVTYPE - DEVTYPE_BASE - 1) * maxdevice + offset;
-    uint32_t uid = UID_BASE + aliveGetDecoderID(); // UID_BASE + offset;
+    uint32_t uid = UID_BASE + aliveGetDecoderID();
     uid_device[0] = (uint8_t)(uid >> 24);
     uid_device[1] = (uint8_t)(uid >> 16);
     uid_device[2] = (uint8_t)(uid >> 8);
@@ -125,11 +96,10 @@ void sendPING()
     opFrame[data5] = VERS_LOW;
     opFrame[data6] = DEVTYPE >> 8;
     opFrame[data7] = DEVTYPE;
-    //%
     coreEspNowSendCAN2Bridge(opFrame);
 }
 
-void copyStringToFrame(uint8_t *frame, int start, const String &txt)
+static void copyStringToFrame(uint8_t *frame, int start, const String &txt)
 {
     memcpy(&frame[start], txt.c_str(), txt.length());
 }
@@ -137,7 +107,6 @@ void copyStringToFrame(uint8_t *frame, int start, const String &txt)
 void sendConfig()
 {
     /*
-    Format Gerätebeschreibung
       Format Gerätebeschreibung:
       Typ     Bedeutung
       Char    Anzahl der Messwerte im Gerät.
@@ -160,10 +129,8 @@ void sendConfig()
             opFrame[hash0] = 0x03;
             opFrame[hash1] = line + 1;
             opFrame[Framelng] = 0x08;
-            // Index
             // Unter Index 0 sind die Gerätebeschreibung abrufbar. Primär ist dies die Anzahl der zur Verfügung
             // gestellten Messkanäle. Weiterhin enthalten sind Angaben zur Identifikation des Gerätes.
-            // Anzahl Kanäle
             opFrame[data1] = 0x01;
             opFrame[data7] = aliveGetDecoderID();
             break;
@@ -182,7 +149,6 @@ void sendConfig()
             opFrame[0x0C] = 0x00;
             break;
         case 4:
-
             opFrame[hash0] = hasharr[0];
             opFrame[hash1] = hasharr[1];
             opFrame[Framelng] = 0x06;
@@ -197,8 +163,6 @@ void sendConfig()
             break;
         }
         coreEspNowSendCAN2Bridge(opFrame);
-        //%
-        //    gDecoder->sendToBridge(FEATURE_CS2, FRAME_CAN_2BRIDGE, opFrame, sizeof(opFrame));
     }
 }
 
@@ -208,70 +172,42 @@ static void onDecDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
     (void)status;
 }
 
-// einghende Daten von der Bridge über ESP-NOW
+// Eingehende Daten von der Bridge über ESP-NOW (läuft im WLAN-Task)
 static void onDecDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
     if (!gDecoder)
         return;
-    /*
-Protokoll der empfangenen Daten:
-[0] SendMode
-[1] Selector
-[2] FeatureID
-[3] CommandID
-[4..] Payload
-*/
+
     if (bridge_is_known == false)
     {
         logMac("Received first ESP-NOW packet from unknown MAC: ", mac);
-        // Broadcast-Peer eintragen
-        esp_now_peer_info_t bcast{};
+        // Bridge als Unicast-Partner eintragen: Antworten gehen nur an sie
+        esp_now_peer_info_t peer{};
         memcpy(&Bridge_Mac[0], mac, 6);
-        memcpy(bcast.peer_addr, Bridge_Mac, 6);
-        bcast.channel = BRIDGE_AP_CHANNEL;
-        bcast.ifidx = WIFI_IF_STA;
-        bcast.encrypt = false;
-        esp_now_add_peer(&bcast);
-        // für rejoin adresse speichern
-        prefs.putBytes(key_bridgeMac, Bridge_Mac, 6);
+        memcpy(peer.peer_addr, Bridge_Mac, 6);
+        peer.channel = BRIDGE_AP_CHANNEL;
+        peer.ifidx = WIFI_IF_STA;
+        peer.encrypt = false;
+        esp_now_add_peer(&peer);
         bridge_is_known = true;
+        // NVS-Zugriff nicht im WLAN-Task: Speichern der MAC übernimmt coreEspNowLoop()
     }
 
-    // Paket an Decoder-Logik weiterreichen
-    gDecoder->onEspNowDataReceived(incomingData, len);
+    // nur in die Warteschlange; Verarbeitung in loop() (Core_Link)
+    coreLinkEnqueue(incomingData, len);
 }
 
-void initEspNowQueue()
-{
-    espnowQueue = xQueueCreate(30, CAN_FRAME_SIZE);
-    if (espnowQueue == NULL)
-    {
-        Serial.println("ERROR: Could not create ESP-NOW queue!");
-    }
-}
-
-void espnowSendTask(void *pv)
+// Sendet die CAN-Frames der Warteschlange als CG2_CAN_FROM_DECODER an die Bridge
+static void espnowSendTask(void *pv)
 {
     uint8_t frame[CAN_FRAME_SIZE];
 
     for (;;)
     {
         // Blockiert, bis ein Frame in der Queue liegt
-        if (xQueueReceive(espnowQueue, frame, portMAX_DELAY))
+        if (xQueueReceive(canTxQueue, frame, portMAX_DELAY))
         {
-
-            gDecoder->sendToBridge(FEATURE_CS2, FRAME_CAN_2BRIDGE, frame, CAN_FRAME_SIZE);
-
-            /*    // Retry-Mechanismus
-                for (int retry = 0; retry < 5; retry++)
-                { //%
-                    if (sendPacket(pkt))
-                        break;
-
-                    // kurze Pause, damit der WiFi-Stack Luft bekommt
-                    vTaskDelay(5 / portTICK_PERIOD_MS);
-                }*/
-
+            coreLinkSend(CG2_F_CAN, CG2_CAN_FROM_DECODER, frame, CAN_FRAME_SIZE);
             // kleine Pause, damit ESP-NOW nicht überlastet
             vTaskDelay(10 / portTICK_PERIOD_MS);
         }
@@ -294,9 +230,7 @@ void coreEspNowInit()
 
     // 3. MAC-Adresse auslesen
     esp_read_mac(Decoder_Mac, ESP_MAC_WIFI_STA);
-    Serial.printf("DECODER-coreEspNowInit: WiFi STA MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-                  Decoder_Mac[0], Decoder_Mac[1], Decoder_Mac[2],
-                  Decoder_Mac[3], Decoder_Mac[4], Decoder_Mac[5]);
+    logMac("DECODER-coreEspNowInit: WiFi STA MAC: ", Decoder_Mac);
 
     // 4. Jetzt erst ESP-NOW initialisieren
     esp_now_deinit();
@@ -310,241 +244,40 @@ void coreEspNowInit()
 
     espNowReady = true;
 
-    // 6. Callbacks registrieren
+    // 5. Callbacks registrieren
     esp_now_register_recv_cb(onDecDataRecv);
     esp_now_register_send_cb(onDecDataSent);
 
- // 🔴 HIER: Peer für Bridge anlegen, falls bekannt
+    // 6. Peer für die Bridge anlegen, falls bekannt (nach OTA)
     if (bridge_is_known)
     {
         esp_now_peer_info_t peer{};
         memcpy(peer.peer_addr, Bridge_Mac, 6);
         peer.channel = BRIDGE_AP_CHANNEL;
-        peer.ifidx   = WIFI_IF_STA;
+        peer.ifidx = WIFI_IF_STA;
         peer.encrypt = false;
 
         esp_err_t pr = esp_now_add_peer(&peer);
         Serial.printf("DECODER-coreEspNowInit: add_peer result=%d\r\n", pr);
     }
-    
-    initEspNowQueue();
-    xTaskCreate(espnowSendTask, "espnowSendTask", 4096, NULL, 1, NULL);
-}
 
-void sendHello(uint8_t assignedId, uint8_t decoderType, const uint8_t *mac)
-{
-    const uint8_t len = 8;
-    uint8_t payload[len] = {
-        assignedId,
-        decoderType,
-        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]};
-    gDecoder->sendToBridge(FEATURE_ALIVE, FRAME_DECODER_HELLO, payload, len);
-}
-
-void startHelloSequence()
-{
-    uint8_t id = aliveGetDecoderID();
-    if (!startAllowed || otaInProgress)
-        return;
-    startAllowed = false;
-    Serial.printf("Starting HELLO sequence with ID=%d\r\n", id);
-    sendHello(id, DEVTYPE, Decoder_Mac);
-}
-
-void sendRejoin()
-{
-    // [0] ID, [1] 1 = das OTA-Update vor diesem Neustart ist fehlgeschlagen
-    bool otaFailed = prefs.getBool(key_otaFailed, false);
-    if (otaFailed)
-        prefs.putBool(key_otaFailed, false);
-
-    const uint8_t len = 2;
-    uint8_t pkt[len];
-    pkt[0] = aliveGetDecoderID();
-    pkt[1] = otaFailed ? 1 : 0;
-
-    Serial.printf("Sending REJOIN with ID=%d, OTA %s\r\n", pkt[0], otaFailed ? "fehlgeschlagen" : "ok");
-    gDecoder->sendToBridge(FEATURE_DECODER, FRAME_DECODER_REJOIN, pkt, len);
-}
-
-void resetDecoderNVS()
-{
-    nvs_handle handle;
-#if DECODER_TYPE == DEVTYPE_SWITCH
-    esp_err_t err = nvs_open("switch", NVS_READWRITE, &handle);
-#endif
-#if DECODER_TYPE == DEVTYPE_SIGNAL
-    esp_err_t err = nvs_open("signal", NVS_READWRITE, &handle);
-#endif
-#if DECODER_TYPE == DEVTYPE_POWER
-    esp_err_t err = nvs_open("power", NVS_READWRITE, &handle);
-#endif
-#if DECODER_TYPE == DEVTYPE_RM
-    esp_err_t err = nvs_open("feedback", NVS_READWRITE, &handle);
-#endif
-    if (err == ESP_OK)
+    if (canTxQueue == NULL)
     {
-        nvs_erase_all(handle); // <-- löscht ALLE Keys in diesem Namespace
-        nvs_commit(handle);
-        nvs_close(handle);
-#if DECODER_TYPE == DEVTYPE_SWITCH
-        Serial.println("NVS: Namespace 'switch' gelöscht.");
-#endif
-#if DECODER_TYPE == DEVTYPE_SIGNAL
-        Serial.println("NVS: Namespace 'signal' gelöscht.");
-#endif
-#if DECODER_TYPE == DEVTYPE_POWER
-        Serial.println("NVS: Namespace 'power' gelöscht.");
-#endif
-#if DECODER_TYPE == DEVTYPE_RM
-        Serial.println("NVS: Namespace 'feedback' gelöscht.");
-#endif
-    }
-    else
-    {
-        Serial.printf("NVS open failed: %s\n", esp_err_to_name(err));
+        canTxQueue = xQueueCreate(30, CAN_FRAME_SIZE);
+        xTaskCreate(espnowSendTask, "espnowSendTask", 4096, NULL, 1, NULL);
     }
 }
 
-// ID_ASSIGN (MAC‑basiert) im Decoder
-// Das ist der Spezialfall für MAC_DIRECT, da hier die Ziel‑MAC im Paket steht und geprüft werden muss, ob sie mit der eigenen MAC übereinstimmt.
-bool handleMacDirectFrame(uint8_t featureId, uint8_t commandId, const uint8_t *data, int len)
+// Aus loop(): einmalig die Bridge-MAC speichern (für REJOIN nach einem OTA)
+void coreEspNowLoop()
 {
-    if (featureId != FEATURE_ALIVE || commandId != FRAME_DECODER_ID_ASSIGN)
-        return false;
-    if (wrong_nextType(commandId))
-        return true;
-
-    nextType = FRAME_DECODER_ALIVE_ACK;
-
-    if (len < 1 + 1 + 6) // assignedId + decoderType + MAC
-        return false;
-
-    uint8_t newAssignedId = data[0];
-    uint8_t newDecoderType = data[1];
-    const uint8_t *targetMac = &data[2];
-    // 1. Nur Decoder ohne gültige ID reagieren
-    if (aliveGetDecoderID() != INVALID_ASSIGNED_ID)
-        return false; // Ich habe schon eine ID → ignorieren
-    // 2. MAC-Vergleich: Bin ich der gemeinte Decoder?
-    if (memcmp(targetMac, Decoder_Mac, 6) != 0)
-        return false; // Nicht meine MAC → ignorieren
-    // 3. Jetzt bin ich sicher: Ich bin gemeint
-    aliveSetDecoderID(newAssignedId);
-    DEVTYPE = newDecoderType;
-
-    prefs.putByte(key_id, INVALID_ASSIGNED_ID); // erstmal ungültige ID speichern, damit bei einem Reboot die Hello-Sequenz wieder von vorne beginnt und nicht mit der alten ID gesendet wird
-    prefs.putBool(key_otaPending, false);
-
-    const uint8_t len_payload = 1;
-    uint8_t payload[len_payload];
-    payload[0] = aliveGetDecoderID();
-    if (!otaInProgress)
-        gDecoder->sendToBridge(FEATURE_ALIVE, FRAME_DECODER_ID_ACK, payload, len_payload);
-
-    if (afterstartCallback != nullptr)
+    static bool macSaved = false;
+    if (bridge_is_known && !macSaved)
     {
-        generateHash();
-        afterstartCallback(); // decoderspezifische Aktionen
-        delay(50);            // kurze Sicherheitspause
+        macSaved = true;
+        uint8_t stored[6] = {0};
+        prefs.getBytes(key_bridgeMac, stored, 6);
+        if (memcmp(stored, Bridge_Mac, 6) != 0)
+            prefs.putBytes(key_bridgeMac, Bridge_Mac, 6);
     }
-    return true;
-}
-
-// Globale Kommandos (Reset to all, etc.)
-bool handleGlobalFrame(uint8_t featureId, uint8_t commandId, const uint8_t *data, int len)
-{
-    if (featureId == FEATURE_DECODER)
-    {
-        switch (commandId)
-        {
-        case MSG_START_DECODERS:
-            nextType = FRAME_DECODER_ID_ASSIGN;
-            startAllowed = true;
-            startHelloSequence();
-            return true;
-        case CMD_DECODER_RESET:
-            if (beforeRestartCallback != nullptr)
-            {
-                beforeRestartCallback(); // decoderspezifische Aktionen
-                delay(50);               // kurze Sicherheitspause
-            }
-            prefs.putByte(key_id, INVALID_ASSIGNED_ID);
-            coreConfigClearOtaPending();
-            delay(500); // kurze Pause, damit die Antwort auf die Reset-Anfrage noch rausgehen kann, bevor der Decoder neu startet
-            ESP.restart();
-            return true;
-        }
-    }
-
-    if (featureId == FEATURE_BRIDGE2DECODER)
-    {
-        switch (commandId)
-        {
-        case PING:
-            sendPING();
-            return true;
-        }
-    }
-
-    // Weitere globale Kommandos hier
-    // Alle anderen CAN-Packets an ALLE Decoder weiterreichen
-    gDecoder->onFeatureFrame(featureId, commandId, data, len);
-    return false;
-}
-
-// Typ‑gebundene Kommandos (z.B. alle PowerDecoder sollen ihren MaxCurrent melden)
-bool handleTypedFrame(uint8_t featureId, uint8_t commandId, const uint8_t *data, int len)
-{
-    // Hier nur noch inhaltliche Logik, kein „bin ich gemeint?“ mehr
-    // hier wird onFeatureFrame nur vom ausgewählten Typ (zB switch) aufgerufen
-    // die Auswahl eines bestimmten Decoders wird anhand der ID vorgenommen
-    gDecoder->onFeatureFrame(featureId, commandId, data, len);
-    return true;
-}
-
-// AssignedId‑gebundene Kommandos
-bool handleIdBoundFrame(uint8_t featureId, uint8_t commandId, const uint8_t *data, int len)
-{
-    /*        FEATURE_ALIVE, FRAME_DECODER_ID_ASSIGN,
-    FEATURE_BRIDGE2DECODER
-    EATURE_SETTING, SETTING_CMD_RESET_TO_DEFAULTS*/
-
-    // Hier z.B. GET_SETTINGS, SET_SETTINGS, etc.
-    if (featureId == FEATURE_SETTING && commandId == SETTING_CMD_RESET_TO_DEFAULTS)
-    {
-        DecoderReset::performReset(
-            DECODER_NVS_NAMESPACE,   // NVS‑Namespace
-            loadDefaultsWithAddress, // Callback
-            FEATURE_SETTING,         // Feature für ACK
-            SETTING_CMD_RESET_ACK,   // ACK‑Kommando
-            aliveGetDecoderID(),
-            DECODER_TYPE);
-    }
-    if (featureId == FEATURE_ALIVE && commandId == FRAME_DECODER_ALIVE_ACK)
-    {
-        aliveHandleAck(data, len);
-    }
-
-    if (featureId == FEATURE_OTA && commandId == OTA_START_WIFI)
-    {
-        if (len < 2)
-            return true;
-        otaRequested = true;
-        otaRunning = true;
-
-        esp_now_deinit();
-        espNowReady = false;
-        return true;
-    }
-    
-    if (featureId == FEATURE_BRIDGE2DECODER && commandId == CONFIG_Status)
-    {
-        sendConfig();
-        return true;
-    }
-
-    gDecoder->onFeatureFrame(featureId, commandId, data, len);
-
-    return true;
 }

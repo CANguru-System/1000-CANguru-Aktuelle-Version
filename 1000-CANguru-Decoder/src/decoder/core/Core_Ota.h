@@ -7,4 +7,5 @@ extern bool otaRunning;
 
 void coreOtaInit();
 void coreOtaLoop();
+void coreOtaRequest(); // Update auf Anforderung der Bridge starten (in coreOtaLoop)
 bool coreOtaStartFromBridge();

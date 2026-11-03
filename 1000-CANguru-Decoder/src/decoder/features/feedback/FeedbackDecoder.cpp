@@ -11,6 +11,7 @@
 #include "Core_Alive.h"
 #include "Core_globals.h"
 #include "DecoderBase.h"
+#include "DecoderResetUtility.h"
 
 uint8_t decoderadr;
 
@@ -125,20 +126,6 @@ void loadFeedbackSettings()
     }
 }
 
-void sendFeedbackSettingsToBridge()
-{
-    uint8_t pkt[maxCntChannels];
-
-    for (int i = 0; i < maxCntChannels; i++)
-        pkt[i] = getFeedbackChannel(i + 1);
-
-    gDecoder->sendToBridge(FEATURE_FEEDBACK, FEEDBACK_CMD_GET_SETTINGS, pkt, maxCntChannels);
-}
-
-void sendFeedbackSetAck()
-{
-    gDecoder->sendToBridge(FEATURE_FEEDBACK, FEEDBACK_CMD_SET_SETTINGS_ACK, nullptr, 0);
-}
 void loadDefaults(bool keepAdr) // setzt seine Standardwerte
 {
     // Hier können die Standardwerte für den FeedbackDecoder gesetzt werden
@@ -266,81 +253,72 @@ void FeedbackDecoder::setup()
 }
 
 // ---------------------------------------------------------------------------
-// Feature-Frames
+// Märklin-CAN-Frames (aus WDP, über die Bridge)
 // ---------------------------------------------------------------------------
-void FeedbackDecoder::onFeatureFrame(uint8_t featureId,
-                                     uint8_t commandId,
-                                     const uint8_t *payload,
-                                     uint8_t payloadLen)
+void FeedbackDecoder::onCanFrame(const uint8_t *frame)
 {
-    if (featureId == FEATURE_BRIDGE2DECODER)
-    {
-        switch (commandId)
-        {
-        case S88_EVENT:
-        {
-            // DLC = 4: Abfrage des aktuellen Status eines Eingangs, Anwort mit DLC = 8
-            if (payload[Framelng] == 4)
-            {
-                if (!wdpAlive)
-                {
-                    wdpAlive = true;
-                }
-                // DLC = 4: Abfrage des aktuellen Status eines Eingangs, Antwort mit DLC = 8
-                // D0/1 Gerätekenner
-                // D2/3 Kontaktkennung
-                Serial.printf("S88_EVENT: Gerätekenner %02X%02X, Kontaktkennung %02X\r\n", payload[hash0], payload[hash1], payload[data3]);
-                for (uint8_t ch = 0; ch < maxCntChannels; ch++)
-                    // Kanal mit dieser Kontaktkennung data3 suchen
-                    if (getFeedbackChannel(ch + 1) == payload[data3])
-                    {
-                        Serial.printf("S88_EVENT: Kanal %d gefunden für Kontaktkennung %02X\r\n", ch + 1, payload[data3]);
-                        // wenn gefunden, dann Meldung machen
-                        process_sensor_event(ch);
-                        break;
-                    }
-            }
-        }
-        }
-    }
-
-    if (featureId != FEATURE_BRIDGE2DECODER && featureId != FEATURE_FEEDBACK)
+    // S88_EVENT mit DLC = 4: Abfrage des aktuellen Status eines Eingangs, Antwort mit DLC = 8
+    if (frame[CANcmd] != S88_EVENT || frame[Framelng] != 4)
         return;
 
-    if (featureId == FEATURE_FEEDBACK)
-    {
-        // Die Bridge sendet an alle Rückmelder; payload[0] enthält die ID des gemeinten Decoders.
-        // Ohne diese Prüfung würden alle Rückmelder dieselbe Kanalzuordnung übernehmen.
-        if (payloadLen < 1 || payload[0] != aliveGetDecoderID())
-            return;
-
-        switch (commandId)
+    wdpAlive = true;
+    // D0/1 Gerätekenner, D2/3 Kontaktkennung
+    Serial.printf("S88_EVENT: Gerätekenner %02X%02X, Kontaktkennung %02X\r\n", frame[hash0], frame[hash1], frame[data3]);
+    for (uint8_t ch = 0; ch < maxCntChannels; ch++)
+        // Kanal mit dieser Kontaktkennung data3 suchen
+        if (getFeedbackChannel(ch + 1) == frame[data3])
         {
-        case FEEDBACK_CMD_GET_SETTINGS:
-            sendFeedbackSettingsToBridge();
-            break;
-
-        case FEEDBACK_CMD_SET_SETTINGS:
-            if (payloadLen == 17)
-            {
-                saveFeedbackSettings(&payload[1]);
-                sendFeedbackSetAck();
-            }
+            Serial.printf("S88_EVENT: Kanal %d gefunden für Kontaktkennung %02X\r\n", ch + 1, frame[data3]);
+            // wenn gefunden, dann Meldung machen
+            process_sensor_event(ch);
             break;
         }
-    }
 }
 
 // ---------------------------------------------------------------------------
-// Alive-Daten
+// Befehle aus der GUI (Feature Rückmelder, Kommandos FEEDBACK_CMD_*, Nutzdaten wie
+// bisher: Nutzdaten[0] = Decoder-ID). Jede Anfrage wird quittiert.
 // ---------------------------------------------------------------------------
-uint8_t FeedbackDecoder::getAliveFeatureData(uint8_t *buf)
+bool FeedbackDecoder::onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen)
 {
-    buf[0] = 0x00;
-    buf[1] = 0x00;
-    buf[2] = 0x00;
-    buf[3] = 0x00;
-    return 4;
+    if (h.feature != CG2_F_FEEDBACK)
+        return false;
+
+    if (payloadLen < 1 || payload[0] != aliveGetDecoderID())
+    {
+        reply(h, nullptr, 0, CG2_ERR_BAD_VALUE);
+        return true;
+    }
+
+    switch (h.command)
+    {
+    case FEEDBACK_CMD_GET_SETTINGS:
+    {
+        // Antwort: Kontaktkennung der 16 Kanäle
+        uint8_t pkt[maxCntChannels];
+        for (int i = 0; i < maxCntChannels; i++)
+            pkt[i] = getFeedbackChannel(i + 1);
+        reply(h, pkt, maxCntChannels);
+        return true;
+    }
+
+    case FEEDBACK_CMD_SET_SETTINGS:
+        // [ID][16 Kontaktkennungen]
+        if (payloadLen < 1 + maxCntChannels)
+        {
+            reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
+            return true;
+        }
+        saveFeedbackSettings(&payload[1]);
+        reply(h);
+        return true;
+    }
+    return false;
+}
+
+bool FeedbackDecoder::factoryReset()
+{
+    return DecoderReset::performReset(DECODER_NVS_NAMESPACE, loadDefaultsWithAddress);
 }
 
 DecoderBase::AliveState FeedbackDecoder::getStatus() const
