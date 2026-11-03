@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tests der C#-Protokollbibliothek am PC; Aufruf über alles-bauen.ps1 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ProtokollTest</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Dieselben Dateien, die auch die GUI verwendet -->
+  <ItemGroup>
+    <Compile Include="..\..\cs\CanguruProtocol.cs" Link="CanguruProtocol.cs" />
+    <Compile Include="..\..\..\0300-Constants\ProtocolConstants.cs" Link="ProtocolConstants.cs" />
+  </ItemGroup>
+
+</Project>

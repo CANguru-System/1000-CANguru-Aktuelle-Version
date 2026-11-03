@@ -1,0 +1,22 @@
+# Testvektoren für das CANguru-Protokoll Version 2
+#
+# Beide Implementierungen (C++ für Decoder/Bridge, C# für die GUI) müssen diese
+# Nachrichten gleich zerlegen und - bei OK - wieder bitgenau erzeugen.
+#
+# Format:  Name | Bytes (hex) | Erwartung
+# Erwartung:
+#   OK F=<Feature> K=<Kommando> FL=<Flags> S=<Folgenummer> D=<Decoder> P=<Nutzdaten hex oder ->
+#   FEHLER <TooShort|WrongMagic|Truncated>
+# Bei OK wird außerdem neu kodiert und mit den ersten 8 + Länge Bytes verglichen.
+
+Parameter schreiben, Quittung erbeten | C2 04 04 01 17 05 03 00 02 2C 01 | OK F=04 K=04 FL=01 S=17 D=05 P=022C01
+Quittung des Decoders                 | C2 04 04 02 17 05 00 00          | OK F=04 K=04 FL=02 S=17 D=05 P=-
+Fehlerantwort unbekanntes Kommando    | C2 04 09 06 2A 03 01 00 02       | OK F=04 K=09 FL=06 S=2A D=03 P=02
+An alle Weichen (Typ 0x52), CAN-Frame | C2 07 03 10 00 52 0D 00 00 16 47 11 06 00 00 30 00 01 01 00 00 | OK F=07 K=03 FL=10 S=00 D=52 P=00164711060000300001010000
+An alle Decoder, ohne Nutzdaten       | C2 01 03 20 05 00 00 00          | OK F=01 K=03 FL=20 S=05 D=00 P=-
+Überzählige Bytes werden ignoriert    | C2 03 01 00 00 03 02 00 01 00 FF | OK F=03 K=01 FL=00 S=00 D=03 P=0100
+Länge Little Endian, zu kurz          | C2 09 02 01 00 00 02 01 AA BB    | FEHLER Truncated
+Kürzer als der Kopf                   | C2 01 01                         | FEHLER TooShort
+Leere Nachricht                       |                                  | FEHLER TooShort
+Altes Format Decoder-Alive            | 70 72 03 52 01 01 00 00 00       | FEHLER WrongMagic
+Altes Format Bridge an Typ            | 01 52 30 32 05 01 01 2C 04 74 00 00 | FEHLER WrongMagic
