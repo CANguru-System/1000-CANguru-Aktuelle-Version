@@ -291,6 +291,129 @@ dict(name="DEVTYPE_BRIDGE",       value="0x5D", arch="core"),
 dict(name="DEVTYPE_FREE",         value="0x5E", arch="core"),
 dict(name="DEVTYPE_LastCANguru",  value="0x5F", arch="core"),
 
+
+# ============================================================
+# PROTOKOLL VERSION 2 (Phase 2) - Beschreibung: 0400-Protocol/PROTOKOLL.md
+# Präfix CG2_, damit die alten Konstanten während der Umstellung bestehen bleiben.
+# ============================================================
+
+# --- Nachrichtenkopf ---
+dict(name="CG2_MAGIC",          value="0xC2", arch="core"),  # Byte 0: CANguru, Hauptversion 2
+dict(name="CG2_PROTO_MINOR",    value="0",    arch="core"),  # Unterversion, in HELLO/DISCOVER_REPLY
+dict(name="CG2_HEADER_SIZE",    value="8",    arch="core"),
+dict(name="CG2_ESPNOW_MAX",     value="250",  arch="core"),  # max. Nachricht über ESP-NOW (Kopf + Nutzdaten)
+
+# --- Flags (Byte 3) ---
+dict(name="CG2_FLAG_ACK_REQ",   value="0x01", arch="core"),  # Quittung erbeten
+dict(name="CG2_FLAG_RESPONSE",  value="0x02", arch="core"),  # Antwort / Quittung
+dict(name="CG2_FLAG_ERROR",     value="0x04", arch="core"),  # Fehler, Nutzdaten[0] = Fehlercode
+dict(name="CG2_ADDR_SHIFT",     value="4",    arch="core"),  # Adressierungsart in Bit 4-5
+dict(name="CG2_ADDR_MASK",      value="0x30", arch="core"),
+dict(name="CG2_ADDR_ID",        value="0",    arch="core"),  # Byte 5 = Decoder-ID
+dict(name="CG2_ADDR_TYPE",      value="1",    arch="core"),  # Byte 5 = Decodertyp
+dict(name="CG2_ADDR_ALL",       value="2",    arch="core"),  # alle Decoder
+
+# --- Decoder-Feld (Byte 5) ---
+dict(name="CG2_ID_BRIDGE",      value="0x00", arch="core"),  # Nachricht an/von der Bridge selbst
+
+# --- Fehlercodes (Nutzdaten[0] bei CG2_FLAG_ERROR) ---
+dict(name="CG2_ERR_UNKNOWN_FEATURE", value="0x01", arch="core"),
+dict(name="CG2_ERR_UNKNOWN_COMMAND", value="0x02", arch="core"),
+dict(name="CG2_ERR_BAD_LENGTH",      value="0x03", arch="core"),
+dict(name="CG2_ERR_BAD_VALUE",       value="0x04", arch="core"),
+dict(name="CG2_ERR_BUSY",            value="0x05", arch="core"),
+dict(name="CG2_ERR_NOT_DELIVERED",   value="0x06", arch="core"),  # Bridge: Decoder antwortet nicht
+dict(name="CG2_ERR_UNKNOWN_DECODER", value="0x07", arch="core"),  # Bridge: ID unbekannt
+
+# --- Zustellung ---
+dict(name="CG2_RETRY_COUNT",    value="3",    arch="core"),
+dict(name="CG2_RETRY_MS",       value="150",  arch="core"),
+
+# --- Feature 0x01 Sitzung ---
+dict(name="CG2_F_SESSION",           value="0x01", arch="core"),
+dict(name="CG2_SESSION_DISCOVER",    value="0x01", arch="core"),
+dict(name="CG2_SESSION_DISCOVER_REPLY", value="0x02", arch="core"),
+dict(name="CG2_SESSION_START",       value="0x03", arch="core"),
+dict(name="CG2_SESSION_END",         value="0x04", arch="core"),
+
+# --- Feature 0x02 Decoder ---
+dict(name="CG2_F_DECODER",           value="0x02", arch="core"),
+dict(name="CG2_DECODER_HELLO",       value="0x01", arch="core"),
+dict(name="CG2_DECODER_ASSIGN_ID",   value="0x02", arch="core"),
+dict(name="CG2_DECODER_ADDED",       value="0x03", arch="core"),
+dict(name="CG2_DECODER_REJOIN",      value="0x04", arch="core"),
+dict(name="CG2_DECODER_REMOVE",      value="0x05", arch="core"),
+dict(name="CG2_DECODER_RESET",       value="0x06", arch="core"),
+
+# --- Feature 0x03 Alive ---
+dict(name="CG2_F_ALIVE",             value="0x03", arch="core"),
+dict(name="CG2_ALIVE_ALIVE",         value="0x01", arch="core"),
+dict(name="CG2_ALIVE_SUMMARY",       value="0x02", arch="core"),
+dict(name="CG2_STATUS_ERROR",        value="0",    arch="core"),
+dict(name="CG2_STATUS_OK",           value="1",    arch="core"),
+dict(name="CG2_STATUS_WARNING",      value="2",    arch="core"),
+
+# --- Feature 0x04 Parameter (Selbstbeschreibung, für alle Decodertypen gleich) ---
+dict(name="CG2_F_PARAM",             value="0x04", arch="core"),
+dict(name="CG2_PARAM_DESCRIBE_GET",  value="0x01", arch="core"),
+dict(name="CG2_PARAM_DESCRIBE",      value="0x02", arch="core"),
+dict(name="CG2_PARAM_READ",          value="0x03", arch="core"),
+dict(name="CG2_PARAM_WRITE",         value="0x04", arch="core"),
+dict(name="CG2_PARAM_FACTORY_RESET", value="0x05", arch="core"),
+dict(name="CG2_KIND_PARAM",          value="0",    arch="core"),  # Art der Beschreibung
+dict(name="CG2_KIND_ACTION",         value="1",    arch="core"),
+dict(name="CG2_KIND_VALUE",          value="2",    arch="core"),  # Messwert (Alive)
+dict(name="CG2_TYPE_U8",             value="0",    arch="core"),  # Datentyp eines Parameters
+dict(name="CG2_TYPE_U16",            value="1",    arch="core"),
+dict(name="CG2_TYPE_CHOICE",         value="2",    arch="core"),
+dict(name="CG2_TYPE_BOOL",           value="3",    arch="core"),
+
+# --- Feature 0x05 Aktion ---
+dict(name="CG2_F_ACTION",            value="0x05", arch="core"),
+dict(name="CG2_ACTION_EXECUTE",      value="0x01", arch="core"),
+
+# --- Feature 0x06 Ereignis ---
+dict(name="CG2_F_EVENT",             value="0x06", arch="core"),
+dict(name="CG2_EVENT_EVENT",         value="0x01", arch="core"),
+dict(name="CG2_EV_POSITION",         value="0x01", arch="core"),  # Stellung geändert
+dict(name="CG2_EV_OVERCURRENT",      value="0x02", arch="core"),  # Überstrom-Abschaltung
+dict(name="CG2_EV_CALIBRATED",       value="0x03", arch="core"),  # Kalibrierung fertig
+
+# --- Feature 0x07 CAN-Tunnel (Märklin-Frames, 13 Byte) ---
+dict(name="CG2_F_CAN",               value="0x07", arch="core"),
+dict(name="CG2_CAN_TO_TRACKBOX",     value="0x01", arch="core"),  # GUI -> Bridge -> CAN
+dict(name="CG2_CAN_TO_GUI",          value="0x02", arch="core"),  # Bridge -> GUI (mit Folgenummer + Quelle)
+dict(name="CG2_CAN_TO_DECODERS",     value="0x03", arch="core"),  # Bridge -> Decoder
+dict(name="CG2_CAN_FROM_DECODER",    value="0x04", arch="core"),  # Decoder -> Bridge (-> WDP, GUI)
+
+# --- Feature 0x08 Datei (lokomotive.cs2) ---
+dict(name="CG2_F_FILE",              value="0x08", arch="core"),
+dict(name="CG2_FILE_BLOCK",          value="0x01", arch="core"),
+dict(name="CG2_FILE_END",            value="0x02", arch="core"),
+
+# --- Feature 0x09 OTA ---
+dict(name="CG2_F_OTA",               value="0x09", arch="core"),
+dict(name="CG2_OTA_UPLOAD_BEGIN",    value="0x01", arch="core"),  # GUI -> Bridge
+dict(name="CG2_OTA_UPLOAD_BLOCK",    value="0x02", arch="core"),  # GUI -> Bridge
+dict(name="CG2_OTA_START",           value="0x03", arch="core"),  # GUI -> Bridge (einzeln/Gruppe)
+dict(name="CG2_OTA_PROGRESS",        value="0x04", arch="core"),  # Bridge -> GUI
+dict(name="CG2_OTA_RESULT",          value="0x05", arch="core"),  # Bridge -> GUI
+dict(name="CG2_OTA_DECODER_START",   value="0x06", arch="core"),  # Bridge -> Decoder: WLAN-Download starten
+dict(name="CG2_OTA_BLOCK_SIZE",      value="1024", arch="core"),
+
+# --- Feature 0x0A Strom (bis Phase 3) ---
+dict(name="CG2_F_POWER",             value="0x0A", arch="core"),
+dict(name="CG2_POWER_SET_THRESHOLD", value="0x01", arch="core"),
+dict(name="CG2_POWER_GET_THRESHOLD", value="0x02", arch="core"),
+dict(name="CG2_POWER_SHUTDOWN",      value="0x03", arch="core"),
+dict(name="CG2_POWER_TRACK",         value="0x04", arch="core"),
+
+# --- Feature 0x0B Stepper (Weiche/Formsignal, Übergang bis Phase 3, Nutzdaten wie bisher) ---
+dict(name="CG2_F_STEPPER",           value="0x0B", arch="core"),
+
+# --- Feature 0x0C Rückmelder (Übergang bis Phase 3, Nutzdaten wie bisher) ---
+dict(name="CG2_F_FEEDBACK",          value="0x0C", arch="core"),
+
 ]
 
 # ------------------------------------------------------------
