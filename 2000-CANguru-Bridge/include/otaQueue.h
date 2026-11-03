@@ -14,8 +14,6 @@ enum OtaState {
 };
 
 extern OtaState otaState;
-extern uint16_t expectedSeq;
-extern File fwFile;
 extern bool firmwareReady;
 extern size_t firmwareSizeOnFs;
 
@@ -32,7 +30,6 @@ extern OtaEntry currentOta;
 
 extern uint8_t otaTotalCount;
 extern uint8_t otaFinishedCount;
-extern uint8_t currentPercent;
 extern unsigned long otaTimer;
 
 extern bool otaSuccessReceived;
@@ -44,6 +41,4 @@ extern volatile bool otaProgressPending;
 
 void startGroupOtaForType(uint8_t targetType);
 void processOta();
-void processFirmwareQueue();
-void processAckQueue();
 void onUploadFinished(size_t size);

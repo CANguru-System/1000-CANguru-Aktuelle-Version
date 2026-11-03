@@ -7,7 +7,6 @@ extern volatile bool thresholdAvailable;
 extern volatile uint16_t lastThreshold;
 
 
-void handleGuiStart();
 void handleGetPowerDecoderSettings();
 void handleSetPowerDecoderSettings(const uint8_t* payload, int payloadLen);
 void sendResetSettingsToDecoder(const uint8_t* payload, int payloadLen);

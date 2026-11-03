@@ -1,12 +1,19 @@
-Ablauf GUI - Bridge
+Ablauf GUI - Bridge (Protokoll Version 2, siehe 0400-Protocol/PROTOKOLL.md)
 
-1. GUI sendet DISCOVERY_REQUEST
-2. Bridge antwortet mit DISCOVERY_RESPONSE
-Zwischenzeitlich wird die Datei lokomotive.cs2 von der GUI zur Bridge geladen
-3. GUI sendet MSG_START_BRIDGE
-4. Bridge sendet MSG_START_DECODERS per broadcast an Decoder
-5. Decoder antworten mit FRAME_DECODER_HELLO
-6. Bridge sendet die Decoderdaten an die GUI
+1. GUI sendet SESSION DISCOVER per Broadcast (jede Sekunde, bis die Bridge antwortet)
+2. Bridge merkt sich die GUI-Adresse und antwortet mit SESSION DISCOVER_REPLY
+   (Firmware, Protokollversion, Gleisbox erkannt) - auch wenn noch kein Decoder läuft
+3. GUI sendet ab jetzt direkt an die Bridge-Adresse und überträgt lokomotive.cs2
+   (FILE BLOCK ... FILE END mit CRC-32, jeder Block wird quittiert)
+4. GUI sendet SESSION START (mit Quittung)
+5. Bridge sendet MSG_START_DECODERS per Broadcast an die Decoder
+6. Decoder antworten mit FRAME_DECODER_HELLO
 7. Bridge sendet per FRAME_DECODER_ID_ASSIGN die ID an die Decoder
 8. Die Decoder antworten mit FRAME_DECODER_ID_ACK
-9. Bridge stellt den Statud des Decoders als ready fest und speichert die lastseen-Zeit
+9. Bridge meldet der GUI FRAME_DECODER_ADDED, stellt den Status des Decoders als ready fest
+   und speichert die lastseen-Zeit
+10. GUI startet die Gleisbox über den CAN-Tunnel (CAN TO_TRACKBOX)
+11. Beim Beenden sendet die GUI SESSION END: Bridge sendet STOPP an die Gleisbox,
+    setzt die Decoder zurück und startet neu
+
+Die Schritte 5-9 (Bridge <-> Decoder) laufen bis Schritt 2.3 noch im alten Format.

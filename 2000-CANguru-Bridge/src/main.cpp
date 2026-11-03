@@ -14,7 +14,7 @@
 #include "alive.h"
 #include "Bridge_OTA.h"
 #include "Bridge_Decoder.h"
-#include "Cs2FileReceiver.h"
+#include "gui_link.h"
 #include "handlers.h"
 #include "MOD-LCD.h"
 
@@ -123,7 +123,8 @@ void setup()
 }
 
 // ----------------------------------------------------
-// Routing für neue Protokoll-Frames (Feature | Frame | Payload)
+// Routing der GUI-Nachrichten für Decoder im alten Format (Feature | Frame | Payload).
+// Sitzung, CAN, Datei und OTA kommen im Protokoll Version 2 (gui_link.cpp).
 // ----------------------------------------------------
 void handleGuiPacket(uint8_t featureId, uint8_t commandId, const uint8_t *payload, int payloadLen)
 {
@@ -191,42 +192,6 @@ void handleGuiPacket(uint8_t featureId, uint8_t commandId, const uint8_t *payloa
       break;
     }
     break;
-  case FEATURE_BRIDGE:
-    switch (commandId)
-    {
-    case BRIDGE_START:
-      handleGuiStart();
-      break;
-
-    default:
-      Serial.printf("Unknown BRIDGE commandId %u\r\n", commandId);
-      break;
-    }
-    break;
-
-  case FEATURE_DECODER:
-    switch (commandId)
-    {
-    case CMD_DECODER_RESET:
-    {
-      enqueueCANFrame2CAN(SysSTOPP, hashEnabled);
-      delay(1000);
-      sendResetToDecoders();
-      ESP.restart();
-      break;
-    }
-    }
-    break;
-
-  case FEATURE_OTA:
-    switch (commandId)
-    {
-    case OTA_SINGLE_DECODER:
-    case OTA_GROUP_DECODERS:
-      otaHandleGuiCommand(payload, payloadLen, commandId);
-      break;
-    }
-    break;
 
   default:
     Serial.printf("Unknown DECODER featureId %02X\r\n", featureId);
@@ -250,103 +215,15 @@ void readGUI()
     packetLength = sizeof(buf);
   udp.read(buf, packetLength);
 
-  // Sonderformat für OTA-Firmware-Blöcke:
-  // OTA-Block?
-  if (buf[0] == OTA_UPLOAD_BLOCK)
+  // Protokoll Version 2: Sitzung, CAN-Tunnel, lokomotive.cs2, OTA
+  if (cg2IsV2(buf, packetLength))
   {
-    int otaLen = packetLength; // <-- WICHTIG: echte UDP-Länge
-    if (otaLen < 9)
-    {
-      Serial.println("BRIDGE: OTA frame too short");
-      return;
-    }
-
-    uint32_t seq = *(uint32_t *)&buf[1];
-    uint16_t plen = *(uint16_t *)&buf[5];
-    uint16_t crc = *(uint16_t *)&buf[7];
-    uint8_t *payload = &buf[9];
-
-    // Startblock
-    if (seq == 0)
-    {
-      if (plen < 4)
-      {
-        Serial.println("FW: Startblock ohne gültige Größe!");
-        AckPacket a = {(uint16_t)(seq & 0xFFFF), 2};
-        ackQueue.push(a);
-        return;
-      }
-
-      expectedSize = *(uint32_t *)payload;
-      receivedSize = 0;
-      firmwareReady = false;
-
-      if (fwFile)
-        fwFile.close();
-
-      LittleFS.remove(FW_PATH);
-      fwFile = LittleFS.open(FW_PATH, FILE_WRITE);
-
-      if (!fwFile)
-      {
-        Serial.println("FW: Kann firmware.bin nicht öffnen!");
-        AckPacket a = {(uint16_t)(seq & 0xFFFF), 1};
-        ackQueue.push(a);
-        return;
-      }
-
-      AckPacket a = {(uint16_t)(seq & 0xFFFF), 0};
-      ackQueue.push(a);
-      return;
-    }
-
-    // Datenblock
-    if (!fwFile)
-    {
-      Serial.println("FW: Datenblock ohne Startblock!");
-      AckPacket a = {(uint16_t)(seq & 0xFFFF), 2};
-      ackQueue.push(a);
-      return;
-    }
-
-    size_t written = fwFile.write(payload, plen);
-    receivedSize += written;
-
-    AckPacket a = {(uint16_t)(seq & 0xFFFF), (written == plen) ? 0 : 1};
-    ackQueue.push(a);
-
-    if (expectedSize > 0 && receivedSize >= expectedSize)
-    {
-      fwFile.close();
-      firmwareReady = true;
-      Serial.println("FW: Upload abgeschlossen");
-
-      onUploadFinished(receivedSize); // <-- HIER
-    }
-
-    return;
-  }
-
-  // Sonderfall: CAN-Frame direkt von GUI
-  if (packetLength == CAN_FRAME_SIZE && buf[0] == 0x00)
-  {
-    enqueueCANFrame2CAN(buf, hashEnabled);
-    if (buf[0x00] == 0x00 && buf[0x01] == PING)
-    {
-      sendToWDP(buf);
-      sendFrame2allDecoders(buf, packetLength);
-    }
-    return;
-  }
-
-  if (buf[0] == CMD_FILE_BLOCK_CS2)
-  {
-    Cs2FileReceiver::handleFileBlock(buf, packetLength);
+    cg2HandleGuiPacket(buf, packetLength, udp.remoteIP());
     return;
   }
 
   // ----------------------------------------------------
-  // 4. NEUES GUI-Paketformat:
+  // Altes Format für Decoder-Nachrichten (bis Schritt 2.3):
   //    Feature | Frame | Payload
   // ----------------------------------------------------
   if (packetLength >= 2)
@@ -375,7 +252,6 @@ void sendSwitchSignalSettingsToDecoder(uint8_t featureId, uint8_t commandId, con
   if (payloadLen == 0)
   {
     Serial.println("ERROR: SWITCH/SIGNAL packet without payload");
-    sendGuiOtaError(0x05);
     return;
   }
 
@@ -456,10 +332,8 @@ void loop()
   // 5. CAN → UDP Pipeline
   sendFiFoFromCANToGUI();
 
-  // 6. firmware-upload-Queue verarbeiten
-  processFirmwareQueue();
+  // 6. OTA-Ablauf (Decoder nacheinander aktualisieren, Fortschritt melden)
   processOta();
-  processAckQueue();
 
   // 7. Alive-Überwachung + Alive-Senden
   checkAliveStates();

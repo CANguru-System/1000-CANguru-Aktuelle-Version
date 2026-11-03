@@ -3,31 +3,8 @@
 #include <Arduino.h>
 #include <PacketHandler.h>
 
-
-struct struct_frame_GUI_ota_finished
-{
-    uint8_t cmd; // z.B. 0x32
-};
-
+// Senden an die GUI. Meldungen im Protokoll Version 2 (Sitzung, CAN, Datei, OTA)
+// stehen in gui_link.h; hier nur noch das alte Format für Decoder-Nachrichten.
 void udpSendToGui(const uint8_t* data, int len);
-void sendGuiOtaStart(uint16_t totalBlocks);
-void sendGuiOtaProgress(uint8_t id, uint8_t percent);
-void sendGuiOtaDone();
-void sendGuiOtaError(uint8_t err);
-void sendGuiOtaOverallProgress(uint8_t percent);
-void sendFirmwareAck(uint16_t seq, uint8_t status);
-void sendGuiOtaFinished();
-
-// Ergebnis des OTA-Updates eines Decoders an die GUI
-enum OtaResult : uint8_t
-{
-    OTA_RESULT_OK = 0,       // neue Firmware läuft
-    OTA_RESULT_REJECTED = 1, // Decoder hat die Datei abgelehnt, alte Firmware läuft weiter
-    OTA_RESULT_TIMEOUT = 2   // keine Rückmeldung des Decoders
-};
-void sendGuiOtaResult(uint8_t decoderId, OtaResult result);
-void sendGuiOtaCurrentDecoder(uint8_t decoderId);
 void sendPacketToGUI(const std::vector<uint8_t> &bytes);
 void sendPacketToGUI(const ParsedPacket &p);
-void sendAck(uint32_t seq, uint8_t status);
-void sendOtaAck(uint16_t seq, uint8_t status);

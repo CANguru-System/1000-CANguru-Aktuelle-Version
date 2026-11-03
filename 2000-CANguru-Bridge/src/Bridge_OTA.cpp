@@ -8,34 +8,6 @@
 #include "Bridge_OTA.h"
 #include "Bridge_Decoder.h"
 
-void otaHandleGuiCommand(const uint8_t *data, int len, uint8_t cmd);
-
-struct DecoderAck
-{
-  uint16_t seq;
-  uint8_t status;
-  uint8_t mac[6];
-};
-
-static DecoderAck lastAck;
-static volatile bool ackAvailable = false;
-static volatile bool doneReceived = false;
-
-// Firmware-Upload-Status
-size_t expectedSize = 0;
-size_t receivedSize = 0;
-
-std::queue<FirmwarePacket> fwQueue;
-std::queue<AckPacket> ackQueue;
-
-// uint16_t nextSeqExpected = 0;
-bool uploadActive = false;
-uint8_t currentDecoderId = 0;
-uint8_t currentDecoderPercent = 0;
-
-extern bool otaRunning;
-static uint8_t otaTargetId = 0; // AssignedId des Decoders
-
 void startOtaHttpServer()
 {
   otaServer.on(FW_PATH, HTTP_GET, [](AsyncWebServerRequest *request)
@@ -86,188 +58,48 @@ void stopOtaHttpServer()
   otaServer.end();
 }
 
-void handleFirmwareBlockGUI2Bridge(uint8_t *data, int len)
+// ------------------------------------------------------------
+// OTA-Start aus der GUI (CG2_OTA_START)
+// mode 0: ein Decoder (selector = ID), mode 1: alle eines Typs (selector = Typ)
+// Rückgabe: 0 oder Fehlercode für die Antwort an die GUI
+// ------------------------------------------------------------
+
+uint8_t otaStartFromGui(uint8_t mode, uint8_t selector)
 {
-  // Mindestlänge prüfen:
-  // [0]   = OTA_UPLOAD_BLOCK
-  // [1]   = SEQ_LO
-  // [2]   = SEQ_HI
-  // [3..6]= TOTAL_SIZE (4 Byte)
-  // [7..] = PAYLOAD
-  if (len < 7)
-    return;
-
-  uint8_t cmd = data[0];
-  if (cmd != OTA_UPLOAD_BLOCK)
-    return;
-
-  // 16-Bit Sequenznummer
-  uint16_t seq = (uint16_t(data[1]) | (uint16_t(data[2]) << 8));
-
-  // Gesamtgröße (4 Byte, little endian)
-  size_t totalSize =
-      (size_t(data[3])) |
-      (size_t(data[4]) << 8) |
-      (size_t(data[5]) << 16) |
-      (size_t(data[6]) << 24);
-
-  uint8_t *payload = data + 7;
-  int plen = len - 7;
-
-  // Upload-Start?
-  if (!uploadActive)
-  {
-    uploadActive = true;
-    expectedSize = totalSize;
-    receivedSize = 0;
-    firmwareReady = false;
-    firmwareSizeOnFs = 0;
-
-    LittleFS.remove(FW_PATH);
-    fwFile = LittleFS.open(FW_PATH, FILE_WRITE);
-
-    if (!fwFile)
-    {
-      Serial.println("FW: Kann firmware.bin nicht öffnen!");
-
-      AckPacket a;
-      a.seq = seq;
-      a.status = 1; // RETRY
-      ackQueue.push(a);
-
-      uploadActive = false;
-      return;
-    }
-  }
-
-  // ACK vorbereiten (erstmal OK)
-  AckPacket a;
-  a.seq = seq;
-  a.status = 0;
-
-  // Block schreiben
-  size_t written = fwFile.write(payload, plen);
-  receivedSize += written;
-
-  if (written != (size_t)plen)
-  {
-    // Schreibfehler → RETRY
-    a.status = 1;
-    ackQueue.push(a);
-    return;
-  }
-
-  // ACK OK senden
-  ackQueue.push(a);
-
-  // Fertig?
-  if (receivedSize >= expectedSize)
-  {
-    fwFile.close();
-    uploadActive = false;
-
-    File f = LittleFS.open(FW_PATH, "r");
-    firmwareSizeOnFs = f ? f.size() : 0;
-    if (f)
-      f.close();
-
-    firmwareReady = (firmwareSizeOnFs == expectedSize);
-
-    Serial.printf(
-        "Firmware-Upload abgeschlossen. Received: %u bytes, Expected: %u bytes, On FS: %u bytes, Ready: %s\r\n",
-        receivedSize, expectedSize, firmwareSizeOnFs,
-        firmwareReady ? "YES" : "NO");
-  }
-}
-
-// =========================
-// ACK / DONE aus ESP-NOW
-// =========================
-
-void otaHandleDecoderAck(const uint8_t *mac, const uint8_t *data, int len)
-{
-  if (len < 4)
-    return;
-  if (data[0] != OTA_FW_ACK)
-    return;
-
-  memcpy(lastAck.mac, mac, 6);
-  lastAck.seq = (data[1] << 8) | data[2];
-  lastAck.status = data[3];
-
-  ackAvailable = true; // letzter Schritt
-}
-
-void otaHandleDecoderDone(const uint8_t *mac, const uint8_t *data, int len)
-{
-  if (len < 1)
-    return;
-  if (data[0] != OTA_FW_DONE)
-    return;
-
-  doneReceived = true;
-}
-
-void otaHandleGuiCommand(const uint8_t *data, int len, uint8_t cmd)
-{
-  if (len < 2)
-    return;
-
-  uint8_t id = data[0];
-  uint8_t type = data[1];
-
-  switch (cmd)
-  {
-  case OTA_SINGLE_DECODER:
+  if (mode == 0)
   {
     DecoderInfo d;
-    if (!findDecoderByAssignedId(id, d))
-    {
-      sendGuiOtaError(0x05);
-      return;
-    }
+    if (!findDecoderByAssignedId(selector, d))
+      return CG2_ERR_UNKNOWN_DECODER;
 
     otaQueue.clear();
-
     OtaEntry e;
     e.decoderId = d.assignedId;
     memcpy(e.mac, d.Decoder_Mac, 6);
-
     otaQueue.push_back(e);
-    otaTotalCount = 1;
-    otaFinishedCount = 0;
-
-    Serial.printf("OTA_SINGLE_DECODER for single decoder ID %d\r\n", id);
-
-    if (!firmwareReady)
-    {
-      Serial.println("FW: OTA-Start angefordert, aber Firmware noch nicht bereit!");
-      otaState = OTA_WAIT_FOR_FIRMWARE;
-    }
-    else
-    {
-      otaState = OTA_START;
-    }
-    break;
+    Serial.printf("OTA requested for decoder ID %d\r\n", selector);
   }
-
-  case OTA_GROUP_DECODERS:
+  else if (mode == 1)
   {
-    startGroupOtaForType(type);
-
+    startGroupOtaForType(selector);
     if (otaQueue.size() == 0)
-    {
-      sendGuiOtaError(0x06);
-      return;
-    }
+      return CG2_ERR_UNKNOWN_DECODER;
+    Serial.printf("OTA requested for %u decoders of type %02X\r\n", otaQueue.size(), selector);
+  }
+  else
+    return CG2_ERR_BAD_VALUE;
 
-    otaTotalCount = otaQueue.size();
-    otaFinishedCount = 0;
+  otaTotalCount = otaQueue.size();
+  otaFinishedCount = 0;
 
+  if (!firmwareReady)
+  {
+    Serial.println("FW: OTA requested, firmware not ready yet");
+    otaState = OTA_WAIT_FOR_FIRMWARE;
+  }
+  else
     otaState = OTA_START;
-    break;
-  }
-  }
+  return 0;
 }
 
 // ------------------------------------------------------------

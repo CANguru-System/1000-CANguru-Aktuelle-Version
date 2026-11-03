@@ -13,17 +13,6 @@ volatile bool thresholdAvailable = false;
 volatile uint16_t lastThreshold = 0;
 
 // ---------------------------------------------------------
-// GUI START
-// ---------------------------------------------------------
-void handleGuiStart()
-{
-    guiIP = udp.remoteIP();
-    systemReady = true;
-    sendStartToDecoders();
-
-}
-
-// ---------------------------------------------------------
 // PowerDecoder: GET_THRESHOLD
 // ---------------------------------------------------------
 void sendResetSettingsToDecoder(const uint8_t* payload, int payloadLen)

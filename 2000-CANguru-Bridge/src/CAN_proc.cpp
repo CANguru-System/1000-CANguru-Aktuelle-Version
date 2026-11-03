@@ -7,6 +7,7 @@
 #include "driver/twai.h"
 #include <CAN_proc.h>
 #include <gui_proc.h>
+#include "gui_link.h"
 #include <alive.h>
 #include <wdp_proc.h>
 #include <globals.h>
@@ -255,19 +256,8 @@ void sendFiFoFromCANToGUI()
   ToGUICANFrameItem item;
   while (dequeueCanFromFifo(item))
   {
-    //    if (item.data[0x00] == 0x0a)
-    udp.beginPacket(guiIP, GUI_PORT);
-    // Kennung, damit die GUI CAN-Frames sicher von anderen Paketen unterscheidet:
-    // FEATURE_CS2 | FRAME_CAN_2GUI | Sortiernummer (4) | CAN-Frame (13) | Quelle (1)
-    const uint8_t kennung[2] = {FEATURE_CS2, FRAME_CAN_2GUI};
-    udp.write(kennung, sizeof(kennung));
-    // zuerst die Sortiernummer
-    udp.write((uint8_t *)&item.seq, sizeof(item.seq));
-    // dann die Daten
-    udp.write(item.data, CAN_FRAME_SIZE); // oder len, wenn du sie mitführst
-    // zuletzt die Quelle
-    udp.write((uint8_t *)&item.source, 1); // oder len, wenn du sie mitführst
-    udp.endPacket();
+    // Protokoll Version 2: CG2_F_CAN / CG2_CAN_TO_GUI [Sortiernummer u32][Frame 13][Quelle]
+    cg2SendCanFrameToGui(item.seq, item.data, item.source);
     // An die WDP
     sendToWDP(item.data);
     //    printf("GUI: %d--%02X-%02X-%02X\r\n", item.seq, item.data[1], item.data[2], item.data[3]);

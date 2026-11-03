@@ -8,6 +8,7 @@
 #include "Bridge_OTA.h"
 #include "otaQueue.h"
 #include "gui_proc.h"
+#include "gui_link.h"
 #include "CAN_proc.h"
 #include "wdp_proc.h"
 #include "handlers.h"
@@ -53,18 +54,9 @@ void onBridgeDataSent(const uint8_t *mac, esp_now_send_status_t status)
 
 void handleOtaPacket(const uint8_t *mac, uint8_t commandId, const uint8_t *payload, int payloadLen)
 {
+    // Erfolg und Fehlschlag eines Updates meldet der Decoder über REJOIN (nach seinem Neustart)
     switch (commandId)
     {
-    case OTA_FW_ACK:
-        otaHandleDecoderAck(mac, payload, payloadLen);
-        return;
-
-    case /* The code seems to be a comment in C++ indicating that the Over-The-Air (OTA) firmware
-    update is done. */
-        OTA_FW_DONE:
-        otaHandleDecoderDone(mac, payload, payloadLen);
-        return;
-
     case OTA_SUCCESS:
         Serial.println("OTA_SUCCESS received from MAC");
         //        stopBridgeOtaApMode();
@@ -224,7 +216,7 @@ void onDecoderReceivedPacketFromDecoder(const uint8_t *mac,
                 if (otaFailed)
                 {
                     Serial.printf("OTA FAILED for decoder ID %d, firmware unchanged\r\n", id);
-                    sendGuiOtaResult(id, OTA_RESULT_REJECTED);
+                    cg2SendOtaResult(id, OTA_RESULT_REJECTED);
                     otaState = OTA_NEXT;
                 }
                 else

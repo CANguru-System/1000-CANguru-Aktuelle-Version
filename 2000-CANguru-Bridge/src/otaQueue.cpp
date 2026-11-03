@@ -6,14 +6,12 @@
 #include "globals.h"
 #include "Bridge_OTA.h"
 #include "gui_proc.h"
+#include "gui_link.h"
 #include "Bridge_Decoder.h"
 
 // Queue-Handling
-File fwFile;
 uint8_t otaTotalCount = 0;
 uint8_t otaFinishedCount = 0;
-uint8_t currentPercent = 0;
-unsigned long lastAckSend = 0;
 bool httpServerRunning = false;
 OtaState otaState = OTA_IDLE;
 
@@ -46,20 +44,11 @@ static void sendOtaProgressIfChanged()
         return;
     lastSentPercent = percent;
 
-    sendGuiOtaProgress(currentOta.decoderId, percent);
-    if (otaTotalCount > 0)
-    {
-        uint8_t overall = (uint8_t)(((otaFinishedCount * 100.0f) + percent) / otaTotalCount);
-        sendGuiOtaOverallProgress(overall);
-    }
+    uint8_t overall = (otaTotalCount > 0)
+                          ? (uint8_t)(((otaFinishedCount * 100.0f) + percent) / otaTotalCount)
+                          : percent;
+    cg2SendOtaProgress(currentOta.decoderId, percent, overall);
 }
-
-uint32_t otaExpectedSize = 0;
-uint32_t otaReceivedSize = 0;
-
-unsigned long otaTimeoutStart = 0;
-const unsigned long OTA_TIMEOUT = 15000; // 15 Sekunden
-uint16_t expectedSeq = 0;
 
 // Queue anhand des Decoder‑Typs erzeugen
 void startGroupOtaForType(uint8_t targetType)
@@ -116,7 +105,9 @@ void processOta()
         otaSuccessReceived = false;
         lastSentPercent = 255;
         sendOtaStartWifiToDecoder(currentOta.decoderId, 0, 0);
-        sendGuiOtaCurrentDecoder(currentOta.decoderId);
+        // Fortschritt 0 % kündigt der GUI den nächsten Decoder an
+        cg2SendOtaProgress(currentOta.decoderId, 0,
+                           otaTotalCount > 0 ? (uint8_t)(otaFinishedCount * 100 / otaTotalCount) : 0);
 
         otaTimer = millis();
         Serial.printf("Started OTA for decoder ID %d\r\n", currentOta.decoderId);
@@ -129,7 +120,7 @@ void processOta()
         if (otaSuccessReceived)
         {
             Serial.printf("OTA SUCCESS for decoder ID %d\r\n", currentOta.decoderId);
-            sendGuiOtaResult(currentOta.decoderId, OTA_RESULT_OK);
+            cg2SendOtaResult(currentOta.decoderId, OTA_RESULT_OK);
             otaSuccessReceived = false;
             otaState = OTA_NEXT;
             break;
@@ -138,7 +129,7 @@ void processOta()
         if (millis() - otaTimer > OTA_TIMEOUT_MS)
         {
             Serial.printf("OTA TIMEOUT for decoder ID %d\r\n", currentOta.decoderId);
-            sendGuiOtaResult(currentOta.decoderId, OTA_RESULT_TIMEOUT);
+            cg2SendOtaResult(currentOta.decoderId, OTA_RESULT_TIMEOUT);
             otaState = OTA_NEXT;
         }
         break;
@@ -168,41 +159,6 @@ void processOta()
         otaState = OTA_IDLE;
         break;
     }
-}
-
-void processFirmwareQueue()
-{
-    if (fwQueue.empty())
-        return;
-
-    FirmwarePacket p = fwQueue.front();
-    fwQueue.pop();
-
-    File f = LittleFS.open(FW_PATH, "a");
-    if (f)
-    {
-        f.write(p.data, p.len);
-        f.close();
-        firmwareSizeOnFs += p.len;
-    }
-    //    Serial.printf("Received firmware total: %d bytes\r\n", firmwareSizeOnFs);
-}
-
-void processAckQueue()
-{
-    if (ackQueue.empty())
-        return;
-
-    // alle 2–5 ms ein ACK senden
-    if (millis() - lastAckSend < 3)
-        return;
-
-    AckPacket a = ackQueue.front();
-    ackQueue.pop();
-
-    sendOtaAck(a.seq, a.status);
-
-    lastAckSend = millis();
 }
 
 void onUploadFinished(size_t size)
