@@ -1,135 +1,81 @@
-﻿using CANguru.Networking;
-using CANguru.Views;
-using System;
+﻿using System;
 using System.IO;
-using System.Net;
-using System.Net.Sockets;
 using System.Threading.Tasks;
+using CANguru.Networking;
+using CANguru.Protocol;
 
 namespace CANguru
 {
+    // Überträgt lokomotive.cs2 zur Bridge (Protokoll Version 2, Feature Datei):
+    // BLOCK [offset][daten] mit Quittung je Block, am Ende END [größe][crc32].
+    // WinDigiPet holt die Datei anschließend per HTTP von der Bridge.
     public class Cs2FileUploader
     {
-        private byte[] fileData = Array.Empty<byte>();
-        private int blockSize = 512;
-        private int offset = 0;
-        private int bytesRead = 0;
-        private bool waitingForAck = false;
+        private const int BlockSize = 1024;
+        private bool _laeuft;
 
-        private TaskCompletionSource<bool>? uploadTcs;
-
-        public event Action<int, int>? ProgressChanged;   // (offset, total)
+        public event Action<int, int>? ProgressChanged;   // (übertragen, gesamt)
         public event Action? UploadCompleted;
         public event Action<string>? UploadError;
 
-        private void StartUpload(string filePath)
+        // true erst, wenn die Bridge die vollständige Datei bestätigt hat
+        public async Task<bool> StartUploadAsync(string filePath)
         {
-            if (!File.Exists(filePath))
-            {
-                var msg = "Datei nicht gefunden: " + filePath;
-                uploadTcs?.TrySetResult(false);
-                UploadError?.Invoke(msg);
-                return;
-            }
-
-            uploadTcs?.TrySetResult(true);
-
-            fileData = File.ReadAllBytes(filePath);
-            offset = 0;
-            waitingForAck = false;
-
-            SendNextBlock();
-        }
-
-        public Task<bool> StartUploadAsync(string filePath)
-        {
-            if (uploadTcs != null && !uploadTcs.Task.IsCompleted)
+            if (_laeuft)
                 throw new InvalidOperationException("Es läuft bereits ein Upload.");
-
-            uploadTcs = new TaskCompletionSource<bool>();
-
-            // hier startest du den Upload
-            StartUpload(filePath);
-
-            return uploadTcs.Task;
-        }
-
-        private void SendNextBlock()
-        {
-            if (waitingForAck)
-                return;
-
-            if (offset >= fileData.Length)
+            _laeuft = true;
+            try
             {
-                uploadTcs?.TrySetResult(true);
+                if (!File.Exists(filePath))
+                    return Fehler("Datei nicht gefunden: " + filePath);
+
+                byte[] data = File.ReadAllBytes(filePath);
+
+                // UTF-8-BOM entfernen (bisher tat das die Bridge)
+                if (data.Length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF)
+                    data = data[3..];
+
+                var link = BridgeLink.Instance;
+                byte bridge = (byte)ProtocolConstants.CG2_ID_BRIDGE;
+                byte fFile = (byte)ProtocolConstants.CG2_F_FILE;
+
+                int offset = 0;
+                do
+                {
+                    int len = Math.Min(BlockSize, data.Length - offset);
+                    byte[] block = new byte[len];
+                    Array.Copy(data, offset, block, 0, len);
+                    byte[] payload = new Cg2Writer().U32((uint)offset).Bytes(block).ToArray();
+
+                    var r = await link.RequestAsync(fFile, (byte)ProtocolConstants.CG2_FILE_BLOCK, bridge, payload);
+                    if (r == null)
+                        return Fehler($"Bridge bestätigt Block bei {offset} nicht.");
+                    if (r.IsError)
+                        return Fehler($"Bridge meldet bei {offset}: {BridgeLink.ErrorText(r.ErrorCode)}");
+
+                    offset += len;
+                    ProgressChanged?.Invoke(offset, data.Length);
+                } while (offset < data.Length);
+
+                uint crc = Cg2.Crc32(0, data, 0, data.Length);
+                byte[] ende = new Cg2Writer().U32((uint)data.Length).U32(crc).ToArray();
+                var end = await link.RequestAsync(fFile, (byte)ProtocolConstants.CG2_FILE_END, bridge, ende);
+                if (end == null || end.IsError || end.Payload.Length < 1 || end.Payload[0] != 1)
+                    return Fehler("Bridge hat die Datei nicht vollständig erhalten (Größe oder Prüfsumme falsch).");
+
                 UploadCompleted?.Invoke();
-                return;
+                return true;
             }
-
-            int len = Math.Min(blockSize, fileData.Length - offset);
-            byte[] block = new byte[len];
-            Array.Copy(fileData, offset, block, 0, len);
-
-            byte[] packet = new byte[5 + len];
-            packet[0] = ProtocolConstants.CMD_FILE_BLOCK_CS2;
-            packet[1] = (byte)(offset >> 24);
-            packet[2] = (byte)(offset >> 16);
-            packet[3] = (byte)(offset >> 8);
-            packet[4] = (byte)(offset);
-
-            Array.Copy(block, 0, packet, 5, len);
-
-            Form1.Instance.SendToBridge(packet);
-
-            waitingForAck = true;
-            bytesRead += len;
-
-            ProgressChanged?.Invoke(bytesRead, fileData.Length);
+            finally
+            {
+                _laeuft = false;
+            }
         }
 
-        public void HandleAck(byte[] data)
+        private bool Fehler(string msg)
         {
-            // 1) Packet parsen
-            if (!PacketParser.TryParse(data, out var featureId, out var commandId, out var payload))
-                return;
-
-            // 2) Nur ACKs für CS2-Dateien akzeptieren
-            if (featureId != ProtocolConstants.FEATURE_CS2)
-                return;
-
-            if (commandId != ProtocolConstants.CMD_FILE_ACK_CS2)
-                return;
-
-            // 3) Payload prüfen
-            if (payload.Length < 5)
-                return;
-
-            int ackOffset =
-                (payload[0] << 24) |
-                (payload[1] << 16) |
-                (payload[2] << 8) |
-                (payload[3]);
-
-            byte status = payload[4];
-
-            // 4) Offset prüfen
-            if (ackOffset != offset)
-                return;
-
-            // 5) Fehler?
-            if (status != 0)
-            {
-                string msg = $"Bridge meldet Fehler bei Offset {ackOffset}.";
-                uploadTcs?.TrySetResult(false);   // Upload fehlgeschlagen, aber kein Crash
-                UploadError?.Invoke(msg);         // GUI bekommt Meldung
-                return;
-            }
-
-            // 6) Alles OK → nächsten Block senden
-            waitingForAck = false;
-            offset += blockSize;
-
-            SendNextBlock();
+            UploadError?.Invoke(msg);
+            return false;
         }
     }
 }

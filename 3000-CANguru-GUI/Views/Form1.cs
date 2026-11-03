@@ -54,24 +54,20 @@ namespace CANguru.Views
         private CANguru.OTA.OtaUploader otaUploader;
         private CancellationTokenSource _uploadCts;
         private byte lastPercent = 0;
-
-        /*&&&        private CancellationTokenSource _uploadCts;
-                private int blockSize = ProtocolConstants.BlockSizeGUI;
-                private int maxRetries = 5;
-                private int ackTimeout = 500; // ms
-                private uint seq;
-        */
-        int totalBlocks = 0;
+        private int lastOtaDecoder = -1; // Decoder, dessen OTA-Fortschritt zuletzt kam
 
         // lokomotive.cs2 -Upload
         private Cs2FileUploader uploader;
+
+        // Bridge suchen (Protokoll Version 2: SESSION DISCOVER)
+        private readonly System.Windows.Forms.Timer discoverTimer = new System.Windows.Forms.Timer();
+        private bool bridgeFound = false;
 
         // Alive-Überwachung
         private DecoderStatus currentDecoderStatus = DecoderStatus.Lost;
         private bool guiClosing = false;
         private bool isFirmwareUploadActive = false;
         private AliveManager aliveManager = new AliveManager();
-        private bool firstAliveReceived = true;
 
         private int lastPower = -1;
         private int lastSwitch = -1;
@@ -80,7 +76,6 @@ namespace CANguru.Views
 
         // CAN-Queues
         private readonly ConcurrentQueue<(uint seq, byte[] data)> incomingFrames = new();
-        private readonly ConcurrentQueue<byte[]> outgoingFrames = new();
 
         // CANguru-Steuerzustand
         private enum enum_canguruStatus
@@ -242,16 +237,18 @@ namespace CANguru.Views
             // OTA-Firmaware
             otaUploader = new CANguru.OTA.OtaUploader(
                 log: text => Log(text),
-                setPercent: percent =>
+                setPercent: percent => UiInvoke(() =>
                 {
                     dualBar.CurrentValue = percent;
                     dualBar.CurrentText = $"{percent}%";
                     dualBar.Invalidate();
-                },
-                blockSize: ProtocolConstants.BlockSizeGUI,
-                maxRetries: 5,
-                ackTimeoutMs: 500
+                }),
+                blockSize: ProtocolConstants.CG2_OTA_BLOCK_SIZE
             );
+
+            // Bridge suchen: DISCOVER per Broadcast, bis sie antwortet
+            discoverTimer.Interval = 1000;
+            discoverTimer.Tick += (s, e) => SendDiscover();
         }
         // Schatten hinzufügen
         protected override CreateParams CreateParams
@@ -394,9 +391,23 @@ namespace CANguru.Views
             udpReceiver = new UdpClient(ProtocolConstants.GUI_PORT);
             udpReceiver.BeginReceive(OnUdpData, null);
 
-            // Neues Startsignal an die Bridge (Broadcast)
-            var packet = PacketBuilder.Build((byte)ProtocolConstants.FEATURE_BRIDGE, (byte)ProtocolConstants.BRIDGE_START, Array.Empty<byte>());
-            UdpClientSingleton.Instance.SendBroadcast(packet);
+            // Bridge suchen; wiederholt jede Sekunde, bis sie antwortet
+            bridgeFound = false;
+            SendDiscover();
+            UiInvoke(() => discoverTimer.Start());
+        }
+
+        // SESSION DISCOVER per Broadcast [protoMinor]
+        private void SendDiscover()
+        {
+            if (bridgeFound)
+            {
+                discoverTimer.Stop();
+                return;
+            }
+            BridgeLink.Instance.Broadcast((byte)ProtocolConstants.CG2_F_SESSION,
+                                          (byte)ProtocolConstants.CG2_SESSION_DISCOVER,
+                                          new byte[] { (byte)ProtocolConstants.CG2_PROTO_MINOR });
         }
 
         // Zum Senden an die Bridge
@@ -462,39 +473,111 @@ namespace CANguru.Views
             return newValue;
         }
 
-        private async void HandleAlivePacket(IPAddress bridgeIp, byte[] payload)
+        // Antwort auf DISCOVER: [fwMajor][fwMinor][protoMinor][gleisbox 0/1]
+        // Die Bridge meldet sich auch, wenn noch kein Decoder läuft.
+        private async void HandleBridgeFound(IPAddress bridgeIp, byte[] payload)
         {
-            firstAliveReceived = false;
+            if (bridgeFound)
+                return;
+            bridgeFound = true;
+            UiInvoke(() => discoverTimer.Stop());
 
-            // Bridge ist online
+            var r = new Cg2Reader(payload);
+            byte fwMajor = r.U8(), fwMinor = r.U8(), protoMinor = r.U8(), gleisbox = r.U8();
+
             currentDecoderStatus = DecoderStatus.Healthy;
+            Log($"Bridge gefunden: {bridgeIp}, Firmware {fwMajor}.{fwMinor}, Protokoll 2.{protoMinor}" +
+                (gleisbox == 1 ? ", Gleisbox erkannt" : ""));
 
-            // Bridge-IP übernehmen
-            Log("Bridge hat sich gemeldet!");
+            // Ab jetzt direkt an die Bridge senden statt per Broadcast
             ProtocolConfig.BridgeIP = bridgeIp;
             ProtocolConfig.ipString = bridgeIp.ToString();
+            UdpClientSingleton.Instance.SetBridge(bridgeIp);
             UiInvoke(() => txtBridgeIP.Text = ProtocolConfig.ipString);
-
-            // STOP/GO aktivieren
             UiInvoke(() => btnStopGo.Enabled = true);
 
+            // Lokliste zur Bridge, damit WDP sie abholen kann
             UiInvoke(() => dualBar.Visible = true);
             bool ok = await uploader.StartUploadAsync("lokomotive.cs2");
-            if (!ok)
+            UiInvoke(() => dualBar.Visible = false);
+            if (ok)
+                Log("lokomotive.cs2 zur Bridge übertragen.");
+
+            // Decoder zur Anmeldung auffordern
+            var start = await BridgeLink.Instance.RequestAsync(
+                (byte)ProtocolConstants.CG2_F_SESSION, (byte)ProtocolConstants.CG2_SESSION_START,
+                (byte)ProtocolConstants.CG2_ID_BRIDGE, null);
+            if (start == null)
+                Log("Bridge bestätigt den Start nicht.");
+
+            canguruStatus = enum_canguruStatus.startGleisbox;
+        }
+
+        // Nachrichten im Protokoll Version 2 (Sitzung, CAN, OTA)
+        private void ProcessCg2Packet(byte[] data, IPEndPoint remote)
+        {
+            if (Cg2.Decode(data, out var h, out var payload) != Cg2DecodeResult.Ok)
             {
-                MessageBox.Show(
-                    "Die Bridge ist nicht im OTA-Startmodus.\r\n" +
-                    "Bitte Decoder auswählen und OTA erneut starten.",
-                    "Upload nicht möglich",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning
-                );
+                Log($"Ungültige Nachricht von der Bridge ignoriert: {BitConverter.ToString(data)}");
                 return;
             }
 
-            UiInvoke(() => dualBar.Visible = false);
+            // Antworten auf eigene Anfragen gehen an den Wartenden in BridgeLink
+            if (BridgeLink.Instance.HandleResponse(h, payload))
+                return;
 
-            canguruStatus = enum_canguruStatus.startGleisbox;
+            switch (h.Feature)
+            {
+                case ProtocolConstants.CG2_F_SESSION:
+                    if (h.Command == ProtocolConstants.CG2_SESSION_DISCOVER_REPLY)
+                        HandleBridgeFound(remote.Address, payload);
+                    return;
+
+                case ProtocolConstants.CG2_F_CAN:
+                    // [folge u32][frame 13][quelle] -> Frame mit Quelle (14 Byte) zur Anzeige
+                    if (h.Command == ProtocolConstants.CG2_CAN_TO_GUI &&
+                        payload.Length >= 4 + ProtocolConstants.CAN_FRAME_SIZE + 1)
+                    {
+                        uint seq = BitConverter.ToUInt32(payload, 0);
+                        incomingFrames.Enqueue((seq, payload[4..]));
+                    }
+                    return;
+
+                case ProtocolConstants.CG2_F_OTA:
+                    if (h.Command == ProtocolConstants.CG2_OTA_PROGRESS)
+                        HandleOtaProgress(payload);
+                    else if (h.Command == ProtocolConstants.CG2_OTA_RESULT)
+                        HandleOtaResultFromBridge(payload);
+                    return;
+            }
+        }
+
+        // OTA-Fortschritt: [decoderId][prozent][gesamtProzent]
+        private void HandleOtaProgress(byte[] payload)
+        {
+            if (payload.Length < 3)
+                return;
+            int id = payload[0], percent = payload[1], overall = Math.Min((int)payload[2], 100);
+
+            if (id != lastOtaDecoder)
+            {
+                lastOtaDecoder = id;
+                Log($"Decoder {id} lädt Firmware ...");
+            }
+            UiInvoke(() =>
+            {
+                dualBar.Visible = true;
+                dualBar.CurrentValue = percent;
+                dualBar.CurrentText = $"{percent}%";
+                dualBar.TotalValue = overall;
+                dualBar.TotalText = $"{overall}%";
+                dualBar.Invalidate();
+            });
+            if (percent == 100)
+                // Ob das Update gelungen ist, steht erst nach Prüfung und Neustart fest (OTA_RESULT)
+                Log("Firmware an den Decoder übertragen – Decoder prüft und startet neu ...");
+            if (overall >= 100)
+                UiInvoke(() => dualBar.Visible = false);
         }
 
         // Ergebnis des OTA-Updates eines Decoders
@@ -555,6 +638,14 @@ namespace CANguru.Views
             if (guiClosing)
                 return;
 
+            // Protokoll Version 2 (Sitzung, CAN, Datei, OTA); erkennbar am ersten Byte 0xC2
+            if (Cg2.IsV2(data))
+            {
+                ProcessCg2Packet(data, remote);
+                return;
+            }
+
+            // Altes Format: Decoder-Nachrichten bis Schritt 2.3
             if (PacketParser.TryParse(data, out var featureId, out var commandId, out var payload))
             {
                 switch (featureId)
@@ -574,102 +665,6 @@ namespace CANguru.Views
                                         int value1 = payload[9];
 
                                         HandleDecoderAdded(id, type, mac, value0, value1);
-                                    }
-                                    break;
-                            }
-                            return;
-                        }
-                    case ProtocolConstants.FEATURE_DECODER_UPLOAD:
-                        {
-                            switch (commandId)
-                            {
-                                case ProtocolConstants.DECODER_UPLOAD_START:
-                                    {
-                                        if (data.Length < 3)
-                                            break;
-                                        totalBlocks = (data[1] << 8) | data[2];
-                                        UiInvoke(() => dualBar.CurrentValue = 1);
-                                        UiInvoke(() => dualBar.CurrentText = $"1%");
-                                    }
-                                    break;
-
-                                case ProtocolConstants.DECODER_UPLOAD_BLOCK:
-                                    {
-                                        if (payload.Length < 2)
-                                            break;
-                                        int percent = payload[0];
-                                        int id = payload[1];
-                                        if (percent == 0)
-                                        {
-                                            Log("Decoder lädt Firmware...");
-                                            UiInvoke(() => dualBar.Visible = true);
-                                        }
-                                        this.BeginInvoke(new Action(() =>
-                                        {
-                                            dualBar.CurrentValue = percent;
-                                            dualBar.CurrentText = $"{percent}%";
-                                            dualBar.Invalidate();
-                                        }));
-                                        if (percent == 100)
-                                        {
-                                            UiInvoke(() => dualBar.Visible = false);
-                                            // Ob das Update gelungen ist, steht erst nach Prüfung
-                                            // und Neustart des Decoders fest (FRAME_GUI_OTA_RESULT).
-                                            Log("Firmware an den Decoder übertragen – Decoder prüft und startet neu ...");
-                                        }
-                                    }
-                                    break;
-
-                                case ProtocolConstants.DECODER_UPLOAD_END:
-                                    Log("OTA erfolgreich abgeschlossen.");
-                                    UiInvoke(() => dualBar.Visible = false);
-                                    break;
-
-                                case ProtocolConstants.DECODER_UPLOAD_ERROR:
-                                    Log("OTA Fehler: " + data[1]);
-                                    AbortOtaAndRecover();
-                                    break;
-                            }
-                            return;
-                        }
-                    case ProtocolConstants.FEATURE_SHOW_BAR:
-                        {
-                            switch (commandId)
-                            {
-                                case ProtocolConstants.FRAME_GUI_OTA_CURRENT_DECODER:
-                                    if (payload.Length < 1)
-                                        break;
-                                    byte decoderIdchg = payload[0];
-                                    Log("Aktueller Decoder: " + decoderIdchg);
-                                    this.Invoke(new Action(() =>
-                                    {
-                                        dualBar.CurrentText = $"0%";
-                                        dualBar.CurrentValue = 0;
-                                    }));
-                                    break;
-
-                                case ProtocolConstants.FRAME_GUI_OTA_OVERALL:
-                                    if (payload.Length < 1)
-                                        break;
-                                    byte percentOverall = payload[0];
-                                    if (percentOverall > 100)
-                                        percentOverall = 100;
-                                    if (percentOverall == 0)
-                                    {
-                                        UiInvoke(() => dualBar.Visible = true);
-                                    }
-                                    this.Invoke(new Action(() =>
-                                    {
-                                        if (dualBar != null)
-                                        {
-                                            dualBar.TotalValue = percentOverall;
-                                            dualBar.TotalText = $"{percentOverall}%";
-                                            dualBar?.Invalidate();
-                                        }
-                                    }));
-                                    if (percentOverall == 100)
-                                    {
-                                        UiInvoke(() => dualBar.Visible = false);
                                     }
                                     break;
                             }
@@ -699,8 +694,6 @@ namespace CANguru.Views
                                     {
                                         if (payload.Length < 9)
                                             break;
-                                        if (firstAliveReceived)
-                                            HandleAlivePacket(remote.Address, payload);
                                         int decoderId = payload[0];
                                         CANguru.Models.DecoderType decoderType = (CANguru.Models.DecoderType)payload[1];
                                         DecoderStatus status = (DecoderStatus)payload[2];
@@ -729,26 +722,6 @@ namespace CANguru.Views
                                         dec.LastSeen = DateTime.Now;
                                         //                            UpdateDecoderRow(id);
                                     }
-                                    break;
-                            }
-                            return;
-                        }
-                    case ProtocolConstants.FEATURE_CS2:
-                        {
-                            switch (commandId)
-                            {
-                                case ProtocolConstants.CMD_FILE_ACK_CS2:
-                                    uploader.HandleAck(data);
-                                    break;
-
-                                // CAN-Frame von der Bridge:
-                                // Sortiernummer (4) | CAN-Frame (13) | Quelle (1)
-                                case ProtocolConstants.FRAME_CAN_2GUI:
-                                    if (payload.Length < 4 + ProtocolConstants.CAN_FRAME_SIZE + 1)
-                                        break;
-                                    uint seq = BitConverter.ToUInt32(payload, 0);
-                                    byte[] canFrame = payload.Skip(4).ToArray();
-                                    incomingFrames.Enqueue((seq, canFrame));
                                     break;
                             }
                             return;
@@ -867,30 +840,6 @@ namespace CANguru.Views
 
                             break;
                         }
-                    case ProtocolConstants.FEATURE_FIRMWARE:
-                        {
-                            // FEATURE_FIRMWARE wird nur in der Kommunikation zwischen GUI und Bridge für OTA genutzt
-                            // Bridge und Decoder nutzen dafür FEATURE_OTA
-                            switch (commandId)
-                            {
-                                case ProtocolConstants.FRAME_GUI_OTA_RESULT:
-                                    HandleOtaResultFromBridge(payload);
-                                    break;
-
-                                case ProtocolConstants.FRAME_GUI_OTA_CURRENT_FINISHED:
-                                    Log("Gruppen-Update abgeschlossen");
-                                    break;
-                            }
-                            return;
-                        }
-                    case ProtocolConstants.FEATURE_OTA:
-                        {
-                            if (commandId == ProtocolConstants.CMD_OTA_ACK)
-                            {
-                                otaUploader.HandleAckPayload(payload);
-                            }
-                            return;
-                        }
                 }
             }
         }
@@ -989,20 +938,6 @@ namespace CANguru.Views
         #endregion Power-Anzeige
 
         #region Over The Air
-        struct GuiOtaStartWifiFrame
-        {
-            public byte type;
-            public byte decoderId;
-            public byte fwMajor;
-            public byte fwMinor;
-        }
-        struct GuiOtaResultFrame
-        {
-            public byte type;
-            public byte decoderId;
-            public byte result;    // 0 = success, 1 = error
-            public byte errorCode; // bei success = 0
-        }
         private void StopAllGuiTimers()
         {
             aliveTimer?.Stop();
@@ -1104,111 +1039,47 @@ namespace CANguru.Views
             Log("Firmware erfolgreich an Bridge übertragen.");
             dualBar.Visible = true;
 
-            // ⭐ OTA-Start an Bridge senden
-
-            // Einzeldecoder
+            // OTA-Start an die Bridge: [modus][id oder typ], modus 0 = ein Decoder, 1 = alle eines Typs
+            byte mode, selector;
             if (radioSingle.Checked)
             {
                 dualBar.SingleBarMode = true;
-
-                var pload = new byte[] { id, 0x00 };
-                var pkt = PacketBuilder.Build(
-                    (byte)ProtocolConstants.FEATURE_OTA,
-                    (byte)ProtocolConstants.OTA_SINGLE_DECODER,
-                    pload);
-
-                UdpClientSingleton.Instance.Send(pkt);
-                return;
+                mode = 0;
+                selector = id;
             }
-
-            // Gruppendecoder
-            byte? type = null;
-            if (radioType1.Checked) type = ProtocolConstants.DEVTYPE_SWITCH;
-            else if (radioType2.Checked) type = ProtocolConstants.DEVTYPE_SIGNAL;
-            else if (radioType3.Checked) type = ProtocolConstants.DEVTYPE_POWER;
-            else if (radioType4.Checked) type = ProtocolConstants.DEVTYPE_RM;
-
-            if (type == null)
+            else
             {
-                MessageBox.Show("Bitte einen OTA-Modus auswählen.");
-                return;
-            }
+                byte? type = null;
+                if (radioType1.Checked) type = ProtocolConstants.DEVTYPE_SWITCH;
+                else if (radioType2.Checked) type = ProtocolConstants.DEVTYPE_SIGNAL;
+                else if (radioType3.Checked) type = ProtocolConstants.DEVTYPE_POWER;
+                else if (radioType4.Checked) type = ProtocolConstants.DEVTYPE_RM;
 
-            dualBar.SingleBarMode = false;
-
-            var payload = new byte[] { id, type.Value };
-            var packet = PacketBuilder.Build(
-                (byte)ProtocolConstants.FEATURE_OTA,
-                (byte)ProtocolConstants.OTA_GROUP_DECODERS,
-                payload);
-
-            UdpClientSingleton.Instance.Send(packet);
-        }
-
-        private void AbortOtaAndRecover()
-        {
-            UiInvoke(() =>
-            {
-                MessageBox.Show(
-                    "Beim Firmware-Update ist ein Fehler aufgetreten.\n\n" +
-                    "Das gesamte System (GUI, Bridge und Decoder) wird jetzt neu gestartet.",
-                    "OTA-Fehler",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning
-                );
-            });
-
-            ResetGuiToInitialState();
-        }
-
-        private void ResetGuiToInitialState()
-        {
-            Log("GUI wird in den Anfangszustand versetzt...");
-
-            // 1. UI zurücksetzen
-            UiInvoke(() =>
-            {
-                listBoxDecoder.Items.Clear();
-                dualBar.Visible = false;
+                if (type == null)
+                {
+                    MessageBox.Show("Bitte einen OTA-Modus auswählen.");
+                    return;
+                }
                 dualBar.SingleBarMode = false;
-
-                dualBar.CurrentValue = 0;
-                dualBar.TotalValue = 0;
-                dualBar.CurrentText = "";
-                dualBar.TotalText = "";
-                dualBar.Invalidate();
-            });
-
-            // 2. interne Objekte neu erzeugen
-            CANFrames = new CANFrames();
-            generateHash();
-            mfxParser = new MfxParser(lokRegistry, CANFrames);
-            decoderController = new DecoderList();
-            decoderStorage = new DecoderStorage();
-
-            // Parser-Callbacks neu setzen
-            mfxParser.LogMessage += OnParserLog;
-            mfxParser.incnextLocid += OnincnextLocid;
-            mfxParser.LokCompleted += OnLokCompleted;
-            mfxParser.SendFrameRequested += OnSendFrameRequested;
-            mfxParser.FindKnownSid = FindKnownMfxSid;
-
-            // 3. UDP neu starten
-            try
-            {
-                udpReceiver?.Close();
+                mode = 1;
+                selector = type.Value;
             }
-            catch { }
 
-            StartUdp();
+            lastOtaDecoder = -1;
+            var start = await BridgeLink.Instance.RequestAsync(
+                (byte)ProtocolConstants.CG2_F_OTA, (byte)ProtocolConstants.CG2_OTA_START,
+                (byte)ProtocolConstants.CG2_ID_BRIDGE, new byte[] { mode, selector });
 
-            // 4. Alive zurücksetzen
-            currentDecoderStatus = DecoderStatus.Lost;
-
-            // 5. CANguru-Status zurücksetzen
-            canguruStatus = enum_canguruStatus.idle;
-
-            Log("GUI-Reset abgeschlossen.");
+            if (start == null || start.IsError)
+            {
+                dualBar.Visible = false;
+                string grund = start == null ? "Die Bridge antwortet nicht."
+                    : start.ErrorCode == ProtocolConstants.CG2_ERR_UNKNOWN_DECODER
+                        ? (mode == 0 ? "Der Decoder ist der Bridge nicht bekannt." : "Kein Decoder dieses Typs angemeldet.")
+                        : BridgeLink.ErrorText(start.ErrorCode);
+                Log("OTA-Start nicht möglich: " + grund);
+                MessageBox.Show(this, grund, "Firmware-Update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         #endregion over the air
@@ -1220,24 +1091,26 @@ namespace CANguru.Views
 
             uploader.ProgressChanged += (offset, total) =>
             {
+                int percent = total > 0 ? offset * 100 / total : 100;
                 UiInvoke(() =>
                     { // Wert aktualisieren
                         dualBar.SingleBarMode = true;
-                        dualBar.CurrentValue = offset * 100 / total;
-                        dualBar.CurrentText = $"{(offset * 100 / total)}%";
+                        dualBar.CurrentValue = percent;
+                        dualBar.CurrentText = $"{percent}%";
                         dualBar.Invalidate();
                     });
             };
 
             uploader.UploadCompleted += () =>
             {
-                Log("Upload lokomotive.cs2 abgeschlossen!");
-                dualBar.SingleBarMode = false;
+                UiInvoke(() => dualBar.SingleBarMode = false);
             };
 
             uploader.UploadError += (msg) =>
             {
-                MessageBox.Show("Fehler beim Upload lokomotive.cs2: " + msg);
+                Log("Fehler beim Upload lokomotive.cs2: " + msg);
+                UiInvoke(() => MessageBox.Show(this, "Fehler beim Upload lokomotive.cs2: " + msg,
+                    "lokomotive.cs2", MessageBoxButtons.OK, MessageBoxIcon.Warning));
             };
         }
         #endregion
@@ -1252,9 +1125,6 @@ namespace CANguru.Views
 
             // CAN-Frames sortieren + anzeigen
             ProcessPendingCanFrames();
-
-            // Outgoing CAN senden
-            ProcessOutgoingCanFrames();
         }
 
         public void OnDecoderAlive(int decoderId)
@@ -1320,11 +1190,12 @@ namespace CANguru.Views
         {
             // canFrame hat ein Zeichen mehr als CAN_FRAME_SIZE: "G"
 
-            // Nur die ersten 13 Bytes senden
+            // Nur die ersten 13 Bytes senden, im CAN-Tunnel (Protokoll Version 2)
             byte[] frameToSend = new byte[ProtocolConstants.CAN_FRAME_SIZE];
             Array.Copy(canFrame, frameToSend, ProtocolConstants.CAN_FRAME_SIZE);
 
-            UdpClientSingleton.Instance.Send(frameToSend);
+            BridgeLink.Instance.Send((byte)ProtocolConstants.CG2_F_CAN, (byte)ProtocolConstants.CG2_CAN_TO_TRACKBOX,
+                                     (byte)ProtocolConstants.CG2_ID_BRIDGE, frameToSend);
             DisplayCanFrame(canFrame);
         }
 
@@ -1345,13 +1216,6 @@ namespace CANguru.Views
                 DisplayCanFrame(frame.data);
                 mfxParser.ProcessCanFrame(frame.data);
             }
-        }
-
-        // Ausgehende CAN-Frames aus Queue senden
-        private void ProcessOutgoingCanFrames()
-        {
-            while (outgoingFrames.TryDequeue(out var frame))
-                UdpClientSingleton.Instance.Send(frame);
         }
 
         // CAN-Frame als Text darstellen
@@ -1910,9 +1774,9 @@ namespace CANguru.Views
                 Properties.Settings.Default.newSubscriptionCounter = (byte)UpDnnewSubscriptionCounter.Value;
                 Properties.Settings.Default.nextLokAddress = (byte)UpDnnextLokAddress.Value;
                 Properties.Settings.Default.Save();
-                // Reset an Bridge senden
-                var packet = PacketBuilder.Build((byte)ProtocolConstants.FEATURE_DECODER, (byte)ProtocolConstants.CMD_DECODER_RESET, Array.Empty<byte>());
-                UdpClientSingleton.Instance.Send(packet);
+                // Sitzungsende: Bridge hält die Gleisbox an, setzt die Decoder zurück und startet neu
+                BridgeLink.Instance.Send((byte)ProtocolConstants.CG2_F_SESSION, (byte)ProtocolConstants.CG2_SESSION_END,
+                                         (byte)ProtocolConstants.CG2_ID_BRIDGE, null);
             }
             catch
             {

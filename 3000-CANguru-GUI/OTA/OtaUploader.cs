@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using CANguru.Networking;
@@ -8,194 +6,71 @@ using CANguru.Protocol;
 
 namespace CANguru.OTA
 {
+    // Lädt eine Firmware-Datei zur Bridge (Protokoll Version 2, Feature OTA):
+    // UPLOAD_BEGIN [größe][crc32], dann UPLOAD_BLOCK [offset][daten] mit Quittung je Block.
+    // Die Bridge prüft am Ende Größe und CRC-32 der ganzen Datei.
     public class OtaUploader
     {
-        private struct AckStruct
-        {
-            public ushort Seq;
-            public byte Status;
-        }
-
-        private readonly ConcurrentQueue<AckStruct> _ackQueue = new();
-
         private readonly Action<string> _log;
         private readonly Action<int> _setPercent;   // 0..100
         private readonly int _blockSize;
-        private readonly int _maxRetries;
-        private readonly int _ackTimeoutMs;
 
-        private uint _seq;
-
-        public OtaUploader(
-            Action<string> log,
-            Action<int> setPercent,
-            int blockSize,
-            int maxRetries,
-            int ackTimeoutMs)
+        public OtaUploader(Action<string> log, Action<int> setPercent, int blockSize)
         {
             _log = log;
             _setPercent = setPercent;
             _blockSize = blockSize;
-            _maxRetries = maxRetries;
-            _ackTimeoutMs = ackTimeoutMs;
-        }
-
-        // Wird von außen aus ProcessIncomingPacket() aufgerufen
-        public void HandleAckPayload(byte[] payload)
-        {
-            if (payload == null || payload.Length < 3)
-                return;
-
-            var ack = new AckStruct
-            {
-                Seq = (ushort)(payload[0] | (payload[1] << 8)),
-                Status = payload[2]
-            };
-            _ackQueue.Enqueue(ack);
         }
 
         public async Task<bool> UploadFirmwareAsync(byte[] firmware, CancellationToken ct)
         {
-            int totalSize = firmware.Length;
-            int offset = 0;
-            _seq = 0;
+            var link = BridgeLink.Instance;
+            byte bridge = (byte)ProtocolConstants.CG2_ID_BRIDGE;
+            byte fOta = (byte)ProtocolConstants.CG2_F_OTA;
 
-            // Startblock (seq=0, payload = totalSize)
-            byte[] startPayload = BitConverter.GetBytes(totalSize);
-            byte[] startFrame = BuildOtaBlock(_seq, startPayload);
+            uint crc = Cg2.Crc32(0, firmware, 0, firmware.Length);
+            byte[] begin = new Cg2Writer().U32((uint)firmware.Length).U32(crc).ToArray();
 
-            _log("Sende Startblock...");
-            if (!await SendBlockWithAckAsync(startFrame, totalSize, offset, startPayload.Length, ct))
+            _log("Firmware-Upload zur Bridge beginnt ...");
+            var r = await link.RequestAsync(fOta, (byte)ProtocolConstants.CG2_OTA_UPLOAD_BEGIN, bridge, begin, 1000, ct);
+            if (r == null || r.IsError)
             {
-                _log("Startblock NICHT bestätigt. Upload abgebrochen.");
+                _log("Bridge nimmt keine Firmware an: " +
+                     (r == null ? "keine Antwort" : BridgeLink.ErrorText(r.ErrorCode)));
                 return false;
             }
 
-            _seq++;
-
-            while (offset < totalSize)
+            int offset = 0;
+            while (offset < firmware.Length)
             {
                 ct.ThrowIfCancellationRequested();
 
-                int len = Math.Min(_blockSize, totalSize - offset);
-                byte[] payload = new byte[len];
-                Buffer.BlockCopy(firmware, offset, payload, 0, len);
+                int len = Math.Min(_blockSize, firmware.Length - offset);
+                byte[] block = new byte[len];
+                Buffer.BlockCopy(firmware, offset, block, 0, len);
+                byte[] payload = new Cg2Writer().U32((uint)offset).Bytes(block).ToArray();
 
-                byte[] frame = BuildOtaBlock(_seq, payload);
-
-                if (!await SendBlockWithAckAsync(frame, totalSize, offset, len, ct))
+                r = await link.RequestAsync(fOta, (byte)ProtocolConstants.CG2_OTA_UPLOAD_BLOCK, bridge, payload, 500, ct);
+                if (r == null)
                 {
-                    _log("Upload abgebrochen: keine gültigen ACKs mehr.");
+                    _log($"Upload abgebrochen: Bridge bestätigt Block bei {offset} nicht.");
+                    return false;
+                }
+                if (r.IsError)
+                {
+                    bool letzterBlock = offset + len >= firmware.Length;
+                    _log(letzterBlock && r.ErrorCode == ProtocolConstants.CG2_ERR_BAD_VALUE
+                        ? "Upload fehlgeschlagen: Prüfsumme der Firmware auf der Bridge falsch."
+                        : $"Upload abgebrochen bei {offset}: {BridgeLink.ErrorText(r.ErrorCode)}");
                     return false;
                 }
 
                 offset += len;
-                _seq++;
+                _setPercent((int)(offset * 100L / firmware.Length));
             }
 
             _log("Firmware-Upload zur Bridge abgeschlossen.");
             return true;
-        }
-
-        private async Task<bool> SendBlockWithAckAsync(
-            byte[] frame,
-            int totalSize,
-            int offset,
-            int len,
-            CancellationToken ct)
-        {
-            for (int attempt = 0; attempt < _maxRetries; attempt++)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                UdpClientSingleton.Instance.Send(frame);
-
-                var ack = await WaitForAckAsync((ushort)(_seq & 0xFFFF), _ackTimeoutMs, ct);
-                if (ack == null)
-                {
-                    _log($"Block {_seq} NICHT bestätigt, Versuch {attempt + 1}/{_maxRetries}");
-                    continue;
-                }
-
-                if (ack.Value.Status == 0)
-                {
-                    int sent = offset + len;
-                    int percent = (int)(sent * 100.0 / totalSize);
-                    _setPercent(Math.Min(100, percent));
-                    return true;
-                }
-
-                if (ack.Value.Status == 1)
-                {
-                    _log($"Block {_seq}: RETRY angefordert.");
-                    continue;
-                }
-
-                if (ack.Value.Status == 2)
-                {
-                    _log($"Block {_seq}: FATAL ERROR.");
-                    return false;
-                }
-            }
-
-            return false;
-        }
-
-        private async Task<AckStruct?> WaitForAckAsync(ushort expectedSeq, int timeoutMs, CancellationToken ct)
-        {
-            var sw = Stopwatch.StartNew();
-
-            while (sw.ElapsedMilliseconds < timeoutMs)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                if (_ackQueue.TryDequeue(out var ack))
-                {
-                    if (ack.Seq == expectedSeq)
-                        return ack;
-                }
-
-                await Task.Delay(1, ct);
-            }
-
-            return null;
-        }
-
-        private static byte[] BuildOtaBlock(uint seq, byte[] payload)
-        {
-            ushort len = (ushort)payload.Length;
-            ushort crc = Crc16(payload);
-
-            byte[] frame = new byte[1 + 4 + 2 + 2 + len];
-
-            frame[0] = ProtocolConstants.OTA_UPLOAD_BLOCK;
-
-            Buffer.BlockCopy(BitConverter.GetBytes(seq), 0, frame, 1, 4);
-            Buffer.BlockCopy(BitConverter.GetBytes(len), 0, frame, 5, 2);
-            Buffer.BlockCopy(BitConverter.GetBytes(crc), 0, frame, 7, 2);
-            Buffer.BlockCopy(payload, 0, frame, 9, len);
-
-            return frame;
-        }
-
-        private static ushort Crc16(byte[] data)
-        {
-            ushort crc = 0xFFFF;
-
-            for (int i = 0; i < data.Length; i++)
-            {
-                crc ^= (ushort)(data[i] << 8);
-
-                for (int b = 0; b < 8; b++)
-                {
-                    if ((crc & 0x8000) != 0)
-                        crc = (ushort)((crc << 1) ^ 0x1021);
-                    else
-                        crc <<= 1;
-                }
-            }
-
-            return crc;
         }
     }
 }

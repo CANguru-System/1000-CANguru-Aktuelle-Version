@@ -14,7 +14,8 @@ public sealed class UdpClientSingleton
     public static UdpClientSingleton Instance => _inst;
 
     private readonly UdpClient _client;
-    private readonly IPEndPoint _remote;
+    // Ziel aller Sendungen: zunächst Broadcast, nach dem Finden der Bridge deren Adresse
+    private volatile IPEndPoint _remote;
 
     private volatile DecoderStatus _DecoderStatus = DecoderStatus.Healthy;
 
@@ -50,6 +51,13 @@ public sealed class UdpClientSingleton
 
         _client.Send(packet, packet.Length,
             new IPEndPoint(IPAddress.Broadcast, ProtocolConfig.BridgePort));
+    }
+
+    // Nach dem Finden der Bridge direkt an ihre Adresse senden statt per Broadcast
+    // (ein Broadcast an 255.255.255.255 geht auf PCs mit mehreren Netzwerkkarten nur über eine)
+    public void SetBridge(IPAddress bridgeIp)
+    {
+        _remote = new IPEndPoint(bridgeIp, ProtocolConstants.BRIDGE_PORT);
     }
 
     public void SetDecoderStatus(DecoderStatus state)
