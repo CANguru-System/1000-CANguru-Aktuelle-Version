@@ -66,6 +66,15 @@ static void respond(const Cg2Header &req, const uint8_t *payload, size_t len, ui
         udpSendToGui(lastResponse, n);
 }
 
+// Fehlerantwort auf eine Anfrage der GUI im Namen eines Decoders (z. B. nicht zustellbar)
+void cg2SendErrorToGui(const Cg2Header &request, uint8_t decoderId, uint8_t errorCode)
+{
+    Cg2Header r = cg2ResponseTo(request, decoderId);
+    r.flags |= CG2_FLAG_ERROR;
+    uint8_t err[1] = {errorCode};
+    sendFrame(r, err, 1);
+}
+
 void cg2SendCanFrameToGui(uint32_t seq, const uint8_t *frame13, char source)
 {
     uint8_t p[4 + CAN_FRAME_SIZE + 1];
@@ -292,7 +301,15 @@ void cg2HandleGuiPacket(const uint8_t *buf, int len, IPAddress remote)
         return;
     }
 
-    // Wiederholte Anfrage: gespeicherte Antwort erneut senden
+    // Nachricht für einen Decoder: unverändert weiterleiten. Wiederholungen erkennt
+    // der Decoder selbst; seine Antwort geht unverändert an die GUI zurück.
+    if (h.decoder != CG2_ID_BRIDGE)
+    {
+        forwardGuiToDecoder(h, buf, len);
+        return;
+    }
+
+    // Wiederholte Anfrage an die Bridge: gespeicherte Antwort erneut senden
     if (h.ackRequested())
     {
         if (guiDuplicates.isDuplicate(CG2_ID_BRIDGE, h.seq) && lastResponseLen > 0 &&
@@ -303,16 +320,16 @@ void cg2HandleGuiPacket(const uint8_t *buf, int len, IPAddress remote)
         }
     }
 
-    // Nachrichten für einen Decoder kommen erst ab Schritt 2.3 im neuen Format
-    if (h.decoder != CG2_ID_BRIDGE)
-    {
-        if (h.ackRequested())
-            respond(h, nullptr, 0, CG2_ERR_UNKNOWN_DECODER);
-        return;
-    }
-
     switch (h.feature)
     {
+    case CG2_F_DECODER:
+        // REMOVE [id]: ausgebauten Decoder aus der dauerhaften Liste löschen
+        if (h.command == CG2_DECODER_REMOVE && h.length >= 1)
+        {
+            respond(h, nullptr, 0, removeDecoder(payload[0]) ? 0 : CG2_ERR_UNKNOWN_DECODER);
+            return;
+        }
+        break;
     case CG2_F_SESSION:
         handleSession(h, payload, remote);
         return;

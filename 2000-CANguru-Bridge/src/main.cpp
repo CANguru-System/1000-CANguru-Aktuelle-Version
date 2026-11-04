@@ -15,7 +15,6 @@
 #include "Bridge_OTA.h"
 #include "Bridge_Decoder.h"
 #include "gui_link.h"
-#include "handlers.h"
 #include "MOD-LCD.h"
 
 // Der Master speichert im setup seine Broadcast-Adresse und jeweils bei Empfang der Slaves deren MAC-Adresse.
@@ -38,12 +37,6 @@ const uint16_t GUI_PORT_IN = BRIDGE_PORT; // GUI → Bridge
 const uint16_t GUI_PORT_OUT = GUI_PORT;   // Bridge → GUI
 
 const char *CS_PATH = "/lokomotive.cs2";
-
-// --- Forward Declarations ---
-void handleFirmware();
-
-// Forward für Routing-Funktionen
-void sendSwitchSignalSettingsToDecoder(uint8_t featureId, uint8_t commandId, const uint8_t *payload, int payloadLen);
 
 void initLittleFS()
 {
@@ -116,87 +109,10 @@ void setup()
   if (!LittleFS.exists(CS_PATH))
     Serial.println("BRIDGE: WARNING - lokomotive.cs2 not found in LittleFS");
 
+  // Dauerhafte Decoder-Liste (MAC -> ID) laden
+  loadDecoderList();
+
   Serial.println("Bridge ready for HELLO packets");
-
-  // Decoder-Liste initialisieren
-  //  loadDecoderList();
-}
-
-// ----------------------------------------------------
-// Routing der GUI-Nachrichten für Decoder im alten Format (Feature | Frame | Payload).
-// Sitzung, CAN, Datei und OTA kommen im Protokoll Version 2 (gui_link.cpp).
-// ----------------------------------------------------
-void handleGuiPacket(uint8_t featureId, uint8_t commandId, const uint8_t *payload, int payloadLen)
-{
-
-  switch (featureId)
-  {
-  case FEATURE_POWER:
-    switch (commandId)
-    {
-    case POWER_CMD_GET_THRESHOLD:
-      handleGetPowerDecoderSettings();
-      break;
-    case POWER_CMD_SET_THRESHOLD:
-      handleSetPowerDecoderSettings(payload, payloadLen);
-      break;
-    default:
-      Serial.printf("Unknown POWER commandId %u\r\n", commandId);
-      break;
-    }
-    break;
-
-  case FEATURE_FEEDBACK:
-    handleFeedbackGuiCommand(commandId, payload, payloadLen);
-    break;
-
-  case FEATURE_SWITCH:
-  case FEATURE_SIGNAL:
-    switch (commandId)
-    {
-    case SWITCH_CMD_SET_SETTINGS:
-    case SWITCH_CMD_GET_SETTINGS:
-    case SWITCH_CMD_MOVE2START:
-    case SWITCH_CMD_SET_ZERO:
-    case SWITCH_CMD_MOVE2END:
-    case SWITCH_CMD_SET_END:
-    case SWITCH_CMD_TEST_RUN:
-    case SWITCH_CMD_STOP_ALL:
-    case SIGNAL_CMD_SET_SETTINGS:
-    case SIGNAL_CMD_GET_SETTINGS:
-    case SIGNAL_CMD_MOVE2START:
-    case SIGNAL_CMD_SET_ZERO:
-    case SIGNAL_CMD_MOVE2END:
-    case SIGNAL_CMD_SET_END:
-    case SIGNAL_CMD_TEST_RUN:
-    case SIGNAL_CMD_STOP_ALL:
-      sendSwitchSignalSettingsToDecoder(featureId, commandId, payload, payloadLen);
-      break;
-
-      // andere Features …
-
-    default:
-      Serial.printf("Unknown SWITCH commandId %02X\r\n", commandId);
-      break;
-    }
-    break;
-  case FEATURE_SETTING:
-    switch (commandId)
-    {
-    case SETTING_CMD_RESET_TO_DEFAULTS:
-      sendResetSettingsToDecoder(payload, payloadLen);
-      break;
-
-    default:
-      Serial.printf("Unknown SETTING commandId %u\r\n", commandId);
-      break;
-    }
-    break;
-
-  default:
-    Serial.printf("Unknown DECODER featureId %02X\r\n", featureId);
-    break;
-  }
 }
 
 // ----------------------------------------------------
@@ -215,55 +131,11 @@ void readGUI()
     packetLength = sizeof(buf);
   udp.read(buf, packetLength);
 
-  // Protokoll Version 2: Sitzung, CAN-Tunnel, lokomotive.cs2, OTA
+  // Die GUI spricht nur noch Protokoll Version 2 (gui_link.cpp)
   if (cg2IsV2(buf, packetLength))
-  {
     cg2HandleGuiPacket(buf, packetLength, udp.remoteIP());
-    return;
-  }
-
-  // ----------------------------------------------------
-  // Altes Format für Decoder-Nachrichten (bis Schritt 2.3):
-  //    Feature | Frame | Payload
-  // ----------------------------------------------------
-  if (packetLength >= 2)
-  {
-    uint8_t feature = buf[0];
-    uint8_t frame = buf[1];
-
-    const uint8_t *payload = nullptr;
-    int payloadLen = packetLength - 2;
-
-    if (payloadLen > 0)
-      payload = &buf[2];
-
-    handleGuiPacket(feature, frame, payload, payloadLen);
-  }
-
-  //  onUdpData(buf, packetLength);
-}
-
-// ----------------------------------------------------
-// SWITCH-Frames an Decoder senden (ESP-NOW)
-// ----------------------------------------------------
-
-void sendSwitchSignalSettingsToDecoder(uint8_t featureId, uint8_t commandId, const uint8_t *payload, int payloadLen)
-{
-  if (payloadLen == 0)
-  {
-    Serial.println("ERROR: SWITCH/SIGNAL packet without payload");
-    return;
-  }
-
-  // Signal-Kommandos gehen an die Signaldecoder, alle anderen an die Weichendecoder
-  const uint8_t decoderType = (featureId == FEATURE_SIGNAL) ? DEVTYPE_SIGNAL : DEVTYPE_SWITCH;
-
-  auto bytes = buildPacket(
-      featureId,
-      commandId,
-      payload,
-      payloadLen);
-  sendTheData(SendMode::TYPE, decoderType, bytes.data(), bytes.size());
+  else
+    Serial.println("GUI: Nachricht im alten Format ignoriert - GUI zu alt?");
 }
 
 // ----------------------------------------------------
@@ -295,10 +167,9 @@ void showLokomotiveFile()
 // --------------------------------------------------
 void loop()
 {
-  processAssignRetries();
-  cleanupFinishedAssigns();
-  // Pakete der Decoder (ESP-NOW) verarbeiten
+  // Pakete der Decoder (ESP-NOW) verarbeiten, eigene Anfragen wiederholen
   processEspNowRx();
+  decoderLinkLoop();
   // 0. Nachrichten von GUI lesen
   readGUI();
 
@@ -334,7 +205,4 @@ void loop()
 
   // 6. OTA-Ablauf (Decoder nacheinander aktualisieren, Fortschritt melden)
   processOta();
-
-  // 7. Alive-Überwachung + Alive-Senden
-  checkAliveStates();
 }

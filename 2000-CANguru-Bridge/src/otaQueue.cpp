@@ -104,7 +104,7 @@ void processOta()
 
         otaSuccessReceived = false;
         lastSentPercent = 255;
-        sendOtaStartWifiToDecoder(currentOta.decoderId, 0, 0);
+        sendOtaStartWifiToDecoder(currentOta.decoderId);
         // Fortschritt 0 % kündigt der GUI den nächsten Decoder an
         cg2SendOtaProgress(currentOta.decoderId, 0,
                            otaTotalCount > 0 ? (uint8_t)(otaFinishedCount * 100 / otaTotalCount) : 0);

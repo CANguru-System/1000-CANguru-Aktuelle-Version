@@ -208,21 +208,15 @@ void sendCanFrame(uint8_t *data, bool hash)
 }
 
 // ---------------------------------------------------------
-// PowerDecoder: Change Track Current
+// Gleisspannung an/aus (STOPP/GO am CAN-Bus) an GUI und Stromdecoder
+// CG2_F_POWER / CG2_POWER_TRACK [an 0/1]
 // ---------------------------------------------------------
 
 void sendPowerState(uint8_t state)
 {
   uint8_t payload[1] = {state};
-
-  auto pkt = buildPacket(
-      FEATURE_POWER,
-      POWER_CHG_TRACK_CURRENT,
-      payload,
-      sizeof(payload));
-
-  udpSendToGui(pkt.data(), pkt.size());
-  sendTheData(SendMode::TYPE, DEVTYPE_POWER, pkt.data(), pkt.size());
+  cg2SendToGui(CG2_F_POWER, CG2_POWER_TRACK, CG2_ID_BRIDGE, payload, sizeof(payload));
+  sendTrackPowerToDecoders(state);
 }
 
 void processCANFrames2CAN()

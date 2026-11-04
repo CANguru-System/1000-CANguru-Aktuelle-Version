@@ -27,21 +27,22 @@ extern WiFiUDP udpGUI; // GUI -> Bridge
 extern AsyncWebServer otaServer;
 extern const char *FW_PATH;
 
+// ESP-NOW-Broadcast-Adresse (an alle Decoder)
 const uint8_t Bridge_Mac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 extern uint8_t SysSTOPP[];
 
 struct DecoderInfo
 {
-  uint8_t assignedId;
-  uint8_t Decoder_Mac[6];
-  uint8_t decoderType;
-  uint8_t fwMajor;
-  uint8_t fwMinor;
-  uint8_t value0;
-  uint8_t value1;
-  bool isReady;
-  unsigned long lastSeen;
+  uint8_t assignedId = 0;
+  uint8_t Decoder_Mac[6] = {};
+  uint8_t decoderType = 0;
+  uint8_t fwMajor = 0;
+  uint8_t fwMinor = 0;
+  uint8_t protoMinor = 0;
+  bool legacy = false;       // alte Firmware (vor Protokoll Version 2): nur Anmeldung, Alive, CAN, OTA
+  bool isReady = false;
+  unsigned long lastSeen = 0;
 };
 
 extern std::vector<DecoderInfo> decoders;
@@ -51,8 +52,13 @@ extern uint8_t FW_MINOR;
 
 bool GUIipIsNotSet();
 void logMac(const char *prefix, const uint8_t *mac);
-int findDecoderByMac(const uint8_t *mac);
+
+// Decoder-Liste. Die Zuordnung MAC -> ID wird in /decoders.txt gespeichert,
+// damit ein Decoder seine ID (und damit seine CAN-UID) dauerhaft behält.
 void loadDecoderList();
-uint8_t getDecoderIdForMac(const uint8_t mac[6]);
-int addDecoder(const uint8_t *mac, const uint8_t* pkt);
+int findDecoderByMac(const uint8_t *mac);
+int findDecoderIndexById(uint8_t id);
+int registerDecoder(const uint8_t *mac, uint8_t type, bool legacy); // Index; neue Decoder bekommen die nächste freie ID
+bool removeDecoder(uint8_t id);
+bool hasLegacyDecoders();
 

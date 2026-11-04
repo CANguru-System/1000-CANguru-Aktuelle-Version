@@ -12,6 +12,9 @@ void cg2HandleGuiPacket(const uint8_t *buf, int len, IPAddress remote);
 void cg2SendToGui(uint8_t feature, uint8_t command, uint8_t decoder,
                   const uint8_t *payload, size_t len);
 
+// Fehlerantwort auf eine Anfrage der GUI im Namen eines Decoders (CG2_ERR_*)
+void cg2SendErrorToGui(const Cg2Header &request, uint8_t decoderId, uint8_t errorCode);
+
 // Ergebnis des OTA-Updates eines Decoders (CG2_OTA_RESULT)
 enum OtaResult : uint8_t
 {

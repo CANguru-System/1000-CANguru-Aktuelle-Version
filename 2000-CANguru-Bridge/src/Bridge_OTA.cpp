@@ -102,19 +102,5 @@ uint8_t otaStartFromGui(uint8_t mode, uint8_t selector)
   return 0;
 }
 
-// ------------------------------------------------------------
-// OTA_START_WIFI senden
-// ------------------------------------------------------------
-
-bool sendOtaStartWifiToDecoder(uint8_t decoderId, uint8_t fwMajor, uint8_t fwMinor)
-{
-  // die Versionsnummer sind zukünftigen Versionen vorbehalten, aktuell immer 0.0
-
-  uint8_t payload[2];
-  payload[0] = fwMajor;
-  payload[1] = fwMinor;
-  auto pkt = buildPacket(FEATURE_OTA, OTA_START_WIFI, payload, sizeof(payload));
-
-  sendTheData(SendMode::ASSIGNED_ID, decoderId, pkt.data(), pkt.size());
-  return true;
-}
+// Den Start-Befehl an den Decoder sendet sendOtaStartWifiToDecoder() in Bridge_Decoder.cpp
+// (Protokoll Version 2 oder altes Format für Decoder mit alter Firmware).
