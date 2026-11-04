@@ -80,6 +80,12 @@ namespace CANguru.Controllers
         {
             // Eine erneute Anmeldung ersetzt den Eintrag vollständig
             // (Typ, MAC oder Firmware können sich geändert haben, z. B. nach OTA)
+            // Derselbe Decoder (gleiche MAC) unter anderer ID ist ein veralteter Eintrag
+            if (decoder.Mac != null)
+                foreach (var key in Decoders.Where(kv => kv.Key != (uint)decoder.AssignedId && kv.Value.Mac != null &&
+                                                         kv.Value.Mac.SequenceEqual(decoder.Mac))
+                                            .Select(kv => kv.Key).ToList())
+                    Decoders.Remove(key);
             Decoders[(uint)decoder.AssignedId] = decoder;
 
             // Falls Liste verwendet wird, synchronisieren

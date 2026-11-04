@@ -28,6 +28,8 @@ const char *OTA_PASS = "";
 
 static uint8_t bridgeSeq = 0;
 
+static const unsigned long START_REPEAT_MS = 5000; // Abstand der wiederholten START-Meldung
+
 // ============================================================
 // Altes Format (Übergang für Decoder vor Protokoll Version 2)
 // [SendMode][Selector][Feature][Kommando][Nutzdaten]
@@ -278,18 +280,27 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
         if (!r.ok())
             return;
 
+        // Die Bridge wiederholt START regelmäßig, damit sich auch später eingeschaltete
+        // oder neu geflashte Decoder anmelden. Ein bereits angemeldeter, unveränderter
+        // Decoder bekommt seine ID erneut, wird der GUI aber nicht noch einmal gemeldet.
+        int prev = findDecoderByMac(mac);
+        bool unchanged = prev >= 0 && decoders[prev].isReady && !decoders[prev].legacy &&
+                         decoders[prev].decoderType == type && decoders[prev].fwMajor == fwMajor &&
+                         decoders[prev].fwMinor == fwMinor && decoders[prev].protoMinor == protoMinor;
+
         int idx = registerDecoder(mac, type, false);
         DecoderInfo &d = decoders[idx];
         d.fwMajor = fwMajor;
         d.fwMinor = fwMinor;
         d.protoMinor = protoMinor;
-        d.isReady = false;
+        d.isReady = unchanged;
 
         uint8_t p[7];
         memcpy(p, mac, 6);
         p[6] = d.assignedId;
         startRequest(mac, d.assignedId, CG2_F_DECODER, CG2_DECODER_ASSIGN_ID, p, sizeof(p));
-        Serial.printf("HELLO from type %02X, assigning ID %d\r\n", type, d.assignedId);
+        if (!unchanged)
+            Serial.printf("HELLO from type %02X, assigning ID %d\r\n", type, d.assignedId);
         return;
     }
 
@@ -308,7 +319,7 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
             if (memcmp(pr.mac, mac, 6) == 0 && pr.feature == h.feature && pr.command == h.command && pr.seq == h.seq)
             {
                 pendingRequests.erase(pendingRequests.begin() + i);
-                if (h.feature == CG2_F_DECODER && h.command == CG2_DECODER_ASSIGN_ID && !h.isError())
+                if (h.feature == CG2_F_DECODER && h.command == CG2_DECODER_ASSIGN_ID && !h.isError() && !d.isReady)
                     decoderReady(d);
                 return;
             }
@@ -510,6 +521,15 @@ void processEspNowRx()
 void decoderLinkLoop()
 {
     unsigned long now = millis();
+
+    // START regelmäßig wiederholen: so melden sich auch Decoder an, die nach dem
+    // Start der GUI eingeschaltet oder neu geflasht wurden (nur Protokoll Version 2)
+    static unsigned long nextStartMs = 0;
+    if (systemReady && !otaRunning && (long)(now - nextStartMs) >= 0)
+    {
+        nextStartMs = now + START_REPEAT_MS;
+        broadcastV2(CG2_F_SESSION, CG2_SESSION_START, CG2_ADDR_ALL, 0, nullptr, 0);
+    }
 
     // eigene Anfragen wiederholen
     for (size_t i = 0; i < pendingRequests.size();)

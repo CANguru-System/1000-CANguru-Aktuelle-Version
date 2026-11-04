@@ -89,7 +89,9 @@ void coreLinkSendHello()
     uint8_t p[10];
     Cg2Writer w(p, sizeof(p));
     w.u8(DEVTYPE).bytes(Decoder_Mac, 6).u8(VERS_HIGH).u8(VERS_LOW).u8(CG2_PROTO_MINOR);
-    Serial.printf("Sending HELLO (ID=%d)\r\n", aliveGetDecoderID());
+    // START kommt alle 5 s: nur die erste Anmeldung ausgeben
+    if (aliveGetDecoderID() == INVALID_ASSIGNED_ID)
+        Serial.println("Sending HELLO");
     coreLinkSend(CG2_F_DECODER, CG2_DECODER_HELLO, p, w.size());
 }
 
