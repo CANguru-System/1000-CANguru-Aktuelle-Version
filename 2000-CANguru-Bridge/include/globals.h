@@ -41,6 +41,7 @@ struct DecoderInfo
   uint8_t fwMinor = 0;
   uint8_t protoMinor = 0;
   bool isReady = false;
+  bool announced = false; // GUI hat ADDED mit den Daten aus dem letzten HELLO erhalten
   unsigned long lastSeen = 0;
 };
 

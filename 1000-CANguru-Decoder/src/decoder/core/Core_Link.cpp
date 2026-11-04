@@ -167,13 +167,14 @@ static void handleAssignId(const Cg2Header &h, const uint8_t *payload)
 
     bool neu = (id != aliveGetDecoderID());
     aliveSetDecoderID(id);
-    // ungültige ID speichern: nach einem Neustart beginnt die Anmeldung von vorn
-    prefs.putByte(key_id, INVALID_ASSIGNED_ID);
-    prefs.putBool(key_otaPending, false);
     coreLinkReply(h, nullptr, 0, 0);
 
+    // Die ID-Vergabe wiederholt sich alle 5 s (START): nur bei Änderung in den Speicher schreiben
     if (neu)
     {
+        // ungültige ID speichern: nach einem Neustart beginnt die Anmeldung von vorn
+        prefs.putByte(key_id, INVALID_ASSIGNED_ID);
+        prefs.putBool(key_otaPending, false);
         Serial.printf("Assigned ID %d\r\n", id);
         generateHash();
         if (afterstartCallback != nullptr)

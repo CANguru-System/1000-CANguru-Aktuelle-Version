@@ -180,6 +180,7 @@ void sendDecoderAddedToGUI(const DecoderInfo &d)
 static void decoderReady(DecoderInfo &d)
 {
     d.isReady = true;
+    d.announced = true;
     d.lastSeen = millis();
     sendDecoderAddedToGUI(d);
     Serial.printf("Decoder ID %d (type %02X, firmware %d.%d) ready\r\n", d.assignedId, d.decoderType, d.fwMajor, d.fwMinor);
@@ -196,12 +197,14 @@ static void forwardToGui(const uint8_t *buf, size_t len, uint8_t decoderId)
     udpSendToGui(copy, len);
 }
 
-// REJOIN nach einem OTA-Neustart (Version 2 und alte Decoder)
+// REJOIN nach einem OTA-Neustart
 static void handleRejoin(DecoderInfo &d, uint8_t failReason)
 {
     Serial.printf("Decoder with ID %d has REJOINED%s\r\n", d.assignedId, failReason ? " after FAILED OTA" : "");
     otaRunning = false;
     d.isReady = true;
+    // Die Firmware kann sich geändert haben: beim nächsten HELLO der GUI neu melden
+    d.announced = false;
     d.lastSeen = millis();
     otaDecoderFinished(d.assignedId, failReason);
 }
@@ -229,10 +232,11 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
             return;
 
         // Die Bridge wiederholt START regelmäßig, damit sich auch später eingeschaltete
-        // oder neu geflashte Decoder anmelden. Ein bereits angemeldeter, unveränderter
-        // Decoder bekommt seine ID erneut, wird der GUI aber nicht noch einmal gemeldet.
+        // oder neu geflashte Decoder anmelden. Ein bereits angemeldeter, der GUI gemeldeter
+        // und unveränderter Decoder bekommt seine ID erneut, wird der GUI aber nicht noch
+        // einmal gemeldet.
         int prev = findDecoderByMac(mac);
-        bool unchanged = prev >= 0 && decoders[prev].isReady &&
+        bool unchanged = prev >= 0 && decoders[prev].isReady && decoders[prev].announced &&
                          decoders[prev].decoderType == type && decoders[prev].fwMajor == fwMajor &&
                          decoders[prev].fwMinor == fwMinor && decoders[prev].protoMinor == protoMinor;
 
@@ -293,11 +297,9 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
         if (h.command == CG2_ALIVE_ALIVE && h.length >= 1)
         {
             // Bereit = Status ungleich Fehler (z. B. nach einer Überstrom-Abschaltung nicht bereit)
-            bool wasReady = d.isReady;
+            // Der GUI gemeldet wird ein Decoder nur über HELLO (mit Firmware-Stand);
+            // das wiederholte START sorgt dafür, dass jeder Decoder HELLO sendet
             d.isReady = (payload[0] != CG2_STATUS_ERROR);
-            // Decoder, der nach einem Neustart der Bridge einfach weiterläuft, der GUI melden
-            if (!wasReady && d.isReady)
-                sendDecoderAddedToGUI(d);
             forwardToGui(buf, len, d.assignedId);
         }
         return;

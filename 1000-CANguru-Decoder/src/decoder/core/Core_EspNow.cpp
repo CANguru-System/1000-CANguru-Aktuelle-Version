@@ -24,6 +24,7 @@ uint8_t Bridge_Mac[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // wird beim ersten
 uint8_t Decoder_Mac[6];
 bool espNowReady = false;
 bool bridge_is_known = false;
+static volatile bool bridgeMacChanged = false; // neue Bridge-MAC gelernt, in coreEspNowLoop() speichern
 
 uint8_t uid_device[uid_num];
 uint8_t hasharr[2];
@@ -178,9 +179,19 @@ static void onDecDataRecv(const uint8_t *mac, const uint8_t *incomingData, int l
     if (!gDecoder)
         return;
 
-    if (bridge_is_known == false)
+    // Die Bridge sendet alle 5 s START. Schweigt die bekannte Bridge länger, eine andere
+    // aber sendet (z. B. falsche MAC aus dem Speicher nach einem OTA-Merker oder
+    // Decoder an einer anderen Anlage), wird die neue Bridge übernommen.
+    static unsigned long lastFromBridgeMs = 0;
+    unsigned long now = millis();
+    bool fromBridge = bridge_is_known && memcmp(mac, Bridge_Mac, 6) == 0;
+    if (fromBridge)
+        lastFromBridgeMs = now;
+    else if (!bridge_is_known || now - lastFromBridgeMs > 15000)
     {
-        logMac("Received first ESP-NOW packet from unknown MAC: ", mac);
+        logMac(bridge_is_known ? "Bridge changed, new MAC: " : "Received first ESP-NOW packet from MAC: ", mac);
+        if (bridge_is_known)
+            esp_now_del_peer(Bridge_Mac);
         // Bridge als Unicast-Partner eintragen: Antworten gehen nur an sie
         esp_now_peer_info_t peer{};
         memcpy(&Bridge_Mac[0], mac, 6);
@@ -190,8 +201,11 @@ static void onDecDataRecv(const uint8_t *mac, const uint8_t *incomingData, int l
         peer.encrypt = false;
         esp_now_add_peer(&peer);
         bridge_is_known = true;
-        // NVS-Zugriff nicht im WLAN-Task: Speichern der MAC übernimmt coreEspNowLoop()
+        bridgeMacChanged = true; // NVS-Zugriff nicht im WLAN-Task: Speichern in coreEspNowLoop()
+        lastFromBridgeMs = now;
     }
+    else
+        return; // Nachricht einer anderen Bridge, während die eigene noch sendet
 
     // nur in die Warteschlange; Verarbeitung in loop() (Core_Link)
     coreLinkEnqueue(incomingData, len);
@@ -268,13 +282,12 @@ void coreEspNowInit()
     }
 }
 
-// Aus loop(): einmalig die Bridge-MAC speichern (für REJOIN nach einem OTA)
+// Aus loop(): die Bridge-MAC speichern, wenn sie neu gelernt wurde (für REJOIN nach einem OTA)
 void coreEspNowLoop()
 {
-    static bool macSaved = false;
-    if (bridge_is_known && !macSaved)
+    if (bridgeMacChanged)
     {
-        macSaved = true;
+        bridgeMacChanged = false;
         uint8_t stored[6] = {0};
         prefs.getBytes(key_bridgeMac, stored, 6);
         if (memcmp(stored, Bridge_Mac, 6) != 0)
