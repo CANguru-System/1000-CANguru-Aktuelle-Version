@@ -94,7 +94,7 @@ Richtung: G = GUI, B = Bridge, D = Decoder. „→ Antwort“ beschreibt die Nut
 |---|---|---|
 | `DISCOVER` 0x01 | G → B (Broadcast) | `[protoMinor]` |
 | `DISCOVER_REPLY` 0x02 | B → G | `[fwMajor][fwMinor][protoMinor][gleisbox 0/1]` |
-| `START` 0x03 | G → B, B → D (ALL) | – . Die Bridge fordert alle Decoder zur Anmeldung auf. |
+| `START` 0x03 | G → B, B → D (ALL) | – . Die Bridge fordert alle Decoder zur Anmeldung auf: beim Start der Sitzung und danach alle 5 s (außer während OTA), damit sich auch später eingeschaltete Decoder anmelden. Jeder Decoder antwortet mit HELLO; ein angemeldeter, unveränderter Decoder erhält seine ID erneut, die GUI bekommt kein weiteres `ADDED`. |
 | `END` 0x04 | G → B | – . Die GUI wird beendet: Gleisbox STOPP, Decoder-Reset, Neustart der Bridge. |
 
 ### 5.2 Decoder `CG2_F_DECODER` (0x02)
