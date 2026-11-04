@@ -7,8 +7,6 @@ namespace CANguru.GUI.Panels
 {
     public partial class SignalDecoderSettingsPanel : DecoderSettingsPanelBase
     {
-        private SignalConfigService cfg;
-
         private bool IsInDesigner =>
             LicenseManager.UsageMode == LicenseUsageMode.Designtime ||
             Process.GetCurrentProcess().ProcessName.Contains("devenv");
@@ -81,75 +79,8 @@ namespace CANguru.GUI.Panels
                 BuildRuntimeUI();   // nur Werte, keine Positionen
         }
 
-        // Runtime-Konstruktor
-        public SignalDecoderSettingsPanel(byte assignedId) : this()
-        {
-            if (IsInDesigner)
-                return;
-
-            if (!IsInDesigner)
-            {
-                numDelay.Minimum = ProtocolConstants.step_delay_min;
-                numDelay.Maximum = ProtocolConstants.step_delay_max;
-                numDelay.Increment = ProtocolConstants.step_delay_step;
-
-                numStepsToEnd.Minimum = ProtocolConstants.stepsToEnd_min;
-                numStepsToEnd.Maximum = ProtocolConstants.stepsToEnd_max;
-                numStepsToEnd.Increment = ProtocolConstants.stepsToEnd_step;
-            }
-
-            cfg = new SignalConfigService(assignedId);
-            WireEvents();
-        }
-
-        private void WireEvents()
-        {
-            if (IsInDesigner)
-                return;
-
-            btnSlowMove2Nullpkt.Click += (s, e) => cfg.SendSlowMove(cmbStepDirection.SelectedIndex == 0);
-            btnSetZero.Click += (s, e) => cfg.SetZeroPoint();
-            btnSlowMove2End.Click += (s, e) => cfg.SetEndPoint();
-            btnTest.Click += (s, e) => cfg.StartTestRun();
-        }
-        public override void LoadFromDecoder()
-        {
-            if (IsInDesigner)
-                return;
-            // Werte werden vom Decoder geladen, mit bis zu 3 Versuchen, um die Zuverlässigkeit zu erhöhen
-            var s = cfg.GetSettingsWithRetry();
-
-            if (s == null)
-            {
-                MessageBox.Show("Decoder antwortet nicht.");
-                return;
-            }
-            // Werte werden in die Formularelemente übertragen
-            numAddress.Value = s.Address;
-            numDelay.Value = s.Delay;
-            numStepsToEnd.Value = s.StepsToEnd;
-
-            cmbRightLeft.SelectedIndex = s.RightOrLeft;
-            cmbStepDirection.SelectedIndex = s.StepDirection;
-        }
-
-        public override void SaveToDecoder()
-        {
-            if (IsInDesigner)
-                return;
-            // Werte aus den Formularelementen werden in ein SwitchSettings-Objekt übertragen 
-            var s = new SignalSettings
-            {
-                //    AssignedId = cfg.AssignedId,
-                Address = (byte)numAddress.Value,
-                Delay = (byte)numDelay.Value,
-                StepsToEnd = (ushort)numStepsToEnd.Value,
-                RightOrLeft = (byte)cmbRightLeft.SelectedIndex,
-                StepDirection = (byte)cmbStepDirection.SelectedIndex
-            };
-            // und an den Decoder gesendet
-            cfg.SetSettings(s);
-        }
+        // Laden, Speichern und die Knöpfe übernimmt SignalDecoderSettingsForm
+        // (Protokoll Version 2, Feature Stepper).
     }
 }
 

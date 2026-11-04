@@ -85,13 +85,8 @@ namespace CANguru.GUI.Forms
             fullPayload.Add(decoder.AssignedId);   // payload[0]
             fullPayload.AddRange(payload); // payload[1..n]
 
-            var packet = PacketBuilder.Build(
-                ProtocolConstants.FEATURE_SIGNAL,
-                command,
-                fullPayload.ToArray()
-            );
-
-            UdpClientSingleton.Instance.Send(packet);
+            // Feature Stepper (Weiche und Formsignal), Quittung durch den Decoder
+            DecoderProtocol.Command(decoder.AssignedId, (byte)ProtocolConstants.CG2_F_STEPPER, command, fullPayload.ToArray());
         }
 
         private void SignalDecoderSettingsForm_Load(object sender, EventArgs e)
@@ -125,9 +120,10 @@ namespace CANguru.GUI.Forms
 
         public void GetSettings()
         {
-            byte[] payload = DecoderProtocol.ReadPayload(
-                ProtocolConstants.FEATURE_SIGNAL,
-                ProtocolConstants.SIGNAL_CMD_GET_SETTINGS,
+            byte[]? payload = DecoderProtocol.ReadPayload(
+                decoder.AssignedId,
+                (byte)ProtocolConstants.CG2_F_STEPPER,
+                (byte)ProtocolConstants.SWITCH_CMD_GET_SETTINGS,
                 expectedLength: ProtocolConstants.EXP_LNG_SIGNAL_SETTINGS,
                 requestPayload: new byte[] { decoder.AssignedId }   // <-- MUSS REIN
             );
@@ -151,12 +147,8 @@ namespace CANguru.GUI.Forms
                 (byte)signalDecoderSettingsPanel1.cmbStepDirection.SelectedIndex
             };
 
-                var packet = PacketBuilder.Build(
-                    ProtocolConstants.FEATURE_SIGNAL,
-                    ProtocolConstants.SIGNAL_CMD_SET_SETTINGS,
-                    payload
-                );
-                UdpClientSingleton.Instance.Send(packet);
+                DecoderProtocol.Command(decoder.AssignedId, (byte)ProtocolConstants.CG2_F_STEPPER,
+                                        (byte)ProtocolConstants.SWITCH_CMD_SET_SETTINGS, payload);
             }));
 
         }
@@ -171,14 +163,12 @@ namespace CANguru.GUI.Forms
             SetSettings();
         }
 
-        public void HandleSetCurrPos(int featureId, int commandId, byte[] payload)
+        // Stellung geändert (SWITCH_CMD_SET_DIR): [id][stellung]
+        public void HandleSetCurrPos(byte decoderId, byte commandId, byte[] payload)
         {
             try
             {
-                if (featureId != ProtocolConstants.FEATURE_SIGNAL ||
-                    commandId != ProtocolConstants.SIGNAL_CMD_SET_DIR)
-                    return;
-                if (payload[0] != decoder.AssignedId)
+                if (decoderId != decoder.AssignedId || commandId != ProtocolConstants.SWITCH_CMD_SET_DIR)
                     return;
                 if (payload == null || payload.Length < 2)
                     return;
@@ -196,13 +186,13 @@ namespace CANguru.GUI.Forms
 
 
         // SIGNAL_CMD_SET_END_ACK
-        public void HandleSetEndAck(int featureId, int commandId, byte[] payload)
+        // Laufweg nach der Kalibrierung: [schritte hi][lo]
+        public void HandleSetEndAck(byte decoderId, byte commandId, byte[] payload)
         {
+            if (decoderId != decoder.AssignedId || commandId != ProtocolConstants.SWITCH_CMD_SET_END_ACK)
+                return;
             try
             {
-                if (featureId != ProtocolConstants.FEATURE_SIGNAL ||
-                    commandId != ProtocolConstants.SIGNAL_CMD_SET_END_ACK)
-                    return;
 
                 if (payload == null || payload.Length < 2)
                     return;
@@ -238,7 +228,7 @@ namespace CANguru.GUI.Forms
         {
             // 0 = forward, 1 = reverse
             enum_direction direction = enum_direction.to_nullpkt;
-            SendSignalCommand(ProtocolConstants.SIGNAL_CMD_MOVE2START, (byte)direction);
+            SendSignalCommand(ProtocolConstants.SWITCH_CMD_MOVE2START, (byte)direction);
         }
 
         // SIGNAL_CMD_SET_ZERO
@@ -248,7 +238,7 @@ namespace CANguru.GUI.Forms
         // keine Meldung an die GUI
         private void BtnSetNullpkt_Click(object sender, EventArgs e)
         {
-            SendSignalCommand(ProtocolConstants.SIGNAL_CMD_SET_ZERO, Array.Empty<byte>());
+            SendSignalCommand(ProtocolConstants.SWITCH_CMD_SET_ZERO, Array.Empty<byte>());
             /*            signalDecoderSettingsPanel1.cmbRightLeft.SelectedIndex = 0; // steht jetzt auf Nullpunkt
                         SaveToDecoder();*/
         }
@@ -263,14 +253,14 @@ namespace CANguru.GUI.Forms
             // 0 = forward, 1 = reverse
             enum_direction direction = enum_direction.to_endpkt;
 
-            SendSignalCommand(ProtocolConstants.SIGNAL_CMD_MOVE2END, (byte)direction);
+            SendSignalCommand(ProtocolConstants.SWITCH_CMD_MOVE2END, (byte)direction);
         }
 
         // SIGNAL_CMD_SET_END
         // public Button btnSetEnd;
         private void BtnSetEndpkt_Click(object sender, EventArgs e)
         {
-            SendSignalCommand(ProtocolConstants.SIGNAL_CMD_SET_END, Array.Empty<byte>());
+            SendSignalCommand(ProtocolConstants.SWITCH_CMD_SET_END, Array.Empty<byte>());
         }
 
         // SIGNAL_CMD_TEST_RUN
@@ -284,7 +274,7 @@ namespace CANguru.GUI.Forms
             else
                 direction = enum_direction.to_nullpkt;
 
-            SendSignalCommand(ProtocolConstants.SIGNAL_CMD_TEST_RUN, (byte)direction);
+            SendSignalCommand(ProtocolConstants.SWITCH_CMD_TEST_RUN, (byte)direction);
             /*            if (signalDecoderSettingsPanel1.cmbRightLeft.SelectedIndex == 0) // 0 == steht auf Nullpunkt
                             signalDecoderSettingsPanel1.cmbRightLeft.SelectedIndex = 1;
                         else
@@ -300,20 +290,23 @@ namespace CANguru.GUI.Forms
 
         private void btnCancel_Click(object sender, EventArgs e)
         {
-            SendSignalCommand(ProtocolConstants.SIGNAL_CMD_STOP_ALL, Array.Empty<byte>());
+            SendSignalCommand(ProtocolConstants.SWITCH_CMD_STOP_ALL, Array.Empty<byte>());
             this.DialogResult = DialogResult.OK;
             this.Close();
         }
 
         private void btnResetToDefaults_Click(object sender, EventArgs e)
         {
-            var request = PacketBuilder.Build(
-                ProtocolConstants.FEATURE_SETTING,
-                ProtocolConstants.SETTING_CMD_RESET_TO_DEFAULTS,
-                new byte[] { decoder.AssignedId }
-            );
-
-            UdpClientSingleton.Instance.Send(request);
+            byte id = decoder.AssignedId;
+            Task.Run(() =>
+            {
+                if (DecoderProtocol.FactoryReset(id))
+                    OnResetAck(id, (byte)ProtocolConstants.DEVTYPE_SIGNAL);
+                else
+                    BeginInvoke(new Action(() => MessageBox.Show(this,
+                        "Der Decoder hat die Werkseinstellungen nicht bestätigt.",
+                        "Werkseinstellungen", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+            });
         }
     }
 }

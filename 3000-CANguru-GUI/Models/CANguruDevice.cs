@@ -67,6 +67,11 @@ namespace CANguru.Models
         // Firmware- oder Protokollversion (optional)
         public int ProtocolVersion { get; set; } = 1;
 
+        // Firmware des Decoders (aus der Anmeldung) und Kennzeichen für alte Firmware
+        // (vor Protokoll Version 2): solche Decoder lassen sich nur per OTA aktualisieren
+        public string Firmware { get; set; } = string.Empty;
+        public bool IsLegacy { get; set; }
+
 
         // READY-Status nach erfolgreichem Handshake
         public DecoderStatus IsReady { get; set; } = DecoderStatus.Lost;
@@ -97,11 +102,8 @@ namespace CANguru.Models
 
         public override void UpdateFromDecoder()
         {
-            MaxCurrent = DecoderProtocol.ReadUInt16(
-                ProtocolConstants.FEATURE_POWER,
-                ProtocolConstants.POWER_CMD_GET_THRESHOLD,
-                0
-            );
+            if (IsLegacy) return; // alte Firmware versteht Protokoll Version 2 nicht
+            MaxCurrent = DecoderProtocol.ReadThreshold(AssignedId, 0);
         }
 
         public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
@@ -120,9 +122,11 @@ namespace CANguru.Models
         public int StepsToEnd { get; set; }
         public override void UpdateFromDecoder()
         {
+            if (IsLegacy) return; // alte Firmware versteht Protokoll Version 2 nicht
             var payload = DecoderProtocol.ReadPayload(
-                ProtocolConstants.FEATURE_SWITCH,
-                ProtocolConstants.SWITCH_CMD_GET_SETTINGS,
+                AssignedId,
+                (byte)ProtocolConstants.CG2_F_STEPPER,
+                (byte)ProtocolConstants.SWITCH_CMD_GET_SETTINGS,
                 expectedLength: ProtocolConstants.EXP_LNG_SWITCH_SETTINGS,
                 requestPayload: new byte[] { (byte)AssignedId }
             );
@@ -152,9 +156,11 @@ namespace CANguru.Models
         public int StepsToEnd { get; set; }
         public override void UpdateFromDecoder()
         {
+            if (IsLegacy) return; // alte Firmware versteht Protokoll Version 2 nicht
             var payload = DecoderProtocol.ReadPayload(
-                ProtocolConstants.FEATURE_SIGNAL,
-                ProtocolConstants.SIGNAL_CMD_GET_SETTINGS,
+                AssignedId,
+                (byte)ProtocolConstants.CG2_F_STEPPER,
+                (byte)ProtocolConstants.SWITCH_CMD_GET_SETTINGS,
                 expectedLength: ProtocolConstants.EXP_LNG_SIGNAL_SETTINGS  ,
                 requestPayload: new byte[] { (byte)AssignedId }
             );
@@ -180,9 +186,11 @@ namespace CANguru.Models
         public byte[] Channels = new byte[16];
         public override void UpdateFromDecoder()
         {
+            if (IsLegacy) return; // alte Firmware versteht Protokoll Version 2 nicht
             var payload = DecoderProtocol.ReadPayload(
-                ProtocolConstants.FEATURE_FEEDBACK,
-                ProtocolConstants.FEEDBACK_CMD_GET_SETTINGS,
+                AssignedId,
+                (byte)ProtocolConstants.CG2_F_FEEDBACK,
+                (byte)ProtocolConstants.FEEDBACK_CMD_GET_SETTINGS,
                 expectedLength: ProtocolConstants.EXP_LNG_FEEDBACK_SETTINGS,
                 requestPayload: new byte[] { (byte)AssignedId }
             );

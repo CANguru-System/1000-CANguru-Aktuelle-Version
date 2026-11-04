@@ -1,4 +1,5 @@
 ﻿using CANguru.GUI.Forms;
+using CANguru.Networking;
 using System;
 using System.Diagnostics;
 using System.Windows.Forms;
@@ -53,42 +54,40 @@ namespace CANguru.GUI.Forms
             }
         }
 
-        private void RequestFeedbackSettings()
+        // Anfrage an den Rückmelder (Feature Rückmelder, Nutzdaten[0] = Decoder-ID)
+        private async Task<Cg2Reply?> RequestAsync(byte command, params byte[] payload)
         {
-            // GUI → Bridge → Decoder
-            SendFeedbackCommand(ProtocolConstants.FEEDBACK_CMD_GET_SETTINGS);
-        }
-
-        private void SendFeedbackCommand(byte command, params byte[] payload)
-        {
-            var fullPayload = new List<byte>();
-            fullPayload.Add(assignedId);
+            var fullPayload = new List<byte> { assignedId };
             fullPayload.AddRange(payload);
-
-            var packet = PacketBuilder.Build(
-                ProtocolConstants.FEATURE_FEEDBACK,
-                command,
-                fullPayload.ToArray()
-            );
-
-            UdpClientSingleton.Instance.Send(packet);
+            return await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_FEEDBACK, command,
+                                                          assignedId, fullPayload.ToArray());
         }
-        private void btnSave_Click(object sender, EventArgs e)
+
+        private async void RequestFeedbackSettings()
         {
-            // Panel → Payload bauen
+            var r = await RequestAsync((byte)ProtocolConstants.FEEDBACK_CMD_GET_SETTINGS);
+            if (r == null || r.IsError)
+            {
+                MessageBox.Show(this, "Der Rückmelder antwortet nicht.", "Rückmelder",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            HandleGetSettingsAck(r.Header.Feature, r.Header.Command, r.Payload);
+        }
+
+        private async void btnSave_Click(object sender, EventArgs e)
+        {
+            // Panel → Payload bauen, GUI → Bridge → Decoder
             byte[] payload = feedbackPanel.BuildPayload();
-
-            // GUI → Bridge → Decoder
-            SendFeedbackCommand(
-                ProtocolConstants.FEEDBACK_CMD_SET_SETTINGS,
-                payload
-            );
-
-            // Falls du SET_SETTINGS_ACK nutzt:
-            // → Erfolgsmeldung kommt später in HandleSetSettingsAck()
-
-            // Falls du KEIN ACK nutzt:
-            // MessageBox.Show("Werte gespeichert.");
+            var r = await RequestAsync((byte)ProtocolConstants.FEEDBACK_CMD_SET_SETTINGS, payload);
+            if (r == null || r.IsError)
+            {
+                MessageBox.Show(this, "Die Werte wurden nicht gespeichert: " +
+                                (r == null ? "der Rückmelder antwortet nicht." : BridgeLink.ErrorText(r.ErrorCode)),
+                                "Rückmelder", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            HandleSetSettingsAck(r.Header.Feature, r.Header.Command, r.Payload);
         }
         private void btnCancel_Click(object sender, EventArgs e)
         {

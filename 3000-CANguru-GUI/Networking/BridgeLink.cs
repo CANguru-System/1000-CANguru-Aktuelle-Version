@@ -76,7 +76,9 @@ namespace CANguru.Networking
                     ct.ThrowIfCancellationRequested();
                     UdpClientSingleton.Instance.Send(frame);
 
-                    var done = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs, ct));
+                    // ConfigureAwait(false): nicht an den UI-Thread binden, damit Request() aus
+                    // dem UI-Thread blockierend warten kann, ohne sich selbst zu blockieren
+                    var done = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs, ct)).ConfigureAwait(false);
                     if (done == tcs.Task)
                         return tcs.Task.Result;
                 }
@@ -87,6 +89,11 @@ namespace CANguru.Networking
                 _pending.TryRemove(key, out _);
             }
         }
+
+        // Blockierende Variante für Stellen, die das Ergebnis sofort brauchen (z. B. beim
+        // Öffnen eines Einstellungsfensters). Wartet höchstens (CG2_RETRY_COUNT + 1) * timeoutMs.
+        public Cg2Reply? Request(byte feature, byte command, byte decoder, byte[]? payload, int timeoutMs = 500) =>
+            RequestAsync(feature, command, decoder, payload, timeoutMs).GetAwaiter().GetResult();
 
         // Aus dem Empfang aufrufen. true = die Nachricht war eine erwartete Antwort.
         public bool HandleResponse(Cg2Header h, byte[] payload)

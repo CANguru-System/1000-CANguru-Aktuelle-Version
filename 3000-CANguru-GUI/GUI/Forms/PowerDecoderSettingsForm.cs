@@ -1,6 +1,9 @@
 ﻿using CANguru.GUI.Forms;
 using CANguru.GUI.Panels;
 using CANguru.Models;
+using CANguru.Networking;
+using CANguru.Protocol;
+using CANguru.Views;
 using System;
 using System.Diagnostics;
 using System.Text;
@@ -32,34 +35,28 @@ namespace CANguru.GUI.Forms
 
         public ushort GetThreshold(ushort defaultValue)
         {
-            return DecoderProtocol.ReadUInt16(
-                ProtocolConstants.FEATURE_POWER,
-                ProtocolConstants.POWER_CMD_GET_THRESHOLD,
-                defaultValue
-            );
+            return DecoderProtocol.ReadThreshold(decoder.AssignedId, defaultValue);
         }
 
-        public void SetThreshold(ushort thr)
+        // Grenzwert setzen (Little Endian); der Decoder antwortet mit dem tatsächlich
+        // gesetzten Wert (begrenzt auf den Messbereich)
+        public async void SetThreshold(ushort thr)
         {
-            var payload = new byte[]
+            var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_POWER,
+                (byte)ProtocolConstants.CG2_POWER_SET_THRESHOLD, decoder.AssignedId,
+                new Cg2Writer().U16(thr).ToArray());
+            if (r == null || r.IsError || r.Payload.Length < 2)
             {
-            (byte)(thr >> 8),
-            (byte)(thr & 0xFF)
-            };
-
-            var packet = PacketBuilder.Build(
-                ProtocolConstants.FEATURE_POWER,
-                ProtocolConstants.POWER_CMD_SET_THRESHOLD,
-                payload
-            );
-
-            UdpClientSingleton.Instance.Send(packet);
+                Form1.Instance?.Log($"Stromdecoder {decoder.AssignedId}: Grenzwert nicht gespeichert.");
+                return;
+            }
+            LoadSettingsIntoUI(r.Payload);
         }
         private void LoadSettingsIntoUI(params byte[] payload)
         {
             if (payload == null || payload.Length < ProtocolConstants.EXP_LNG_POWER_SETTINGS)
                 return;
-            ushort thr = (ushort)((payload[0] << 8) | payload[1]);
+            ushort thr = new Cg2Reader(payload).U16();
 
             this.Invoke(() =>
             {
@@ -123,13 +120,16 @@ namespace CANguru.GUI.Forms
 
         private void btnResetToDefaults_Click(object sender, EventArgs e)
         {
-            var request = PacketBuilder.Build(
-                ProtocolConstants.FEATURE_SETTING,
-                ProtocolConstants.SETTING_CMD_RESET_TO_DEFAULTS,
-                new byte[] { decoder.AssignedId }
-            );
-
-            UdpClientSingleton.Instance.Send(request);
+            byte id = decoder.AssignedId;
+            Task.Run(() =>
+            {
+                if (DecoderProtocol.FactoryReset(id))
+                    OnResetAck(id, (byte)ProtocolConstants.DEVTYPE_POWER);
+                else
+                    BeginInvoke(new Action(() => MessageBox.Show(this,
+                        "Der Decoder hat die Werkseinstellungen nicht bestätigt.",
+                        "Werkseinstellungen", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+            });
         }
     }
 }

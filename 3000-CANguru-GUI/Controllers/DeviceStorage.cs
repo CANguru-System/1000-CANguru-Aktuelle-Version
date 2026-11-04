@@ -65,6 +65,7 @@ namespace CANguru.Controllers
 
         public void Remove(int AssignedId)
         {
+            Decoders.Remove((uint)AssignedId);
             var d = _decoders_storage.FirstOrDefault(x => x.AssignedId == AssignedId);
             if (d != null)
                 _decoders_storage.Remove(d);
@@ -77,21 +78,9 @@ namespace CANguru.Controllers
 
         public void AddOrUpdate(CANguruDecoder decoder)
         {
-            uint key = (uint)decoder.AssignedId;
-
-            if (Decoders.TryGetValue(key, out var existing))
-            {
-                // Update bestehender Eintrag
-                existing.Type = decoder.Type;
-                existing.value0 = decoder.value0;
-                existing.value1 = decoder.value1;
-                // (kopiere ggf. weitere Felder)
-            }
-            else
-            {
-                // neu anlegen
-                Decoders[key] = decoder;
-            }
+            // Eine erneute Anmeldung ersetzt den Eintrag vollständig
+            // (Typ, MAC oder Firmware können sich geändert haben, z. B. nach OTA)
+            Decoders[(uint)decoder.AssignedId] = decoder;
 
             // Falls Liste verwendet wird, synchronisieren
             _decoders_storage.Clear();

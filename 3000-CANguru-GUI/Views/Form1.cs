@@ -325,6 +325,18 @@ namespace CANguru.Views
             canTimer.Enabled = true;
             // Optional: OwnerDraw für Decoder aktivieren
             // listBoxDecoder.DrawItem += ListBoxDecoder_DrawItem;
+
+            // Rechtsklick auf einen Decoder: entfernen
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("Decoder entfernen", null, DecoderEntfernen_Click);
+            menu.Opening += (s, e) => e.Cancel = listBoxDecoder.SelectedItem is not CANguruDecoder;
+            listBoxDecoder.ContextMenuStrip = menu;
+            listBoxDecoder.MouseDown += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Right) return;
+                int i = listBoxDecoder.IndexFromPoint(e.Location);
+                if (i >= 0) listBoxDecoder.SelectedIndex = i;
+            };
         }
 
         #endregion
@@ -549,6 +561,109 @@ namespace CANguru.Views
                     else if (h.Command == ProtocolConstants.CG2_OTA_RESULT)
                         HandleOtaResultFromBridge(payload);
                     return;
+
+                case ProtocolConstants.CG2_F_DECODER:
+                    // ADDED: [id][typ][mac 6][fwMajor][fwMinor][protoMinor][alteFirmware]
+                    if (h.Command == ProtocolConstants.CG2_DECODER_ADDED && payload.Length >= 12)
+                        HandleDecoderAdded(payload[0], (DecoderType)payload[1], payload[2..8],
+                                           payload[8], payload[9], payload[11] != 0);
+                    return;
+
+                case ProtocolConstants.CG2_F_ALIVE:
+                    if (h.Command == ProtocolConstants.CG2_ALIVE_ALIVE)
+                        HandleDecoderAlive(h.Decoder, payload);
+                    else if (h.Command == ProtocolConstants.CG2_ALIVE_SUMMARY)
+                        HandleAliveSummary(payload);
+                    return;
+
+                case ProtocolConstants.CG2_F_POWER:
+                    HandlePowerMessage(h, payload);
+                    return;
+
+                case ProtocolConstants.CG2_F_STEPPER:
+                    // Meldungen von Weiche/Formsignal an das gerade offene Einstellungsfenster
+                    activeSwitchForm?.HandleSetEndAck(h.Decoder, h.Command, payload);
+                    activeSwitchForm?.HandleSetCurrPos(h.Decoder, h.Command, payload);
+                    activeSignalForm?.HandleSetEndAck(h.Decoder, h.Command, payload);
+                    activeSignalForm?.HandleSetCurrPos(h.Decoder, h.Command, payload);
+                    return;
+            }
+        }
+
+        // ALIVE eines Decoders: [status][anzahl][wert u16] x anzahl
+        private void HandleDecoderAlive(byte decoderId, byte[] payload)
+        {
+            var r = new Cg2Reader(payload);
+            byte status = r.U8();
+            int count = r.U8();
+            var values = new int[count];
+            for (int i = 0; i < count; i++)
+                values[i] = r.U16();
+            if (!r.Ok)
+                return;
+
+            if (!decoderStorage.Decoders.TryGetValue(decoderId, out var dec))
+                return;
+            dec.LastSeen = DateTime.Now; // den Status berechnet aliveTimer aus LastSeen
+
+            // Stromdecoder: Messwerte = Strom je Kanal in mA, 0xFFFF = nicht angeschlossen
+            if (dec.Type == DecoderType.Power && count >= 2)
+            {
+                PowerCtrl.UpdateCurrent(0, values[0] == 0xFFFF ? -1 : values[0]);
+                PowerCtrl.UpdateCurrent(1, values[1] == 0xFFFF ? -1 : values[1]);
+            }
+        }
+
+        // SUMMARY: [anzahl][typ][zahl] x anzahl - bereite Decoder je Typ
+        private void HandleAliveSummary(byte[] payload)
+        {
+            if (payload.Length < 1)
+                return;
+            int power = 0, sw = 0, signal = 0, feedback = 0;
+            int n = payload[0];
+            for (int i = 0; i < n && 2 + 2 * i < payload.Length; i++)
+            {
+                byte typ = payload[1 + 2 * i];
+                int zahl = payload[2 + 2 * i];
+                if (typ == ProtocolConstants.DEVTYPE_POWER) power = zahl;
+                else if (typ == ProtocolConstants.DEVTYPE_SWITCH) sw = zahl;
+                else if (typ == ProtocolConstants.DEVTYPE_SIGNAL) signal = zahl;
+                else if (typ == ProtocolConstants.DEVTYPE_RM) feedback = zahl;
+            }
+            aliveManager.ProcessAliveSummary(power, sw, signal, feedback);
+        }
+
+        // Feature Strom: Gleisspannung (TRACK [an]) und Überstrom (SHUTDOWN [kanal][mA u16])
+        private void HandlePowerMessage(Cg2Header h, byte[] payload)
+        {
+            var r = new Cg2Reader(payload);
+            if (h.Command == ProtocolConstants.CG2_POWER_TRACK)
+            {
+                byte on = r.U8();
+                if (!r.Ok)
+                    return;
+                if (on == 0)
+                {
+                    Log("STOPP – Gleisspannung ausgeschaltet.");
+                    UiInvoke(() => btnStopGo.SetMode(false));
+                }
+                else
+                {
+                    Log("GO – Gleisspannung liegt an.");
+                    UiInvoke(() => btnStopGo.SetMode(true));
+                }
+            }
+            else if (h.Command == ProtocolConstants.CG2_POWER_SHUTDOWN)
+            {
+                int channel = r.U8();
+                ushort mA = r.U16();
+                if (!r.Ok)
+                    return;
+                PowerCtrl.UpdateCurrent(channel, mA);
+                PowerCtrl.TriggerShutdown(channel);
+                Log($"ÜBERSTROM auf Kanal {channel}: {mA} mA – Gleisspannung abgeschaltet.");
+                // Knopf auf GO stellen, damit ein Klick wieder einschaltet
+                UiInvoke(() => btnStopGo.SetMode(false));
             }
         }
 
@@ -645,203 +760,9 @@ namespace CANguru.Views
                 return;
             }
 
-            // Altes Format: Decoder-Nachrichten bis Schritt 2.3
-            if (PacketParser.TryParse(data, out var featureId, out var commandId, out var payload))
-            {
-                switch (featureId)
-                {
-                    case ProtocolConstants.FEATURE_DECODER:
-                        {
-                            switch (commandId)
-                            {
-                                case ProtocolConstants.FRAME_DECODER_ADDED:
-                                    {
-                                        if (payload.Length < 10)
-                                            break;
-                                        byte id = payload[0];
-                                        DecoderType type = (DecoderType)payload[1];
-                                        byte[] mac = payload.Skip(2).Take(6).ToArray();
-                                        int value0 = payload[8];
-                                        int value1 = payload[9];
-
-                                        HandleDecoderAdded(id, type, mac, value0, value1);
-                                    }
-                                    break;
-                            }
-                            return;
-                        }
-                    case ProtocolConstants.FEATURE_ALIVE:
-                        {
-                            switch (commandId)
-                            {
-                                // aliveManager.ProcessAliveMessage(receivedLine);
-
-                                case ProtocolConstants.HANDLE_ALIVE:
-                                    {
-                                        // Neue Alive-Summary
-                                        if (payload.Length >= 4)
-                                        {
-                                            int power = payload[0];
-                                            int sw = payload[1];
-                                            int signal = payload[2];
-                                            int feedback = payload[3];
-
-                                            aliveManager.ProcessAliveSummary(power, sw, signal, feedback);
-                                        }
-                                    }
-                                    break;
-                                case ProtocolConstants.FRAME_DECODER_ALIVE:
-                                    {
-                                        if (payload.Length < 9)
-                                            break;
-                                        int decoderId = payload[0];
-                                        CANguru.Models.DecoderType decoderType = (CANguru.Models.DecoderType)payload[1];
-                                        DecoderStatus status = (DecoderStatus)payload[2];
-                                        int fwMajor = payload[3];
-                                        int fwMinor = payload[4];
-                                        int current01 = payload[5];
-                                        int current02 = payload[6];
-                                        int current11 = payload[7];
-                                        int current12 = payload[8];
-                                        bool exists = decoderStorage.Decoders.Values.Any(d => d.AssignedId == decoderId);
-                                        if (!exists)
-                                            break;
-                                        OnDecoderAlive(decoderId);
-                                        var dec = listBoxDecoder.Items.OfType<CANguruDecoder>().FirstOrDefault(d => d.AssignedId == decoderId);
-
-                                        if (dec == null) break;
-                                        dec.IsReady = status;
-                                        if (decoderType == DecoderType.Power)
-                                        {
-                                            // 0xFFFF = Kanal nicht angeschlossen → -1
-                                            int mA0 = (current01 << 8) | current02;
-                                            PowerCtrl.UpdateCurrent(0, mA0 == 0xFFFF ? -1 : mA0);
-                                            int mA1 = (current11 << 8) | current12;
-                                            PowerCtrl.UpdateCurrent(1, mA1 == 0xFFFF ? -1 : mA1);
-                                        }
-                                        dec.LastSeen = DateTime.Now;
-                                        //                            UpdateDecoderRow(id);
-                                    }
-                                    break;
-                            }
-                            return;
-                        }
-                    case ProtocolConstants.FEATURE_SETTING:
-                        {
-                            switch (commandId)
-                            {
-                                case ProtocolConstants.SETTING_CMD_RESET_ACK:
-                                    byte assignedId = payload[0];
-                                    byte decoderType = payload[1];
-
-                                    CurrentSettingsFormManager.OnResetAck(assignedId, decoderType);
-                                    break;
-                            }
-                            return;
-                        }
-                    case ProtocolConstants.FEATURE_SWITCH:
-                        {
-                            switch (commandId)
-                            {
-                                case ProtocolConstants.SWITCH_CMD_GET_SETTINGS:
-                                    DecoderProtocol.RaiseResponse(featureId, commandId, payload);
-                                    break;
-                                case ProtocolConstants.SWITCH_CMD_SET_END_ACK:
-                                    activeSwitchForm?.HandleSetEndAck(featureId, commandId, payload);
-                                    break;
-                                case ProtocolConstants.SWITCH_CMD_SET_DIR:
-                                    activeSwitchForm?.HandleSetCurrPos(featureId, commandId, payload);
-                                    break;
-                            }
-                        }
-                        return;
-                    case ProtocolConstants.FEATURE_SIGNAL:
-                        {
-                            switch (commandId)
-                            {
-                                case ProtocolConstants.SIGNAL_CMD_GET_SETTINGS:
-                                    DecoderProtocol.RaiseResponse(featureId, commandId, payload);
-                                    break;
-                                case ProtocolConstants.SIGNAL_CMD_SET_END_ACK:
-                                    activeSignalForm?.HandleSetEndAck(featureId, commandId, payload);
-                                    break;
-                                case ProtocolConstants.SIGNAL_CMD_SET_DIR:
-                                    activeSignalForm?.HandleSetCurrPos(featureId, commandId, payload);
-                                    break;
-                            }
-                        }
-                        return;
-                    case ProtocolConstants.FEATURE_POWER:
-                        {
-                            switch (commandId)
-                            {
-                                // ⭐ NEU: PowerDecoder – Live-Stromwerte
-
-                                // ⭐ NEU: PowerDecoder – Threshold bestätigt
-                                case ProtocolConstants.POWER_CMD_SET_THRESHOLD:
-                                    {
-                                        ushort thr = (ushort)((payload[0] << 8) | payload[1]);
-                                        PowerCtrl.Threshold_mA = thr;
-                                        break;
-                                    }
-
-                                case ProtocolConstants.POWER_CMD_GET_THRESHOLD:
-                                    {
-                                        DecoderProtocol.RaiseResponse(featureId, commandId, payload);
-                                        break;
-                                    }
-
-                                // ⭐ NEU: PowerDecoder – Shutdown
-                                case ProtocolConstants.POWER_CMD_SHUTDOWN:
-                                    {
-                                        // payload: [Kanal, Strom_hi, Strom_lo]
-                                        if (payload.Length < 3)
-                                            break;
-                                        int channel = payload[0];
-                                        ushort mA = (ushort)((payload[1] << 8) | payload[2]);
-                                        PowerCtrl.UpdateCurrent(channel, mA);
-                                        PowerCtrl.TriggerShutdown(channel);
-                                        Log($"ÜBERSTROM auf Kanal {channel}: {mA} mA – Gleisspannung abgeschaltet.");
-                                        // Knopf auf GO stellen, damit ein Klick wieder einschaltet
-                                        UiInvoke(() => btnStopGo.SetMode(false));
-                                    }
-                                    break;
-                                // ⭐ NEU: PowerDecoder – Track Current
-                                case ProtocolConstants.POWER_CHG_TRACK_CURRENT:
-                                    {
-                                        if (payload[0] == 0)
-                                        {
-                                            Log("STOPP gedrückt – Gleisspannung ausgeschaltet.");
-                                            btnStopGo.SetMode(false); // => IsGoMode
-                                        }
-                                        else
-                                        {
-                                            Log("GO gedrückt – Gleisspannung liegt an.");
-                                            btnStopGo.SetMode(true);// => IsSTOPPMode
-                                        }
-                                    }
-                                    break;
-                            }
-                            return;
-                        }
-                    case ProtocolConstants.FEATURE_FEEDBACK:
-                        {
-                            if (commandId == ProtocolConstants.FEEDBACK_CMD_GET_SETTINGS)
-                            {
-                                // 1. Maske aktualisieren
-                                activeFeedbackForm?.HandleGetSettingsAck(featureId, commandId, payload);
-
-                                // 2. DecoderProtocol informieren (für UpdateFromDecoder)
-                                DecoderProtocol.RaiseResponse(featureId, commandId, payload);
-                            }
-
-                            if (commandId == ProtocolConstants.FEEDBACK_CMD_SET_SETTINGS_ACK)
-                                activeFeedbackForm?.HandleSetSettingsAck(featureId, commandId, payload);
-
-                            break;
-                        }
-                }
-            }
+            // Altes Format wird seit Protokoll Version 2 nicht mehr ausgewertet;
+            // alte Decoder übersetzt die Bridge.
+            Debug.WriteLine($"Nachricht im alten Format von {remote} ignoriert ({data.Length} Bytes).");
         }
 
 
@@ -896,6 +817,13 @@ namespace CANguru.Views
             if (listBoxDecoder.SelectedItem is not CANguruDecoder decoder)
             {
                 MessageBox.Show("Bitte einen Decoder auswählen.");
+                return;
+            }
+            if (decoder.IsLegacy)
+            {
+                MessageBox.Show(this, $"Der Decoder hat eine alte Firmware ({decoder.Firmware}) und versteht " +
+                    "das neue Protokoll nicht. Bitte zuerst per OTA aktualisieren.",
+                    "Einstellungen", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -1338,68 +1266,70 @@ namespace CANguru.Views
 
         #region Decoder-Handling (Liste + Zeichnen)
 
-        private void HandleDecoderAdded(byte id, DecoderType type, byte[] mac, int value_0, int value_1)
+        private void HandleDecoderAdded(byte id, DecoderType type, byte[] mac,
+                                        int fwMajor, int fwMinor, bool legacy)
         {
-            CANguruDecoder decoder;
-
-            switch (type)
+            CANguruDecoder decoder = type switch
             {
-                case DecoderType.Power:
-                    decoder = new PowerDecoder();
-                    break;
-
-                case DecoderType.Switch:
-                    decoder = new SwitchDecoder();
-                    if (decoder is SwitchDecoder _switch)
-                    {
-                        Task.Run(async () =>
-                        {
-                            await Task.Delay(300); // Decoder Zeit geben
-                            _switch.UpdateFromDecoder();
-                        });
-                    }
-                    break;
-
-                case DecoderType.Signal:
-                    decoder = new SignalDecoder();
-                    if (decoder is SignalDecoder _signal)
-                    {
-                        Task.Run(async () =>
-                        {
-                            await Task.Delay(300); // Decoder Zeit geben
-                            _signal.UpdateFromDecoder();
-                        });
-                    }
-                    break;
-
-                case DecoderType.Feedback:
-                    decoder = new FeedbackDecoder();
-                    if (decoder is FeedbackDecoder _feedback)
-                    {
-                        Task.Run(async () =>
-                        {
-                            await Task.Delay(300); // Decoder Zeit geben
-                            _feedback.UpdateFromDecoder();
-                        });
-                    }
-                    break;
-
-                default:
-                    decoder = new CANguruDecoder();
-                    break;
-            }
+                DecoderType.Power => new PowerDecoder(),
+                DecoderType.Switch => new SwitchDecoder(),
+                DecoderType.Signal => new SignalDecoder(),
+                DecoderType.Feedback => new FeedbackDecoder(),
+                _ => new CANguruDecoder()
+            };
 
             decoder.AssignedId = id;
             decoder.Type = type;
             decoder.Mac = mac;
-            decoder.value0 = value_0;
-            decoder.value1 = value_1;
+            decoder.Firmware = $"{fwMajor}.{fwMinor}";
+            decoder.IsLegacy = legacy;
             decoder.LastSeen = DateTime.Now;
 
-            Log($"Neuer Decoder hinzugefügt: ID={decoder.AssignedId}, Type={decoder.Type}");
+            Log($"Decoder angemeldet: ID={id}, Typ={type}, Firmware {decoder.Firmware}" +
+                (legacy ? " (alte Firmware – bitte per OTA aktualisieren)" : ""));
 
             decoderStorage.AddOrUpdate(decoder);
             RefreshDecoderListBox();
+
+            // Einstellungen holen; der Stromdecoder liefert seine Werte per ALIVE
+            if (!legacy && type != DecoderType.Power)
+            {
+                Task.Run(async () =>
+                {
+                    await Task.Delay(300); // Decoder Zeit geben
+                    switch (decoder)
+                    {
+                        case SwitchDecoder s: s.UpdateFromDecoder(); break;
+                        case SignalDecoder s: s.UpdateFromDecoder(); break;
+                        case FeedbackDecoder f: f.UpdateFromDecoder(); break;
+                    }
+                });
+            }
+        }
+
+        // Kontextmenü der Decoderliste: Decoder aus der Liste der Bridge entfernen
+        // (die Bridge vergisst die feste ID; meldet er sich wieder, erhält er eine neue)
+        private async void DecoderEntfernen_Click(object? sender, EventArgs e)
+        {
+            if (listBoxDecoder.SelectedItem is not CANguruDecoder decoder)
+                return;
+            byte id = (byte)decoder.AssignedId;
+            if (MessageBox.Show(this, $"Decoder {id} ({decoder.Type}) aus der Liste der Bridge entfernen?",
+                    "Decoder entfernen", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_DECODER,
+                (byte)ProtocolConstants.CG2_DECODER_REMOVE, (byte)ProtocolConstants.CG2_ID_BRIDGE, new[] { id });
+            if (r == null || r.IsError)
+            {
+                MessageBox.Show(this, "Die Bridge hat den Decoder nicht entfernt: " +
+                    (r == null ? "keine Antwort." : BridgeLink.ErrorText(r.ErrorCode)),
+                    "Decoder entfernen", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            decoderStorage.Remove(id);
+            RefreshDecoderListBox();
+            Log($"Decoder {id} entfernt.");
         }
 
         // Decoder-ListBox neu aufbauen (Header + Decoder)
@@ -1470,6 +1400,8 @@ namespace CANguru.Views
                     DecoderType.Feedback => "Gleisbesetztmelder",
                     _ => "Decoder"
                 };
+                if (decoder.IsLegacy)
+                    name += " (alt)";
 
                 string line = $"{name.PadRight(25)} {macStr.PadRight(20)} {adr}";
 

@@ -69,13 +69,8 @@ namespace CANguru.GUI.Forms
             fullPayload.Add(decoder.AssignedId);   // payload[0]
             fullPayload.AddRange(payload); // payload[1..n]
 
-            var packet = PacketBuilder.Build(
-                ProtocolConstants.FEATURE_SWITCH,
-                command,
-                fullPayload.ToArray()
-            );
-
-            UdpClientSingleton.Instance.Send(packet);
+            // Feature Stepper (Weiche und Formsignal), Quittung durch den Decoder
+            DecoderProtocol.Command(decoder.AssignedId, (byte)ProtocolConstants.CG2_F_STEPPER, command, fullPayload.ToArray());
         }
 
         private void SwitchDecoderSettingsForm_Load(object sender, EventArgs e)
@@ -109,9 +104,10 @@ namespace CANguru.GUI.Forms
 
         public void LoadFromDecoder()
         {
-            byte[] payload = DecoderProtocol.ReadPayload(
-                ProtocolConstants.FEATURE_SWITCH,
-                ProtocolConstants.SWITCH_CMD_GET_SETTINGS,
+            byte[]? payload = DecoderProtocol.ReadPayload(
+                decoder.AssignedId,
+                (byte)ProtocolConstants.CG2_F_STEPPER,
+                (byte)ProtocolConstants.SWITCH_CMD_GET_SETTINGS,
                 expectedLength: ProtocolConstants.EXP_LNG_SWITCH_SETTINGS,
                 requestPayload: new byte[] { decoder.AssignedId }   // <-- MUSS REIN
             );
@@ -135,23 +131,17 @@ namespace CANguru.GUI.Forms
                 (byte)switchDecoderSettingsPanel1.cmbStepDirection.SelectedIndex
             };
 
-                var packet = PacketBuilder.Build(
-                    ProtocolConstants.FEATURE_SWITCH,
-                    ProtocolConstants.SWITCH_CMD_SET_SETTINGS,
-                    payload
-                );
-                UdpClientSingleton.Instance.Send(packet);
+                DecoderProtocol.Command(decoder.AssignedId, (byte)ProtocolConstants.CG2_F_STEPPER,
+                                        (byte)ProtocolConstants.SWITCH_CMD_SET_SETTINGS, payload);
             }));
         }
 
-        public void HandleSetCurrPos(int featureId, int commandId, byte[] payload)
+        // Stellung geändert (SWITCH_CMD_SET_DIR): [id][stellung]
+        public void HandleSetCurrPos(byte decoderId, byte commandId, byte[] payload)
         {
             try
             {
-                if (featureId != ProtocolConstants.FEATURE_SWITCH ||
-                    commandId != ProtocolConstants.SWITCH_CMD_SET_DIR)
-                    return;
-                if (payload[0] != decoder.AssignedId)
+                if (decoderId != decoder.AssignedId || commandId != ProtocolConstants.SWITCH_CMD_SET_DIR)
                     return;
                 if (payload == null || payload.Length < 2)
                     return;
@@ -168,13 +158,12 @@ namespace CANguru.GUI.Forms
         }
 
 
-        // SWITCH_CMD_SET_END_ACK
-        public void HandleSetEndAck(int featureId, int commandId, byte[] payload)
+        // Laufweg nach der Kalibrierung (SWITCH_CMD_SET_END_ACK): [schritte hi][lo]
+        public void HandleSetEndAck(byte decoderId, byte commandId, byte[] payload)
         {
             try
             {
-                if (featureId != ProtocolConstants.FEATURE_SWITCH ||
-                    commandId != ProtocolConstants.SWITCH_CMD_SET_END_ACK)
+                if (decoderId != decoder.AssignedId || commandId != ProtocolConstants.SWITCH_CMD_SET_END_ACK)
                     return;
 
                 if (payload == null || payload.Length < 2)
@@ -273,13 +262,16 @@ namespace CANguru.GUI.Forms
 
         private void btnResetToDefaults_Click(object sender, EventArgs e)
         {
-            var request = PacketBuilder.Build(
-                ProtocolConstants.FEATURE_SETTING,
-                ProtocolConstants.SETTING_CMD_RESET_TO_DEFAULTS,
-                new byte[] { decoder.AssignedId }
-            );
-
-            UdpClientSingleton.Instance.Send(request);
+            byte id = decoder.AssignedId;
+            Task.Run(() =>
+            {
+                if (DecoderProtocol.FactoryReset(id))
+                    OnResetAck(id, (byte)ProtocolConstants.DEVTYPE_SWITCH);
+                else
+                    BeginInvoke(new Action(() => MessageBox.Show(this,
+                        "Der Decoder hat die Werkseinstellungen nicht bestätigt.",
+                        "Werkseinstellungen", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+            });
         }
     }
 }
