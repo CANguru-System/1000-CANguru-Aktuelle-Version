@@ -400,6 +400,13 @@ dict(name="CG2_OTA_PROGRESS",        value="0x04", arch="core"),  # Bridge -> GU
 dict(name="CG2_OTA_RESULT",          value="0x05", arch="core"),  # Bridge -> GUI
 dict(name="CG2_OTA_DECODER_START",   value="0x06", arch="core"),  # Bridge -> Decoder: WLAN-Download starten
 dict(name="CG2_OTA_BLOCK_SIZE",      value="1024", arch="core"),
+# Grund eines fehlgeschlagenen Decoder-Updates (REJOIN und RESULT)
+dict(name="CG2_OTA_FAIL_NONE",       value="0x00", arch="core"),
+dict(name="CG2_OTA_FAIL_WIFI",       value="0x01", arch="core"),  # keine Verbindung zum WLAN der Bridge
+dict(name="CG2_OTA_FAIL_HTTP",       value="0x02", arch="core"),  # Datei nicht abrufbar
+dict(name="CG2_OTA_FAIL_SIZE",       value="0x03", arch="core"),  # Datei zu groß / Update.begin
+dict(name="CG2_OTA_FAIL_DOWNLOAD",   value="0x04", arch="core"),  # Download abgebrochen / unvollständig
+dict(name="CG2_OTA_FAIL_INVALID",    value="0x05", arch="core"),  # keine gültige Firmware
 
 # --- Feature 0x0A Strom (bis Phase 3) ---
 dict(name="CG2_F_POWER",             value="0x0A", arch="core"),

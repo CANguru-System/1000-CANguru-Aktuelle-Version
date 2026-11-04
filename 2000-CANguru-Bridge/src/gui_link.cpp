@@ -2,7 +2,7 @@
 //
 // Hier liegt alles, was die Bridge selbst mit der GUI bespricht: Sitzung, CAN-Tunnel,
 // Übertragung von lokomotive.cs2 und das Hochladen der Firmware für OTA.
-// Nachrichten für Decoder laufen bis Schritt 2.3 noch im alten Format (main.cpp).
+// Nachrichten für Decoder leitet Bridge_Decoder.cpp weiter.
 
 #include <Arduino.h>
 #include <LittleFS.h>
@@ -89,9 +89,9 @@ void cg2SendOtaProgress(uint8_t decoderId, uint8_t percent, uint8_t overall)
     cg2SendToGui(CG2_F_OTA, CG2_OTA_PROGRESS, CG2_ID_BRIDGE, p, sizeof(p));
 }
 
-void cg2SendOtaResult(uint8_t decoderId, uint8_t result)
+void cg2SendOtaResult(uint8_t decoderId, uint8_t result, uint8_t failReason)
 {
-    uint8_t p[2] = {decoderId, result};
+    uint8_t p[3] = {decoderId, result, failReason};
     cg2SendToGui(CG2_F_OTA, CG2_OTA_RESULT, CG2_ID_BRIDGE, p, sizeof(p));
 }
 

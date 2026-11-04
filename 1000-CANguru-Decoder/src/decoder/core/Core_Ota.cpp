@@ -62,12 +62,12 @@ static bool connectToBridgeAP()
 // (Callbacks und Peer fehlten, der Decoder war danach taub). Deshalb sauber neu
 // starten: ID und Bridge-MAC bleiben erhalten, der Decoder meldet sich per REJOIN
 // zurück und teilt dabei mit, dass das Update fehlgeschlagen ist.
-static void restartAfterOtaFailure(const char *reason)
+static void restartAfterOtaFailure(uint8_t code, const char *reason)
 {
     Serial.printf("DECODER: OTA fehlgeschlagen (%s) - Neustart, Firmware bleibt unverändert\r\n", reason);
     Update.abort();
     prefs.putByte(key_id, aliveGetDecoderID());
-    prefs.putBool(key_otaFailed, true);
+    prefs.putByte(key_otaFailed, code); // Grund wird mit REJOIN gemeldet
     coreConfigSetOtaPending(true);
     delay(500);
     ESP.restart();
@@ -76,7 +76,7 @@ static void restartAfterOtaFailure(const char *reason)
 bool coreOtaStartFromBridge() {
 
     if (!connectToBridgeAP()) {
-        restartAfterOtaFailure("keine Verbindung zum WLAN der Bridge");
+        restartAfterOtaFailure(CG2_OTA_FAIL_WIFI, "keine Verbindung zum WLAN der Bridge");
         return false;
     }
 
@@ -87,7 +87,7 @@ bool coreOtaStartFromBridge() {
     HTTPClient http;
 
     if (!http.begin(client, OTA_URL)) {
-        restartAfterOtaFailure("HTTP begin");
+        restartAfterOtaFailure(CG2_OTA_FAIL_HTTP, "HTTP begin");
         return false;
     }
 
@@ -95,20 +95,20 @@ bool coreOtaStartFromBridge() {
     if (httpCode != HTTP_CODE_OK) {
         Serial.printf("DECODER: HTTP GET Code %d\r\n", httpCode);
         http.end();
-        restartAfterOtaFailure("HTTP GET");
+        restartAfterOtaFailure(CG2_OTA_FAIL_HTTP, "HTTP GET");
         return false;
     }
 
     int contentLength = http.getSize();
     if (contentLength <= 0) {
         http.end();
-        restartAfterOtaFailure("ungültige Content-Length");
+        restartAfterOtaFailure(CG2_OTA_FAIL_HTTP, "ungültige Content-Length");
         return false;
     }
 
     if (!Update.begin(contentLength)) {
         http.end();
-        restartAfterOtaFailure("Update.begin");
+        restartAfterOtaFailure(CG2_OTA_FAIL_SIZE, "Update.begin");
         return false;
     }
 
@@ -142,8 +142,13 @@ bool coreOtaStartFromBridge() {
         }
         delay(1);
     }
-    Serial.printf("DECODER: Firmware empfangen, Größe: %d bytes\r\n", written);
-    Serial.println();
+    Serial.printf("DECODER: Firmware empfangen, Größe: %d von %d bytes\r\n", written, contentLength);
+
+    if (written < (size_t)contentLength) {
+        http.end();
+        restartAfterOtaFailure(CG2_OTA_FAIL_DOWNLOAD, "Download unvollständig");
+        return false;
+    }
 
     coreConfigSetOtaPending(true);
 
@@ -151,13 +156,13 @@ bool coreOtaStartFromBridge() {
         Serial.print("DECODER: Update.end() Fehler: ");
         Serial.println(Update.getError());
         http.end();
-        restartAfterOtaFailure("Update.end");
+        restartAfterOtaFailure(CG2_OTA_FAIL_INVALID, "Update.end");
         return false;
     }
 
     if (!Update.isFinished()) {
         http.end();
-        restartAfterOtaFailure("Update nicht vollständig");
+        restartAfterOtaFailure(CG2_OTA_FAIL_INVALID, "Update nicht vollständig");
         return false;
     }
 

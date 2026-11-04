@@ -26,4 +26,4 @@ enum OtaResult : uint8_t
 // Meldungen an die GUI
 void cg2SendCanFrameToGui(uint32_t seq, const uint8_t *frame13, char source);
 void cg2SendOtaProgress(uint8_t decoderId, uint8_t percent, uint8_t overall);
-void cg2SendOtaResult(uint8_t decoderId, uint8_t result);
+void cg2SendOtaResult(uint8_t decoderId, uint8_t result, uint8_t failReason); // [id][ergebnis][grund CG2_OTA_FAIL_*]

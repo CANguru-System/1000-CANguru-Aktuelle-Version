@@ -40,7 +40,6 @@ struct DecoderInfo
   uint8_t fwMajor = 0;
   uint8_t fwMinor = 0;
   uint8_t protoMinor = 0;
-  bool legacy = false;       // alte Firmware (vor Protokoll Version 2): nur Anmeldung, Alive, CAN, OTA
   bool isReady = false;
   unsigned long lastSeen = 0;
 };
@@ -58,7 +57,6 @@ void logMac(const char *prefix, const uint8_t *mac);
 void loadDecoderList();
 int findDecoderByMac(const uint8_t *mac);
 int findDecoderIndexById(uint8_t id);
-int registerDecoder(const uint8_t *mac, uint8_t type, bool legacy); // Index; neue Decoder bekommen die nächste freie ID
+int registerDecoder(const uint8_t *mac, uint8_t type); // Index; neue Decoder bekommen die nächste freie ID
 bool removeDecoder(uint8_t id);
-bool hasLegacyDecoders();
 

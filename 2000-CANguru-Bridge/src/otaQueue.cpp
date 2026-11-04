@@ -2,6 +2,7 @@
 #include <vector>
 #include <esp_now.h>
 #include <LittleFS.h>
+#include "protocol_constants_core.h"
 #include "otaQueue.h"
 #include "globals.h"
 #include "Bridge_OTA.h"
@@ -27,6 +28,32 @@ std::vector<OtaEntry> otaQueue;
 OtaEntry currentOta;
 
 bool otaSuccessReceived = false;
+static uint8_t otaFailReason = CG2_OTA_FAIL_NONE; // Fehlergrund aus dem REJOIN
+static bool otaFailReceived = false;
+static unsigned long otaRetryAtMs = 0;
+static const unsigned long OTA_RETRY_DELAY_MS = 3000; // Decoder nach dem Neustart erst ankommen lassen
+static const uint8_t OTA_MAX_ATTEMPTS = 2;
+
+// Verbindungsfehler lohnen eine Wiederholung, eine ungültige Datei nicht
+static bool otaRetryWorthwhile(uint8_t reason)
+{
+    return reason == CG2_OTA_FAIL_WIFI || reason == CG2_OTA_FAIL_HTTP || reason == CG2_OTA_FAIL_DOWNLOAD;
+}
+
+void otaDecoderFinished(uint8_t decoderId, uint8_t failReason)
+{
+    // Nur der Decoder, der gerade aktualisiert wird, beendet den OTA-Schritt.
+    // Sonst könnte ein verspäteter REJOIN den nächsten Decoder als fertig markieren.
+    if (otaState != OTA_WAIT_FOR_FINISH || decoderId != currentOta.decoderId)
+        return;
+    if (failReason == CG2_OTA_FAIL_NONE)
+        otaSuccessReceived = true;
+    else
+    {
+        otaFailReason = failReason;
+        otaFailReceived = true;
+    }
+}
 
 volatile uint8_t otaProgressPercent = 0;
 volatile bool otaProgressPending = false;
@@ -59,7 +86,8 @@ void startGroupOtaForType(uint8_t targetType)
     {
         DecoderInfo &d = decoders[i];
 
-        if (d.decoderType == targetType)
+        // nur angemeldete Decoder: die Liste enthält auch Decoder, die gerade nicht laufen
+        if (d.decoderType == targetType && d.isReady)
         {
             OtaEntry e;
             e.decoderId = d.assignedId;
@@ -93,7 +121,10 @@ void processOta()
             otaState = OTA_DONE;
             break;
         }
+        if ((long)(millis() - otaRetryAtMs) < 0)
+            break; // Wiederholung: kurz warten
 
+        otaQueue[0].attempts++;
         currentOta = otaQueue[0];
 
         if (!httpServerRunning)
@@ -103,6 +134,7 @@ void processOta()
         }
 
         otaSuccessReceived = false;
+        otaFailReceived = false;
         lastSentPercent = 255;
         sendOtaStartWifiToDecoder(currentOta.decoderId);
         // Fortschritt 0 % kündigt der GUI den nächsten Decoder an
@@ -120,24 +152,42 @@ void processOta()
         if (otaSuccessReceived)
         {
             Serial.printf("OTA SUCCESS for decoder ID %d\r\n", currentOta.decoderId);
-            cg2SendOtaResult(currentOta.decoderId, OTA_RESULT_OK);
+            cg2SendOtaResult(currentOta.decoderId, OTA_RESULT_OK, CG2_OTA_FAIL_NONE);
             otaSuccessReceived = false;
             otaState = OTA_NEXT;
+            break;
+        }
+
+        if (otaFailReceived)
+        {
+            otaFailReceived = false;
+            Serial.printf("OTA FAILED for decoder ID %d, reason %d, attempt %d\r\n",
+                          currentOta.decoderId, otaFailReason, currentOta.attempts);
+            if (otaRetryWorthwhile(otaFailReason) && currentOta.attempts < OTA_MAX_ATTEMPTS)
+            {
+                // Der Decoder läuft mit der alten Firmware weiter: noch einmal versuchen
+                otaRetryAtMs = millis() + OTA_RETRY_DELAY_MS;
+                otaState = OTA_START;
+            }
+            else
+            {
+                cg2SendOtaResult(currentOta.decoderId, OTA_RESULT_REJECTED, otaFailReason);
+                otaState = OTA_NEXT;
+            }
             break;
         }
 
         if (millis() - otaTimer > OTA_TIMEOUT_MS)
         {
             Serial.printf("OTA TIMEOUT for decoder ID %d\r\n", currentOta.decoderId);
-            cg2SendOtaResult(currentOta.decoderId, OTA_RESULT_TIMEOUT);
+            cg2SendOtaResult(currentOta.decoderId, OTA_RESULT_TIMEOUT, CG2_OTA_FAIL_NONE);
             otaState = OTA_NEXT;
         }
         break;
 
     case OTA_NEXT:
-        Serial.printf("Moving to next OTA after success for decoder ID %d\r\n", currentOta.decoderId);
-
         otaQueue.erase(otaQueue.begin());
+        otaFinishedCount++;
 
         if (otaQueue.size() == 0)
         {
@@ -146,13 +196,15 @@ void processOta()
         }
         else
         {
-            otaFinishedCount++;
             otaState = OTA_START;
             Serial.printf("OTA finished for decoder ID %d, moving to next\r\n", currentOta.decoderId);
         }
         break;
 
     case OTA_DONE:
+        // Gesamtfortschritt 100 % = alle Decoder bearbeitet (auch wenn einer fehlschlug);
+        // die GUI blendet daraufhin die Fortschrittsanzeige aus
+        cg2SendOtaProgress(currentOta.decoderId, lastSentPercent == 255 ? 0 : lastSentPercent, 100);
         // Den Webserver NICHT beenden: er liefert auch lokomotive.cs2 an WDP, und
         // otaServer.end() ohne erneutes begin() machte jedes weitere OTA unmöglich.
         // Die Route für firmware.bin bleibt registriert (httpServerRunning bleibt true).

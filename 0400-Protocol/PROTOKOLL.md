@@ -81,7 +81,7 @@ Texte haben die Form `[Länge][UTF-8-Bytes]`, höchstens 255 Byte.
 - Unbekannte Features und Kommandos werden **ignoriert**. Bei erbetener Quittung antwortet der Empfänger mit `CG2_ERR_UNKNOWN_FEATURE` bzw. `_COMMAND`.
 - Nutzdaten dürfen in neuen Versionen **nur hinten verlängert** werden. Empfänger lesen, was sie kennen, und ignorieren den Rest.
 - `CG2_MAGIC` ändert sich nur bei einem echten Bruch. Kleinere Erweiterungen zählen `CG2_PROTO_MINOR` hoch, mitgeteilt in `HELLO` und `DISCOVER_REPLY`.
-- **Erkennung des alten Formats (Umstellung):** Nachrichten, deren erstes Byte nicht `0xC2` ist, stammen von alter Firmware (`cg2IsV2`). Die Bridge verarbeitet davon übergangsweise nur Anmeldung, Alive und OTA-Start.
+- **Altes Format:** Nachrichten, deren erstes Byte nicht `0xC2` ist, stammen von Firmware vor Version 2 (`cg2IsV2`). Sie werden ignoriert (die Bridge meldet das seriell); solche Decoder müssen einmal per USB aktualisiert werden.
 
 ---
 
@@ -102,8 +102,8 @@ Richtung: G = GUI, B = Bridge, D = Decoder. „→ Antwort“ beschreibt die Nut
 |---|---|---|
 | `HELLO` 0x01 | D → B | `[typ][mac 6][fwMajor][fwMinor][protoMinor]` |
 | `ASSIGN_ID` 0x02 | B → D (Unicast) | `[mac 6][id]`. Der Decoder prüft die MAC und quittiert. |
-| `ADDED` 0x03 | B → G | `[id][typ][mac 6][fwMajor][fwMinor][protoMinor][alteFirmware 0/1]` |
-| `REJOIN` 0x04 | D → B | `[otaFehlgeschlagen 0/1]` (Absender-ID in Byte 5) |
+| `ADDED` 0x03 | B → G | `[id][typ][mac 6][fwMajor][fwMinor][protoMinor][reserviert 0]` |
+| `REJOIN` 0x04 | D → B | `[fehlergrund]` (Absender-ID in Byte 5). Grund nach einem OTA-Neustart: `CG2_OTA_FAIL_NONE` 0 ok, `_WIFI` 1 kein WLAN der Bridge, `_HTTP` 2 Datei nicht abrufbar, `_SIZE` 3 Datei zu groß, `_DOWNLOAD` 4 Download unvollständig, `_INVALID` 5 keine gültige Firmware |
 | `REMOVE` 0x05 | G → B | `[id]`. Den Eintrag aus der dauerhaften Decoder-Liste löschen. |
 | `RESET` 0x06 | B → D | – . Der Decoder startet neu und meldet sich neu an. |
 
@@ -171,7 +171,7 @@ Ein CAN-Frame ist immer das 13-Byte-Märklin-Format (ID 4 Byte, DLC, 8 Datenbyte
 | `UPLOAD_BLOCK` 0x02 | G → B | `[offset u32][daten bis CG2_OTA_BLOCK_SIZE]` → Antwort `[offset u32]` |
 | `START` 0x03 | G → B | `[modus][id oder typ]`, Modus: 0 ein Decoder, 1 alle eines Typs |
 | `PROGRESS` 0x04 | B → G | `[id][prozent][gesamtProzent]` |
-| `RESULT` 0x05 | B → G | `[id][ergebnis]`, Ergebnis: 0 ok, 1 abgelehnt, 2 keine Rückmeldung |
+| `RESULT` 0x05 | B → G | `[id][ergebnis][fehlergrund]`, Ergebnis: 0 ok, 1 fehlgeschlagen, 2 keine Rückmeldung; Fehlergrund wie bei `REJOIN`. Bei den Gründen 1, 2 und 4 versucht die Bridge es nach 3 s ein zweites Mal, bevor sie `RESULT` sendet. Nach dem letzten Decoder sendet sie `PROGRESS` mit Gesamt 100 %. |
 | `DECODER_START` 0x06 | B → D (Unicast) | – . Der Decoder verbindet sich mit dem WLAN der Bridge und lädt die Firmware per HTTP. |
 
 ### 5.10 Strom `CG2_F_POWER` (0x0A) – bis Phase 3

@@ -255,6 +255,12 @@ public static class ProtocolConstants
     public const int CG2_OTA_RESULT = 0x05;
     public const int CG2_OTA_DECODER_START = 0x06;
     public const int CG2_OTA_BLOCK_SIZE = 1024;
+    public const int CG2_OTA_FAIL_NONE = 0x00;
+    public const int CG2_OTA_FAIL_WIFI = 0x01;
+    public const int CG2_OTA_FAIL_HTTP = 0x02;
+    public const int CG2_OTA_FAIL_SIZE = 0x03;
+    public const int CG2_OTA_FAIL_DOWNLOAD = 0x04;
+    public const int CG2_OTA_FAIL_INVALID = 0x05;
     public const int CG2_F_POWER = 0x0A;
     public const int CG2_POWER_SET_THRESHOLD = 0x01;
     public const int CG2_POWER_GET_THRESHOLD = 0x02;

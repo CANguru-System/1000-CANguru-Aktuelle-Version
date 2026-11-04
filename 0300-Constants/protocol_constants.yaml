@@ -761,6 +761,24 @@ constants:
   CG2_OTA_BLOCK_SIZE:
     value: '1024'
     architecture: core
+  CG2_OTA_FAIL_NONE:
+    value: '0x00'
+    architecture: core
+  CG2_OTA_FAIL_WIFI:
+    value: '0x01'
+    architecture: core
+  CG2_OTA_FAIL_HTTP:
+    value: '0x02'
+    architecture: core
+  CG2_OTA_FAIL_SIZE:
+    value: '0x03'
+    architecture: core
+  CG2_OTA_FAIL_DOWNLOAD:
+    value: '0x04'
+    architecture: core
+  CG2_OTA_FAIL_INVALID:
+    value: '0x05'
+    architecture: core
   CG2_F_POWER:
     value: '0x0A'
     architecture: core

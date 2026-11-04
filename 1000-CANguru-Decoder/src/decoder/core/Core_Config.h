@@ -4,7 +4,7 @@
 extern const char* key_id;
 extern const char* key_otaPending;
 extern const char* key_bridgeMac;
-extern const char* key_otaFailed;   // true = letzter OTA-Versuch fehlgeschlagen (wird mit REJOIN gemeldet)
+extern const char* key_otaFailed;   // Grund des fehlgeschlagenen OTA-Versuchs (CG2_OTA_FAIL_*), wird mit REJOIN gemeldet
 
 void coreConfigInit();
 bool coreConfigIsOtaPending();

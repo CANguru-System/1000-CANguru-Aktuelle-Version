@@ -55,6 +55,7 @@ namespace CANguru.Views
         private CancellationTokenSource _uploadCts;
         private byte lastPercent = 0;
         private int lastOtaDecoder = -1; // Decoder, dessen OTA-Fortschritt zuletzt kam
+        private int lastOtaPercent = -1; // zuletzt gemeldeter Fortschritt dieses Decoders
 
         // lokomotive.cs2 -Upload
         private Cs2FileUploader uploader;
@@ -563,10 +564,10 @@ namespace CANguru.Views
                     return;
 
                 case ProtocolConstants.CG2_F_DECODER:
-                    // ADDED: [id][typ][mac 6][fwMajor][fwMinor][protoMinor][alteFirmware]
-                    if (h.Command == ProtocolConstants.CG2_DECODER_ADDED && payload.Length >= 12)
+                    // ADDED: [id][typ][mac 6][fwMajor][fwMinor][protoMinor][reserviert]
+                    if (h.Command == ProtocolConstants.CG2_DECODER_ADDED && payload.Length >= 10)
                         HandleDecoderAdded(payload[0], (DecoderType)payload[1], payload[2..8],
-                                           payload[8], payload[9], payload[11] != 0);
+                                           payload[8], payload[9]);
                     return;
 
                 case ProtocolConstants.CG2_F_ALIVE:
@@ -674,11 +675,23 @@ namespace CANguru.Views
                 return;
             int id = payload[0], percent = payload[1], overall = Math.Min((int)payload[2], 100);
 
+            // 100 % gesamt = alle Decoder bearbeitet (auch nach einem Fehlschlag)
+            if (overall >= 100 && percent < 100)
+            {
+                UiInvoke(() => dualBar.Visible = false);
+                return;
+            }
+
             if (id != lastOtaDecoder)
             {
                 lastOtaDecoder = id;
+                lastOtaPercent = -1;
                 Log($"Decoder {id} lädt Firmware ...");
             }
+            else if (percent == 0 && lastOtaPercent > 0)
+                Log($"Decoder {id}: neuer Versuch ...");
+            bool fertigUebertragen = percent == 100 && lastOtaPercent != 100;
+            lastOtaPercent = percent;
             UiInvoke(() =>
             {
                 dualBar.Visible = true;
@@ -688,7 +701,7 @@ namespace CANguru.Views
                 dualBar.TotalText = $"{overall}%";
                 dualBar.Invalidate();
             });
-            if (percent == 100)
+            if (fertigUebertragen)
                 // Ob das Update gelungen ist, steht erst nach Prüfung und Neustart fest (OTA_RESULT)
                 Log("Firmware an den Decoder übertragen – Decoder prüft und startet neu ...");
             if (overall >= 100)
@@ -696,13 +709,15 @@ namespace CANguru.Views
         }
 
         // Ergebnis des OTA-Updates eines Decoders
-        // payload: [decoderId, result]  result: 0 = ok, 1 = Datei abgelehnt, 2 = keine Rückmeldung
+        // payload: [decoderId, result, grund]  result: 0 = ok, 1 = fehlgeschlagen, 2 = keine Rückmeldung
+        // grund: CG2_OTA_FAIL_* (warum der Decoder das Update nicht übernommen hat)
         void HandleOtaResultFromBridge(byte[] payload)
         {
             if (payload.Length < 2) return;
 
             byte decoderId = payload[0];
             byte result = payload[1];
+            int reason = payload.Length >= 3 ? payload[2] : ProtocolConstants.CG2_OTA_FAIL_NONE;
 
             if (result == 0)
             {
@@ -710,9 +725,19 @@ namespace CANguru.Views
                 return;
             }
 
-            string grund = result == 1
-                ? "Der Decoder hat die Datei abgelehnt (keine gültige Firmware)."
-                : "Der Decoder hat sich nicht zurückgemeldet.";
+            string grund = result != 1
+                ? "Der Decoder hat sich nicht zurückgemeldet."
+                : reason switch
+                {
+                    ProtocolConstants.CG2_OTA_FAIL_WIFI => "Der Decoder konnte sich nicht mit dem WLAN der Bridge verbinden.",
+                    ProtocolConstants.CG2_OTA_FAIL_HTTP => "Der Decoder konnte die Datei nicht von der Bridge abrufen.",
+                    ProtocolConstants.CG2_OTA_FAIL_SIZE => "Die Datei ist zu groß für den Decoder.",
+                    ProtocolConstants.CG2_OTA_FAIL_DOWNLOAD => "Der Download wurde unterbrochen (Datei unvollständig).",
+                    ProtocolConstants.CG2_OTA_FAIL_INVALID => "Die Datei ist keine gültige Firmware für diesen Decoder.",
+                    _ => "Das Update ist fehlgeschlagen."
+                };
+            if (result == 1 && reason != ProtocolConstants.CG2_OTA_FAIL_INVALID && reason != ProtocolConstants.CG2_OTA_FAIL_SIZE)
+                grund += " Die Bridge hat es bereits zweimal versucht.";
             Log($"OTA FEHLGESCHLAGEN für Decoder {decoderId}: {grund}");
 
             UiInvoke(() => MessageBox.Show(
@@ -817,13 +842,6 @@ namespace CANguru.Views
             if (listBoxDecoder.SelectedItem is not CANguruDecoder decoder)
             {
                 MessageBox.Show("Bitte einen Decoder auswählen.");
-                return;
-            }
-            if (decoder.IsLegacy)
-            {
-                MessageBox.Show(this, $"Der Decoder hat eine alte Firmware ({decoder.Firmware}) und versteht " +
-                    "das neue Protokoll nicht. Bitte zuerst per OTA aktualisieren.",
-                    "Einstellungen", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -1267,7 +1285,7 @@ namespace CANguru.Views
         #region Decoder-Handling (Liste + Zeichnen)
 
         private void HandleDecoderAdded(byte id, DecoderType type, byte[] mac,
-                                        int fwMajor, int fwMinor, bool legacy)
+                                        int fwMajor, int fwMinor)
         {
             CANguruDecoder decoder = type switch
             {
@@ -1282,17 +1300,15 @@ namespace CANguru.Views
             decoder.Type = type;
             decoder.Mac = mac;
             decoder.Firmware = $"{fwMajor}.{fwMinor}";
-            decoder.IsLegacy = legacy;
             decoder.LastSeen = DateTime.Now;
 
-            Log($"Decoder angemeldet: ID={id}, Typ={type}, Firmware {decoder.Firmware}" +
-                (legacy ? " (alte Firmware – bitte per OTA aktualisieren)" : ""));
+            Log($"Decoder angemeldet: ID={id}, Typ={type}, Firmware {decoder.Firmware}");
 
             decoderStorage.AddOrUpdate(decoder);
             RefreshDecoderListBox();
 
             // Einstellungen holen; der Stromdecoder liefert seine Werte per ALIVE
-            if (!legacy && type != DecoderType.Power)
+            if (type != DecoderType.Power)
             {
                 Task.Run(async () =>
                 {
@@ -1400,8 +1416,6 @@ namespace CANguru.Views
                     DecoderType.Feedback => "Gleisbesetztmelder",
                     _ => "Decoder"
                 };
-                if (decoder.IsLegacy)
-                    name += " (alt)";
 
                 string line = $"{name.PadRight(25)} {macStr.PadRight(20)} {adr}";
 

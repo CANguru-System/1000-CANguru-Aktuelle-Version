@@ -21,7 +21,11 @@ extern size_t firmwareSizeOnFs;
 struct OtaEntry {
     uint8_t decoderId;
     uint8_t mac[6];
+    uint8_t attempts = 0; // bisherige Versuche; bei Verbindungsfehlern wird einmal wiederholt
 };
+
+// Ergebnis des laufenden Decoder-Updates melden (REJOIN): Fehlergrund CG2_OTA_FAIL_*, 0 = ok
+void otaDecoderFinished(uint8_t decoderId, uint8_t failReason);
 
 extern std::vector<OtaEntry> otaQueue;
 

@@ -95,15 +95,16 @@ void coreLinkSendHello()
     coreLinkSend(CG2_F_DECODER, CG2_DECODER_HELLO, p, w.size());
 }
 
-// REJOIN nach einem OTA-Neustart: [otaFehlgeschlagen 0/1], ID in Byte 5
+// REJOIN nach einem OTA-Neustart: [Fehlergrund CG2_OTA_FAIL_*, 0 = ok], ID in Byte 5
 void coreLinkSendRejoin()
 {
-    bool otaFailed = prefs.getBool(key_otaFailed, false);
-    if (otaFailed)
-        prefs.putBool(key_otaFailed, false);
+    uint8_t failReason = prefs.getByte(key_otaFailed, CG2_OTA_FAIL_NONE);
+    if (failReason != CG2_OTA_FAIL_NONE)
+        prefs.putByte(key_otaFailed, CG2_OTA_FAIL_NONE);
 
-    uint8_t p[1] = {(uint8_t)(otaFailed ? 1 : 0)};
-    Serial.printf("Sending REJOIN with ID=%d, OTA %s\r\n", aliveGetDecoderID(), otaFailed ? "fehlgeschlagen" : "ok");
+    uint8_t p[1] = {failReason};
+    Serial.printf("Sending REJOIN with ID=%d, OTA %s (%d)\r\n", aliveGetDecoderID(),
+                  failReason ? "fehlgeschlagen" : "ok", failReason);
     coreLinkSend(CG2_F_DECODER, CG2_DECODER_REJOIN, p, sizeof(p));
 }
 

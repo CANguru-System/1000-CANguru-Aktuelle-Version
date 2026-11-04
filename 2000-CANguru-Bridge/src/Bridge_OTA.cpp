@@ -28,8 +28,10 @@ void startOtaHttpServer()
 
     AsyncWebServerResponse *response =
         request->beginResponse("application/octet-stream", total,
-            [fp, total](uint8_t *buffer, size_t maxLen, size_t index) -> size_t
+            [fp, total](uint8_t *buffer, size_t maxLen, size_t index) mutable -> size_t
             {
+                if (fp == nullptr)
+                    return 0; // Datei schon geschlossen
                 size_t n = fp->read(buffer, maxLen);
 
                 // Fortschritt nur merken: dieser Callback läuft im Task des Webservers.
@@ -40,11 +42,14 @@ void startOtaHttpServer()
                 otaProgressPercent = (uint8_t)((sent * 100.0f) / total);
                 otaProgressPending = true;
 
-                // Datei am Ende schließen
-                if (n == 0)
+                // Datei am Ende schließen. Bei bekannter Länge ruft der Webserver
+                // nach dem letzten Byte nicht noch einmal auf (n == 0 kommt dann nie),
+                // deshalb auch bei erreichter Gesamtgröße schließen.
+                if (n == 0 || sent >= total)
                 {
                     fp->close();
                     delete fp;
+                    fp = nullptr;
                 }
 
                 return n;

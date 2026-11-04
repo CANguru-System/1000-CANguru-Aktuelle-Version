@@ -84,13 +84,6 @@ int findDecoderIndexById(uint8_t id)
     return -1;
 }
 
-bool hasLegacyDecoders()
-{
-    for (const DecoderInfo &d : decoders)
-        if (d.legacy && d.isReady)
-            return true;
-    return false;
-}
 
 static void saveDecoderList()
 {
@@ -166,7 +159,7 @@ void loadDecoderList()
 
 // Meldet sich ein Decoder an, bekommt er seine gespeicherte ID; ein neuer Decoder
 // bekommt die nächste freie ID. Rückgabe: Index in decoders
-int registerDecoder(const uint8_t *mac, uint8_t type, bool legacy)
+int registerDecoder(const uint8_t *mac, uint8_t type)
 {
     int index = findDecoderByMac(mac);
     bool changed = false;
@@ -187,7 +180,6 @@ int registerDecoder(const uint8_t *mac, uint8_t type, bool legacy)
     }
 
     DecoderInfo &d = decoders[index];
-    d.legacy = legacy;
     d.lastSeen = millis();
     if (changed)
         saveDecoderList();
