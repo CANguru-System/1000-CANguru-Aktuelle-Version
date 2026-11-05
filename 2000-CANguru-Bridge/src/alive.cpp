@@ -4,11 +4,11 @@
 #include "gui_link.h"
 #include "alive.h"
 #include "MOD-LCD.h"
+#include "CAN_proc.h"
 
 // Ohne Alive in dieser Zeit gilt ein Decoder als ausgefallen
 static const unsigned long ALIVE_TIMEOUT_MS = 5000;
 
-static uint16_t CountDecoders;
 
 // ----------------------------------------------------
 // InitAlive
@@ -21,7 +21,6 @@ void InitAlive()
     lastRequest = 0;
     lastGuiAlive = 0;
     guiIsAlive = false;
-    CountDecoders = 0;
 }
 
 // ----------------------------------------------------
@@ -79,13 +78,20 @@ void sendAliveSummary()
         }
     }
 
-    // Display wie bisher mit den vier bekannten Typen
-    uint16_t CountDecoders_old = CountDecoders;
-    CountDecoders = power + sw + signal + feedback;
-    if (CountDecoders > CountDecoders_old)
+    // Display: bei jeder Änderung einer Anzahl (oder der Gleisbox) neu beschriften.
+    // Bisher nur bei steigender Gesamtzahl - ein ausgefallener Decoder blieb stehen.
+    static int lastPower = -1, lastSw = -1, lastSignal = -1, lastFeedback = -1;
+    static bool lastGb = false;
+    if (power != lastPower || sw != lastSw || signal != lastSignal || feedback != lastFeedback ||
+        GB_found != lastGb)
+    {
+        lastPower = power;
+        lastSw = sw;
+        lastSignal = signal;
+        lastFeedback = feedback;
+        lastGb = GB_found;
         drawAliveCounts(power, sw, signal, feedback);
-    if (CountDecoders < CountDecoders_old)
-        displayLCD("Decoder count decreased");
+    }
 
     uint8_t p[1 + 2 * sizeof(types)];
     p[0] = n;

@@ -2410,8 +2410,16 @@ void clearDisplay()
 void drawAliveCounts(int power, int sw, int signal, int feedback)
 {
   const uint16_t offset = 70;
-  // bereitet das Display vor
-  backgroundDisplayLCD28();
+  // Beim ersten Aufruf den Hintergrund neu zeichnen (löscht die Startmeldungen);
+  // danach nur noch die Zeilen überschreiben - backgroundDisplayLCD28() wartet 1 s
+  static bool backgroundDrawn = false;
+  if (!backgroundDrawn)
+  {
+    backgroundDisplayLCD28();
+    backgroundDrawn = true;
+  }
+  display9341.setTextColor(COLOR_TEXT);
+  display9341.setTextSize(2);
   // Power
   display9341.fillRect(0, offset + 20, 200, 20, COLOR_BG); // Zeile löschen
   display9341.setCursor(0, offset + 20);
