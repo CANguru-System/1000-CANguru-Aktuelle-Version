@@ -352,7 +352,7 @@ namespace CANguru.GUI.Forms
                                   (r == null ? "keine Antwort." : BridgeLink.ErrorText(r.ErrorCode));
                     return;
                 }
-                // Werte neu lesen
+                // Werte neu lesen (Eingaben verwerfen: es gelten jetzt die Standardwerte)
                 for (int i = 0; i < paramControls.Count; i++)
                 {
                     var (d, c, _) = paramControls[i];
@@ -392,6 +392,43 @@ namespace CANguru.GUI.Forms
             btnSave.Enabled = !busy && paramControls.Count > 0;
             btnDefaults.Enabled = !busy;
             UseWaitCursor = busy;
+        }
+
+        // ------------------------------------------------------------
+        // Ereignisse des Decoders (Aufruf aus dem Empfangsthread)
+        // ------------------------------------------------------------
+
+        // Ein Ereignis (z. B. Kalibrierung fertig) kann Parameter geändert haben: neu lesen
+        public void OnEvent(byte fromDecoder, byte ev, byte[] data)
+        {
+            if (fromDecoder != decoderId || IsDisposed || !IsHandleCreated)
+                return;
+            BeginInvoke(async () =>
+            {
+                status.Text = ev switch
+                {
+                    (byte)ProtocolConstants.CG2_EV_POSITION => "Stellung geändert.",
+                    (byte)ProtocolConstants.CG2_EV_CALIBRATED => "Kalibrierung gespeichert.",
+                    (byte)ProtocolConstants.CG2_EV_OVERCURRENT => "Überstrom – abgeschaltet.",
+                    _ => $"Ereignis {ev}."
+                };
+                await ReloadParamsAsync();
+            });
+        }
+
+        private async Task ReloadParamsAsync()
+        {
+            for (int i = 0; i < paramControls.Count; i++)
+            {
+                var (d, c, loaded) = paramControls[i];
+                ushort? v = await ReadAsync(d.Number);
+                if (v == null)
+                    continue;
+                // ungespeicherte Eingaben des Nutzers nicht überschreiben
+                if (ControlValue(c) == loaded)
+                    SetControlValue(c, v.Value);
+                paramControls[i] = (d, c, v.Value);
+            }
         }
 
         // ------------------------------------------------------------

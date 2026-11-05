@@ -73,6 +73,32 @@ static void restartAfterOtaFailure(uint8_t code, const char *reason)
     ESP.restart();
 }
 
+// Kopf einer ESP-Firmware: Byte 0 = 0xE9, Byte 12/13 = Chip-Kennung (Little Endian).
+// Eine Firmware für einen anderen Chip würde nach dem Neustart nicht laufen; der Decoder
+// wäre dann nur noch per USB zu retten (z. B. C3-Firmware auf dem ESP32 des LED-Signals).
+static bool firmwareFitsChip(const uint8_t *h)
+{
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+    const uint16_t ownChip = 5;
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+    const uint16_t ownChip = 9;
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+    const uint16_t ownChip = 2;
+#else
+    const uint16_t ownChip = 0; // klassischer ESP32
+#endif
+    if (h[0] != 0xE9) {
+        Serial.println("DECODER: Datei ist keine ESP-Firmware");
+        return false;
+    }
+    uint16_t chip = h[12] | (h[13] << 8);
+    if (chip != ownChip) {
+        Serial.printf("DECODER: Firmware für Chip %u, dieser Decoder ist Chip %u\r\n", chip, ownChip);
+        return false;
+    }
+    return true;
+}
+
 bool coreOtaStartFromBridge() {
 
     if (!connectToBridgeAP()) {
@@ -118,6 +144,10 @@ bool coreOtaStartFromBridge() {
 
     otaInProgress = true;
 
+    uint8_t header[16];
+    size_t headerLen = 0;
+    bool headerChecked = false;
+
     // Abbruch, wenn so lange keine Daten mehr kommen
     const unsigned long stallTimeoutMs = 10000;
     unsigned long lastData = millis();
@@ -130,6 +160,17 @@ bool coreOtaStartFromBridge() {
                 toRead = sizeof(buff);
             int read = stream->readBytes(buff, toRead);
             if (read > 0) {
+                // Die ersten 16 Byte sind der Kopf der Firmware: passt sie zu diesem Chip?
+                for (int i = 0; i < read && headerLen < sizeof(header); i++)
+                    header[headerLen++] = buff[i];
+                if (!headerChecked && headerLen >= sizeof(header)) {
+                    headerChecked = true;
+                    if (!firmwareFitsChip(header)) {
+                        http.end();
+                        restartAfterOtaFailure(CG2_OTA_FAIL_INVALID, "Firmware passt nicht zu diesem Chip");
+                        return false;
+                    }
+                }
                 size_t w = Update.write(buff, read);
                 written += w;
                 lastData = millis();

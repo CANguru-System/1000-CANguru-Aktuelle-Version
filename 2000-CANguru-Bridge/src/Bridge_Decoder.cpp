@@ -177,12 +177,25 @@ void sendDecoderAddedToGUI(const DecoderInfo &d)
     cg2SendToGui(CG2_F_DECODER, CG2_DECODER_ADDED, d.assignedId, p, w.size());
 }
 
+// Zuletzt gemeldete Gleisspannung (-1 = noch unbekannt). Ein neu angemeldeter Decoder
+// erfährt sie sofort, z. B. damit LED-Signale nach GO nicht bis zum nächsten STOPP/GO rot bleiben.
+static int8_t trackPowerState = -1;
+
+static void sendTrackPowerTo(const DecoderInfo &d)
+{
+    if (trackPowerState < 0)
+        return;
+    uint8_t p[1] = {(uint8_t)trackPowerState};
+    sendV2(d.Decoder_Mac, CG2_F_SESSION, CG2_SESSION_TRACK_POWER, CG2_ADDR_ID, d.assignedId, 0, bridgeSeq++, p, sizeof(p));
+}
+
 static void decoderReady(DecoderInfo &d)
 {
     d.isReady = true;
     d.announced = true;
     d.lastSeen = millis();
     sendDecoderAddedToGUI(d);
+    sendTrackPowerTo(d);
     Serial.printf("Decoder ID %d (type %02X, firmware %d.%d) ready\r\n", d.assignedId, d.decoderType, d.fwMajor, d.fwMinor);
 }
 
@@ -523,6 +536,10 @@ void sendConfigData(const uint8_t *data)
 void sendTrackPowerToDecoders(uint8_t on)
 {
     uint8_t p[1] = {on};
+    trackPowerState = on ? 1 : 0;
+    // an alle Decoder (LED-Signale, Stromdecoder ...)
+    broadcastV2(CG2_F_SESSION, CG2_SESSION_TRACK_POWER, CG2_ADDR_ALL, 0, p, sizeof(p));
+    // Übergang bis Schritt 3.4: Stromdecoder mit älterer Firmware kennen nur POWER_TRACK
     broadcastV2(CG2_F_POWER, CG2_POWER_TRACK, CG2_ADDR_TYPE, DEVTYPE_POWER, p, sizeof(p));
 }
 

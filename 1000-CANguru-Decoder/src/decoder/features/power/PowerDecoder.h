@@ -18,14 +18,15 @@ public:
 
     bool onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen) override;
     uint8_t getAliveValues(uint16_t *values, uint8_t maxValues) override;
-    bool factoryReset() override;
     AliveState getStatus() const override;
+    void onTrackPower(bool on) override;
 
-    // Selbstbeschreibung: Abschaltgrenze als Parameter, Strom je Kanal als Messwert
+    // Selbstbeschreibung: Abschaltgrenze als Parameter (gespeichert vom Kern),
+    // Strom je Kanal als Messwert; Werkseinstellungen übernimmt der Kern
     uint8_t paramCount() const override;
     const Cg2ParamDef *paramDef(uint8_t n) const override;
-    uint16_t paramRead(uint8_t n) override;
-    uint16_t paramWrite(uint8_t n, uint16_t value) override;
+    CANguruPreferences *paramPrefs() override;
+    void onParamChanged(uint8_t n, uint16_t value) override;
     uint8_t valueCount() const override;
     const Cg2InfoDef *valueDef(uint8_t n) const override;
 

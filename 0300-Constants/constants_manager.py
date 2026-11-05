@@ -335,6 +335,7 @@ dict(name="CG2_SESSION_DISCOVER",    value="0x01", arch="core"),
 dict(name="CG2_SESSION_DISCOVER_REPLY", value="0x02", arch="core"),
 dict(name="CG2_SESSION_START",       value="0x03", arch="core"),
 dict(name="CG2_SESSION_END",         value="0x04", arch="core"),
+dict(name="CG2_SESSION_TRACK_POWER", value="0x05", arch="core"),  # Bridge -> alle Decoder: Gleisspannung [an 0/1]
 
 # --- Feature 0x02 Decoder ---
 dict(name="CG2_F_DECODER",           value="0x02", arch="core"),

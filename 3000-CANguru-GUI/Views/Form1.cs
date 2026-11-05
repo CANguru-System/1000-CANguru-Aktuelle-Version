@@ -584,6 +584,12 @@ namespace CANguru.Views
                     HandlePowerMessage(h, payload);
                     return;
 
+                case ProtocolConstants.CG2_F_EVENT:
+                    // Ereignis eines Decoders (Stellung, Kalibrierung ...): [ereignis][daten]
+                    if (h.Command == ProtocolConstants.CG2_EVENT_EVENT && payload.Length >= 1)
+                        activeParameterForm?.OnEvent(h.Decoder, payload[0], payload[1..]);
+                    return;
+
                 case ProtocolConstants.CG2_F_STEPPER:
                     // Meldungen von Weiche/Formsignal an das gerade offene Einstellungsfenster
                     activeSwitchForm?.HandleSetEndAck(h.Decoder, h.Command, payload);

@@ -238,6 +238,13 @@ static void dispatch(const uint8_t *buf, size_t len)
     case CG2_F_SESSION:
         if (h.command == CG2_SESSION_START)
             coreLinkSendHello();
+        else if (h.command == CG2_SESSION_TRACK_POWER && h.length >= 1)
+        {
+            // Gleisspannung an/aus (STOPP/GO): z. B. LED-Signale auf Rot, Stromdecoder schaltet
+            gDecoder->onTrackPower(payload[0] == 1);
+            if (h.ackRequested())
+                coreLinkReply(h, nullptr, 0, 0);
+        }
         return;
 
     case CG2_F_DECODER:

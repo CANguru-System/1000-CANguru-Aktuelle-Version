@@ -206,6 +206,7 @@ public static class ProtocolConstants
     public const int CG2_SESSION_DISCOVER_REPLY = 0x02;
     public const int CG2_SESSION_START = 0x03;
     public const int CG2_SESSION_END = 0x04;
+    public const int CG2_SESSION_TRACK_POWER = 0x05;
     public const int CG2_F_DECODER = 0x02;
     public const int CG2_DECODER_HELLO = 0x01;
     public const int CG2_DECODER_ASSIGN_ID = 0x02;

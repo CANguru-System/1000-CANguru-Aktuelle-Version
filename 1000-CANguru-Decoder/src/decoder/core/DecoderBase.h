@@ -1,10 +1,18 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include <vector>
 #include "canguru_protocol.h"
+
+class CANguruPreferences;
+
+// Merkmale eines Parameters (Cg2ParamDef::flags)
+static const uint8_t CG2_PF_KEEP_ON_RESET = 0x01; // bleibt bei Werkseinstellungen erhalten (z. B. Adresse)
 
 // Beschreibung eines Parameters (Feature Parameter, PROTOKOLL.md 5.4).
 // Der Kern beantwortet damit DESCRIBE_GET und prüft geschriebene Werte.
+// Mit key != nullptr speichert der Kern den Wert selbst (NVS, Namensraum aus paramPrefs()):
+// u8, Auswahl, Ja/Nein als Byte, u16 als 16-Bit-Wert - dieselben Formate wie bisher.
 struct Cg2ParamDef
 {
     uint8_t type;                // CG2_TYPE_U8, _U16, _CHOICE (Wert = Index), _BOOL
@@ -13,6 +21,8 @@ struct Cg2ParamDef
     const char *name;            // kurz, deutsch, z. B. "Abschaltgrenze"
     const char *const *choices;  // nur bei CG2_TYPE_CHOICE
     uint8_t choiceCount;
+    const char *key;             // NVS-Schlüssel (höchstens 15 Zeichen) oder nullptr (fehlt = nullptr)
+    uint8_t flags;               // CG2_PF_* (fehlt = 0)
 };
 
 // Beschreibung einer Aktion oder eines Messwerts (nur Name und Einheit)
@@ -55,9 +65,13 @@ public:
 
     virtual AliveState getStatus() const { return AliveState::Online; }
 
-    // Werkseinstellungen: eigene Einstellungen löschen und Standardwerte laden,
-    // die Zubehöradresse bleibt erhalten. true = erfolgreich.
-    virtual bool factoryReset() { return false; }
+    // Werkseinstellungen: eigene Einstellungen auf Standard, die Zubehöradresse bleibt
+    // erhalten. true = erfolgreich. Standard: alle vom Kern gespeicherten Parameter ohne
+    // CG2_PF_KEEP_ON_RESET auf ihren Standardwert (siehe paramsFactoryReset()).
+    virtual bool factoryReset() { return paramsFactoryReset(); }
+
+    // Gleisspannung an/aus (STOPP/GO am CAN-Bus, von der Bridge an alle Decoder)
+    virtual void onTrackPower(bool on) {}
 
     // ---- Selbstbeschreibung (Feature Parameter / Aktion) ----
     // Der Kern beantwortet DESCRIBE_GET, READ, WRITE und EXECUTE aus diesen Tabellen.
@@ -65,9 +79,15 @@ public:
 
     virtual uint8_t paramCount() const { return 0; }
     virtual const Cg2ParamDef *paramDef(uint8_t n) const { return nullptr; }
-    virtual uint16_t paramRead(uint8_t n) { return 0; }
-    // Wert ist bereits auf den erlaubten Bereich begrenzt; Rückgabe = tatsächlich gespeicherter Wert
-    virtual uint16_t paramWrite(uint8_t n, uint16_t value) { return value; }
+    // Standard: Wert aus dem Speicher des Kerns (siehe paramsLoad())
+    virtual uint16_t paramRead(uint8_t n);
+    // Wert ist bereits auf den erlaubten Bereich begrenzt; Rückgabe = tatsächlich gespeicherter Wert.
+    // Standard: speichert (bei key) im NVS und ruft onParamChanged() auf.
+    virtual uint16_t paramWrite(uint8_t n, uint16_t value);
+    // Namensraum für die vom Kern gespeicherten Parameter
+    virtual CANguruPreferences *paramPrefs() { return nullptr; }
+    // ein Parameter hat einen neuen Wert (nach paramWrite oder Werkseinstellungen)
+    virtual void onParamChanged(uint8_t n, uint16_t value) {}
 
     virtual uint8_t actionCount() const { return 0; }
     virtual const Cg2InfoDef *actionDef(uint8_t n) const { return nullptr; }
@@ -88,6 +108,22 @@ public:
 
     // Märklin-CAN-Frame (13 Byte) an die Bridge, die ihn an WDP und GUI weitergibt
     void sendCanFrame(const uint8_t *frame);
+
+    // Ereignis an die GUI: [ereignis][daten ...] (CG2_EV_*, PROTOKOLL.md 5.6)
+    void sendEvent(uint8_t event, const uint8_t *data, size_t len);
+
+    // ---- Parameter-Speicher des Kerns ----
+
+    // Lädt alle Parameter mit key aus dem NVS (begrenzt auf den erlaubten Bereich) und ruft
+    // für jeden onParamChanged() auf. Aufruf im setup() des Decodertyps, nach paramPrefs()->init().
+    void paramsLoad();
+    // Werkseinstellungen für die vom Kern gespeicherten Parameter
+    bool paramsFactoryReset();
+    // aktueller Wert aus dem Speicher des Kerns
+    uint16_t paramValue(uint8_t n) const { return n < paramValues.size() ? paramValues[n] : 0; }
+
+private:
+    std::vector<uint16_t> paramValues;
 };
 
 extern DecoderBase *gDecoder;

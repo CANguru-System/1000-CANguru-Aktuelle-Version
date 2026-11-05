@@ -614,6 +614,9 @@ constants:
   CG2_SESSION_END:
     value: '0x04'
     architecture: core
+  CG2_SESSION_TRACK_POWER:
+    value: '0x05'
+    architecture: core
   CG2_F_DECODER:
     value: '0x02'
     architecture: core

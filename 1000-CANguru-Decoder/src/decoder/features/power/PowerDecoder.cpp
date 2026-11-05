@@ -11,6 +11,7 @@
 #include "Core_globals.h"
 #include "DecoderBase.h"
 #include "DecoderResetUtility.h"
+#include "Core_Param.h"
 
 uint16_t threshold_mA = 1000;
 
@@ -171,6 +172,7 @@ void PowerDecoder::setup()
     initPowerDecoder();
     // NVS
     loadDefaults();
+    paramsLoad(); // Abschaltgrenze über den Parameter-Speicher des Kerns
 }
 
 void PowerDecoder::readCurrent()
@@ -315,9 +317,9 @@ bool PowerDecoder::onMessage(const Cg2Header &h, const uint8_t *payload, uint16_
             reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
             return true;
         }
-        threshold_mA = limitThreshold(value);
-        coreConfigSetUInt16(key_power_threshold, threshold_mA);
-        Serial.printf("Threshold %u mA gespeichert\n", threshold_mA);
+        // derselbe Weg wie über das Parameter-Fenster (Bereich, Schrittweite, Speicher)
+        coreParamLimit(*paramDef(0), value);
+        paramWrite(0, value);
         // Antwort: tatsächlich gesetzter Wert (ggf. begrenzt)
         uint8_t resp[2];
         Cg2Writer(resp, sizeof(resp)).u16(threshold_mA);
@@ -335,22 +337,11 @@ bool PowerDecoder::onMessage(const Cg2Header &h, const uint8_t *payload, uint16_
 
     case CG2_POWER_TRACK:
     {
-        // STOPP/GO von GUI oder WDP (die Bridge leitet es vom CAN-Bus ab)
+        // alte Bridge-Firmware: STOPP/GO nur an den Stromdecoder (neu: Sitzung TRACK_POWER an alle)
         uint8_t state = r.u8();
         if (!r.ok())
             return true;
-        bool on = (state == 1);
-        if (on)
-        {
-            // Beim Wiedereinschalten die Überstromüberwachung neu scharf schalten,
-            // sonst würde nach der ersten Abschaltung nie wieder abgeschaltet.
-            shutdownActive[0] = false;
-            shutdownActive[1] = false;
-            overCount[0] = 0;
-            overCount[1] = 0;
-            currentStatus = DecoderBase::AliveState::Online;
-        }
-        setTrackPower(on);
+        onTrackPower(state == 1);
         if (h.ackRequested())
             reply(h);
         return true;
@@ -359,9 +350,20 @@ bool PowerDecoder::onMessage(const Cg2Header &h, const uint8_t *payload, uint16_
     return false;
 }
 
-bool PowerDecoder::factoryReset()
+// STOPP/GO (die Bridge leitet es vom CAN-Bus ab und meldet es allen Decodern)
+void PowerDecoder::onTrackPower(bool on)
 {
-    return DecoderReset::performReset(DECODER_NVS_NAMESPACE, loadDefaultsWithAddress);
+    if (on)
+    {
+        // Beim Wiedereinschalten die Überstromüberwachung neu scharf schalten,
+        // sonst würde nach der ersten Abschaltung nie wieder abgeschaltet.
+        shutdownActive[0] = false;
+        shutdownActive[1] = false;
+        overCount[0] = 0;
+        overCount[1] = 0;
+        currentStatus = DecoderBase::AliveState::Online;
+    }
+    setTrackPower(on);
 }
 
 // ------------------------------------------------------------
@@ -369,8 +371,8 @@ bool PowerDecoder::factoryReset()
 // ------------------------------------------------------------
 
 static const Cg2ParamDef powerParams[] = {
-    // Typ, min, max, Standard, Schritt, Einheit, Name
-    {CG2_TYPE_U16, 100, MAX_THRESHOLD_mA, 1000, 50, "mA", "Abschaltgrenze", nullptr, 0},
+    // Typ, min, max, Standard, Schritt, Einheit, Name, Auswahl, Anzahl, NVS-Schlüssel (wie bisher)
+    {CG2_TYPE_U16, 100, MAX_THRESHOLD_mA, 1000, 50, "mA", "Abschaltgrenze", nullptr, 0, "pwrThreshold"},
 };
 
 // Reihenfolge wie in getAliveValues()
@@ -382,19 +384,16 @@ static const Cg2InfoDef powerValues[] = {
 uint8_t PowerDecoder::paramCount() const { return sizeof(powerParams) / sizeof(powerParams[0]); }
 const Cg2ParamDef *PowerDecoder::paramDef(uint8_t n) const { return n < paramCount() ? &powerParams[n] : nullptr; }
 
-uint16_t PowerDecoder::paramRead(uint8_t n)
-{
-    return (n == 0) ? threshold_mA : 0;
-}
+CANguruPreferences *PowerDecoder::paramPrefs() { return &prefsPower; }
 
-uint16_t PowerDecoder::paramWrite(uint8_t n, uint16_t value)
+// Speichern übernimmt der Kern; hier nur den Wert übernehmen
+void PowerDecoder::onParamChanged(uint8_t n, uint16_t value)
 {
-    if (n != 0)
-        return 0;
-    threshold_mA = limitThreshold(value);
-    coreConfigSetUInt16(key_power_threshold, threshold_mA);
-    Serial.printf("Abschaltgrenze %u mA gespeichert\r\n", threshold_mA);
-    return threshold_mA;
+    if (n == 0)
+    {
+        threshold_mA = limitThreshold(value);
+        Serial.printf("Abschaltgrenze %u mA\r\n", threshold_mA);
+    }
 }
 
 uint8_t PowerDecoder::valueCount() const { return sizeof(powerValues) / sizeof(powerValues[0]); }

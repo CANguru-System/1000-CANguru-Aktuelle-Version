@@ -96,6 +96,7 @@ Richtung: G = GUI, B = Bridge, D = Decoder. „→ Antwort“ beschreibt die Nut
 | `DISCOVER_REPLY` 0x02 | B → G | `[fwMajor][fwMinor][protoMinor][gleisbox 0/1]` |
 | `START` 0x03 | G → B, B → D (ALL) | – . Die Bridge fordert alle Decoder zur Anmeldung auf: beim Start der Sitzung und danach alle 5 s (außer während OTA), damit sich auch später eingeschaltete Decoder anmelden. Jeder Decoder antwortet mit HELLO; ein angemeldeter, unveränderter Decoder erhält seine ID erneut, die GUI bekommt kein weiteres `ADDED`. |
 | `END` 0x04 | G → B | – . Die GUI wird beendet: Gleisbox STOPP, Decoder-Reset, Neustart der Bridge. |
+| `TRACK_POWER` 0x05 | B → D (ALL), B → D (ID) | `[an 0/1]`. Gleisspannung, abgeleitet aus STOPP/GO am CAN-Bus, an **alle** Decoder (z. B. LED-Signale bei STOPP auf Rot). Ein neu angemeldeter Decoder erhält den aktuellen Stand sofort per Unicast. |
 
 ### 5.2 Decoder `CG2_F_DECODER` (0x02)
 | Kommando | Richtung | Nutzdaten |
@@ -103,7 +104,7 @@ Richtung: G = GUI, B = Bridge, D = Decoder. „→ Antwort“ beschreibt die Nut
 | `HELLO` 0x01 | D → B | `[typ][mac 6][fwMajor][fwMinor][protoMinor]` |
 | `ASSIGN_ID` 0x02 | B → D (Unicast) | `[mac 6][id]`. Der Decoder prüft die MAC und quittiert. |
 | `ADDED` 0x03 | B → G | `[id][typ][mac 6][fwMajor][fwMinor][protoMinor][reserviert 0]` |
-| `REJOIN` 0x04 | D → B | `[fehlergrund]` (Absender-ID in Byte 5). Grund nach einem OTA-Neustart: `CG2_OTA_FAIL_NONE` 0 ok, `_WIFI` 1 kein WLAN der Bridge, `_HTTP` 2 Datei nicht abrufbar, `_SIZE` 3 Datei zu groß, `_DOWNLOAD` 4 Download unvollständig, `_INVALID` 5 keine gültige Firmware |
+| `REJOIN` 0x04 | D → B | `[fehlergrund]` (Absender-ID in Byte 5). Grund nach einem OTA-Neustart: `CG2_OTA_FAIL_NONE` 0 ok, `_WIFI` 1 kein WLAN der Bridge, `_HTTP` 2 Datei nicht abrufbar, `_SIZE` 3 Datei zu groß, `_DOWNLOAD` 4 Download unvollständig, `_INVALID` 5 keine gültige Firmware oder Firmware für einen anderen Chip (der Decoder prüft die Chip-Kennung im Kopf der Datei schon beim ersten Block) |
 | `REMOVE` 0x05 | G → B | `[id]`. Den Eintrag aus der dauerhaften Decoder-Liste löschen. |
 | `RESET` 0x06 | B → D | – . Der Decoder startet neu und meldet sich neu an. |
 
@@ -186,7 +187,7 @@ Ein CAN-Frame ist immer das 13-Byte-Märklin-Format (ID 4 Byte, DLC, 8 Datenbyte
 | `SET_THRESHOLD` 0x01 | G → D | `[grenzwert mA u16]` → Antwort `[grenzwert u16]` (tatsächlich gesetzt) |
 | `GET_THRESHOLD` 0x02 | G → D | – → Antwort `[grenzwert u16]` |
 | `SHUTDOWN` 0x03 | D → B → G | `[kanal][strom mA u16]` |
-| `TRACK` 0x04 | B → D, B → G | `[an 0/1]` (Gleisspannung, abgeleitet aus STOPP/GO am CAN-Bus) |
+| `TRACK` 0x04 | B → D, B → G | `[an 0/1]` (Gleisspannung, abgeleitet aus STOPP/GO am CAN-Bus). An Decoder nur noch für ältere Stromdecoder-Firmware, neu: Sitzung `TRACK_POWER` (5.1). Entfällt mit Schritt 3.4. |
 
 ### 5.11 Stepper `CG2_F_STEPPER` (0x0B) – Übergang bis Phase 3
 Weichen- und Formsignaldecoder. **Die Kommandos sind die bisherigen Werte `SWITCH_CMD_*`**
