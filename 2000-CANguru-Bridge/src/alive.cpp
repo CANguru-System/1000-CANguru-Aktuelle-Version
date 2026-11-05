@@ -54,8 +54,8 @@ void sendAliveSummary()
 
     for (const DecoderInfo &d : decoders)
     {
-        if (!d.isReady)
-            continue;
+        if (!d.isReady || d.hasError)
+            continue; // nur Decoder ohne Fehler zählen als bereit
 
         uint8_t i = 0;
         while (i < n && types[i] != d.decoderType)

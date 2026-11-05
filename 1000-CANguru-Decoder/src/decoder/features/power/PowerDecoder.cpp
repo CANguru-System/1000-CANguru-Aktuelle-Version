@@ -40,6 +40,13 @@ static const float AVG_FACTOR = 0.05f;
 // (ca. 25 ms) - einzelne Spitzen, z. B. beim Aufsetzen einer Lok, lösen nicht aus.
 static const uint8_t OVERCURRENT_SAMPLES = 4;
 
+// Nach dem Einschalten der Gleisspannung fließt kurz ein hoher Ladestrom (L298,
+// Kondensatoren der Lokdecoder). So lange wird kein Überstrom gezählt; ein echter
+// Kurzschluss löst danach sofort aus.
+static const unsigned long INRUSH_BLANK_MS = 150;
+static unsigned long trackOnMs = 0;
+static bool trackOn = false;
+
 // Ein Kanal gilt als angeschlossen, wenn an ihm Versorgungsspannung anliegt.
 static const float CONNECTED_MIN_VOLT = 5.0f;
 static const unsigned long CONNECTED_CHECK_MS = 500;
@@ -76,6 +83,9 @@ void coreConfigSetUInt16(const char *key, int value)
 
 void setTrackPower(bool state)
 {
+    if (state && !trackOn)
+        trackOnMs = millis(); // Beginn der Einschaltphase
+    trackOn = state;
     if (state)
     {
         Serial.println("POWER_CHG_TRACK_CURRENT EIN received");
@@ -194,8 +204,10 @@ void PowerDecoder::readCurrent()
         avg_mA[ch] += (raw_mA - avg_mA[ch]) * AVG_FACTOR;
         current_mA[ch] = (uint16_t)(avg_mA[ch] + 0.5f);
 
-        // Überstrom: aufeinanderfolgende Messungen über dem Grenzwert zählen
-        if (raw_mA > threshold_mA)
+        // Überstrom: aufeinanderfolgende Messungen über dem Grenzwert zählen,
+        // nicht während der Einschaltphase und nicht bei ausgeschalteter Gleisspannung
+        bool blanked = !trackOn || (now - trackOnMs < INRUSH_BLANK_MS);
+        if (!blanked && raw_mA > threshold_mA)
         {
             if (overCount[ch] < 255)
                 overCount[ch]++;
@@ -274,6 +286,8 @@ void PowerDecoder::shutdown(uint8_t channel)
 {
     shutdownActive[channel] = true;
     currentStatus = DecoderBase::AliveState::Offline;
+    Serial.printf("UEBERSTROM Kanal %u: %u mA (Grenzwert %u mA, %lu ms nach dem Einschalten)\r\n",
+                  channel, lastRaw_mA[channel], threshold_mA, millis() - trackOnMs);
     setTrackPower(false);
 
     // gemeldet wird der Strom der letzten Messung, die zur Abschaltung geführt hat:

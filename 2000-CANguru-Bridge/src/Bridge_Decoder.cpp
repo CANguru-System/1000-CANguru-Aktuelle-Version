@@ -246,6 +246,8 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
         d.fwMinor = fwMinor;
         d.protoMinor = protoMinor;
         d.isReady = unchanged;
+        if (!unchanged)
+            d.hasError = false; // neu gestartet: Status kommt mit dem nächsten Alive
 
         uint8_t p[7];
         memcpy(p, mac, 6);
@@ -297,9 +299,10 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
         if (h.command == CG2_ALIVE_ALIVE && h.length >= 1)
         {
             // Bereit = Status ungleich Fehler (z. B. nach einer Überstrom-Abschaltung nicht bereit)
-            // Der GUI gemeldet wird ein Decoder nur über HELLO (mit Firmware-Stand);
-            // das wiederholte START sorgt dafür, dass jeder Decoder HELLO sendet
-            d.isReady = (payload[0] != CG2_STATUS_ERROR);
+            // Der Fehlerstatus (z. B. Stromdecoder nach Überstrom) ändert nichts an der
+            // Anmeldung - sonst meldete das wiederholte START den Decoder alle 5 s neu an.
+            // Der GUI gemeldet wird ein Decoder nur über HELLO (mit Firmware-Stand).
+            d.hasError = (payload[0] == CG2_STATUS_ERROR);
             forwardToGui(buf, len, d.assignedId);
         }
         return;

@@ -40,7 +40,8 @@ struct DecoderInfo
   uint8_t fwMajor = 0;
   uint8_t fwMinor = 0;
   uint8_t protoMinor = 0;
-  bool isReady = false;
+  bool isReady = false;   // angemeldet und meldet sich regelmäßig (Alive)
+  bool hasError = false;  // letzter Alive-Status = Fehler (z. B. Stromdecoder nach Überstrom)
   bool announced = false; // GUI hat ADDED mit den Daten aus dem letzten HELLO erhalten
   unsigned long lastSeen = 0;
 };
