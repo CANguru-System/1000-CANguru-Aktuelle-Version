@@ -110,7 +110,7 @@ Richtung: G = GUI, B = Bridge, D = Decoder. „→ Antwort“ beschreibt die Nut
 ### 5.3 Alive `CG2_F_ALIVE` (0x03)
 | Kommando | Richtung | Nutzdaten |
 |---|---|---|
-| `ALIVE` 0x01 | D → B → G | `[status][anzahl][wert u16] × anzahl`. Status: 0 Fehler, 1 OK, 2 Warnung. Die Werte sind die Messwerte des Decoders in der Reihenfolge seiner Beschreibung (5.4, Art 2). |
+| `ALIVE` 0x01 | D → B → G | `[status][anzahl][wert u16] × anzahl`. Status: 0 Fehler, 1 OK, 2 Warnung. Die Werte sind die Messwerte des Decoders in der Reihenfolge seiner Beschreibung (5.4, Art 2); `0xFFFF` = nicht verfügbar (z. B. Kanal nicht angeschlossen). |
 | `SUMMARY` 0x02 | B → G | `[anzahl][typ][zahl] × anzahl`: wie viele Decoder je Typ bereit sind |
 
 ### 5.4 Parameter `CG2_F_PARAM` (0x04)
@@ -130,7 +130,13 @@ Antwort auf `DESCRIBE_GET` (ein Eintrag je Anfrage, passt sicher in ein ESP-NOW-
 ```
 Datentyp: 0 u8, 1 u16, 2 Auswahl (Wert = Index), 3 Ja/Nein.
 Bei Aktionen und Messwerten bleiben min/max/standard/schritt 0, sofern sie keine Bedeutung haben.
-Mit `nummer` ≥ `anzahl gesamt` antwortet der Decoder mit `CG2_ERR_BAD_VALUE`.
+Mit `nummer` ≥ `anzahl gesamt` antwortet der Decoder mit `CG2_ERR_BAD_VALUE`. Ein Decoder ohne Einträge einer Art
+antwortet also schon auf Nummer 0 mit diesem Fehler.
+
+Beim `WRITE` begrenzt der Decoder den Wert: u8/u16 auf min…max, gerundet auf die Schrittweite (gezählt ab min);
+Ja/Nein wird zu 0 oder 1. Ein Auswahlindex außerhalb der Liste ergibt `CG2_ERR_BAD_VALUE`. Die Antwort enthält
+den tatsächlich gespeicherten Wert. Die Bearbeitung übernimmt der Decoder-Kern (`Core_Param.cpp`) anhand der
+Tabellen des Decodertyps (`DecoderBase::paramDef`, `actionDef`, `valueDef`).
 
 ### 5.5 Aktion `CG2_F_ACTION` (0x05)
 | Kommando | Richtung | Nutzdaten |

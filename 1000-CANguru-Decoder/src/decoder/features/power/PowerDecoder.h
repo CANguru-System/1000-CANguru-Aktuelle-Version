@@ -21,6 +21,14 @@ public:
     bool factoryReset() override;
     AliveState getStatus() const override;
 
+    // Selbstbeschreibung: Abschaltgrenze als Parameter, Strom je Kanal als Messwert
+    uint8_t paramCount() const override;
+    const Cg2ParamDef *paramDef(uint8_t n) const override;
+    uint16_t paramRead(uint8_t n) override;
+    uint16_t paramWrite(uint8_t n, uint16_t value) override;
+    uint8_t valueCount() const override;
+    const Cg2InfoDef *valueDef(uint8_t n) const override;
+
 private:
     void readCurrent();
 #if POWER_DIAG

@@ -158,6 +158,30 @@ static void testeWriterReader()
     pruefe(!w2.ok() && w2.size() == 2, "Writer: Überlauf wird erkannt");
 }
 
+// Beschreibung eines Auswahl-Parameters (PROTOKOLL.md 5.4); dieselben Bytes prüft der C#-Test.
+// Umlaute als UTF-8-Escapes, damit der Test nicht von der Quelltext-Codierung abhängt.
+static const char *BESCHREIBUNG_HEX =
+    "000102020000010000000100000C4C6175667269636874756E670209766F7277C3A47274730B72C3BC636B77C3A4727473";
+
+static void testeBeschreibung()
+{
+    uint8_t buf[96];
+    Cg2Writer w(buf, sizeof(buf));
+    w.u8(CG2_KIND_PARAM).u8(1).u8(2).u8(CG2_TYPE_CHOICE).u16(0).u16(1).u16(0).u16(1);
+    w.str("").str("Laufrichtung").u8(2).str("vorw\xC3\xA4rts").str("r\xC3\xBC" "ckw\xC3\xA4rts");
+    pruefe(w.ok() && bytesZuHex(buf, w.size()) == BESCHREIBUNG_HEX, "Beschreibung: Kodierung");
+
+    Cg2Reader r(buf, w.size());
+    char einheit[8], name[24], a0[16], a1[16];
+    bool ok = r.u8() == CG2_KIND_PARAM && r.u8() == 1 && r.u8() == 2 && r.u8() == CG2_TYPE_CHOICE;
+    ok = ok && r.u16() == 0 && r.u16() == 1 && r.u16() == 0 && r.u16() == 1;
+    ok = ok && r.str(einheit, sizeof(einheit)) && r.str(name, sizeof(name)) && r.u8() == 2;
+    ok = ok && r.str(a0, sizeof(a0)) && r.str(a1, sizeof(a1)) && r.ok() && r.remaining() == 0;
+    pruefe(ok && einheit[0] == 0 && std::strcmp(name, "Laufrichtung") == 0 &&
+               std::strcmp(a1, "r\xC3\xBC" "ckw\xC3\xA4rts") == 0,
+           "Beschreibung: Zerlegung");
+}
+
 static void testeKopfHilfen()
 {
     Cg2Header h;
@@ -200,6 +224,7 @@ int main(int argc, char **argv)
     std::printf("C++-Protokolltest\n");
     testeVektoren(argc > 1 ? argv[1] : "testvektoren.txt");
     testeWriterReader();
+    testeBeschreibung();
     testeKopfHilfen();
     testeDuplikate();
     testeCrc();

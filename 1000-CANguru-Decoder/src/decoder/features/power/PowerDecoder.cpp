@@ -364,6 +364,42 @@ bool PowerDecoder::factoryReset()
     return DecoderReset::performReset(DECODER_NVS_NAMESPACE, loadDefaultsWithAddress);
 }
 
+// ------------------------------------------------------------
+// Selbstbeschreibung (Feature Parameter, PROTOKOLL.md 5.4)
+// ------------------------------------------------------------
+
+static const Cg2ParamDef powerParams[] = {
+    // Typ, min, max, Standard, Schritt, Einheit, Name
+    {CG2_TYPE_U16, 100, MAX_THRESHOLD_mA, 1000, 50, "mA", "Abschaltgrenze", nullptr, 0},
+};
+
+// Reihenfolge wie in getAliveValues()
+static const Cg2InfoDef powerValues[] = {
+    {"Strom Kanal 1", "mA"},
+    {"Strom Kanal 2", "mA"},
+};
+
+uint8_t PowerDecoder::paramCount() const { return sizeof(powerParams) / sizeof(powerParams[0]); }
+const Cg2ParamDef *PowerDecoder::paramDef(uint8_t n) const { return n < paramCount() ? &powerParams[n] : nullptr; }
+
+uint16_t PowerDecoder::paramRead(uint8_t n)
+{
+    return (n == 0) ? threshold_mA : 0;
+}
+
+uint16_t PowerDecoder::paramWrite(uint8_t n, uint16_t value)
+{
+    if (n != 0)
+        return 0;
+    threshold_mA = limitThreshold(value);
+    coreConfigSetUInt16(key_power_threshold, threshold_mA);
+    Serial.printf("Abschaltgrenze %u mA gespeichert\r\n", threshold_mA);
+    return threshold_mA;
+}
+
+uint8_t PowerDecoder::valueCount() const { return sizeof(powerValues) / sizeof(powerValues[0]); }
+const Cg2InfoDef *PowerDecoder::valueDef(uint8_t n) const { return n < valueCount() ? &powerValues[n] : nullptr; }
+
 // Messwerte im Alive: geglätteter Strom je Kanal in mA, 0xFFFF = nicht angeschlossen
 uint8_t PowerDecoder::getAliveValues(uint16_t *values, uint8_t maxValues)
 {

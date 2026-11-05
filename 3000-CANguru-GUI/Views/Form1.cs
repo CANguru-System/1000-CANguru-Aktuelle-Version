@@ -44,6 +44,7 @@ namespace CANguru.Views
         private SwitchDecoderSettingsForm activeSwitchForm;
         private SignalDecoderSettingsForm activeSignalForm;
         private FeedbackDecoderSettingsForm activeFeedbackForm;
+        private volatile ParameterForm? activeParameterForm; // offenes allgemeines Parameter-Fenster
         private DecoderListForm decoderListForm;
         private LokListForm lokListForm;
 
@@ -327,8 +328,10 @@ namespace CANguru.Views
             // Optional: OwnerDraw für Decoder aktivieren
             // listBoxDecoder.DrawItem += ListBoxDecoder_DrawItem;
 
-            // Rechtsklick auf einen Decoder: entfernen
+            // Rechtsklick auf einen Decoder: allgemeine Parameter, entfernen
             var menu = new ContextMenuStrip();
+            menu.Items.Add("Parameter …", null, DecoderParameter_Click);
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Decoder entfernen", null, DecoderEntfernen_Click);
             menu.Opening += (s, e) => e.Cancel = listBoxDecoder.SelectedItem is not CANguruDecoder;
             listBoxDecoder.ContextMenuStrip = menu;
@@ -606,6 +609,9 @@ namespace CANguru.Views
             if (!decoderStorage.Decoders.TryGetValue(decoderId, out var dec))
                 return;
             dec.LastSeen = DateTime.Now; // den Status berechnet aliveTimer aus LastSeen
+
+            // offenes Parameter-Fenster zeigt die Messwerte laut Beschreibung an
+            activeParameterForm?.UpdateValues(decoderId, values);
 
             // Stromdecoder: Messwerte = Strom je Kanal in mA, 0xFFFF = nicht angeschlossen
             if (dec.Type == DecoderType.Power && count >= 2)
@@ -1320,6 +1326,23 @@ namespace CANguru.Views
                         case FeedbackDecoder f: f.UpdateFromDecoder(); break;
                     }
                 });
+            }
+        }
+
+        // Kontextmenü der Decoderliste: allgemeines Parameter-Fenster aus der Selbstbeschreibung
+        private void DecoderParameter_Click(object? sender, EventArgs e)
+        {
+            if (listBoxDecoder.SelectedItem is not CANguruDecoder decoder)
+                return;
+            using var form = new ParameterForm((byte)decoder.AssignedId, decoder.Type.ToString());
+            activeParameterForm = form;
+            try
+            {
+                form.ShowDialog(this);
+            }
+            finally
+            {
+                activeParameterForm = null;
             }
         }
 

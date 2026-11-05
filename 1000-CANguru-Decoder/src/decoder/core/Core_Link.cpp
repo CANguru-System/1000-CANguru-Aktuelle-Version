@@ -16,6 +16,7 @@
 #include "Core_Ota.h"
 #include "core_globals.h"
 #include "DecoderBase.h"
+#include "Core_Param.h"
 
 struct RxItem
 {
@@ -30,7 +31,7 @@ static bool warnedOldFormat = false;
 // Wiederholte Anfrage der Bridge (unsere Antwort ging verloren): nicht noch einmal
 // ausführen, sondern die gespeicherte Antwort erneut senden
 static Cg2DuplicateFilter duplicates;
-static uint8_t lastResponse[64];
+static uint8_t lastResponse[CG2_ESPNOW_MAX]; // auch lange Antworten (Beschreibung) wiederholbar
 static size_t lastResponseLen = 0;
 
 // ------------------------------------------------------------
@@ -274,6 +275,14 @@ static void dispatch(const uint8_t *buf, size_t len)
             coreLinkReply(h, nullptr, 0, ok ? 0 : CG2_ERR_UNKNOWN_COMMAND);
             return;
         }
+        // Beschreibung, Lesen, Schreiben aus den Tabellen des Decodertyps
+        if (coreParamHandle(h, payload, h.length))
+            return;
+        break;
+
+    case CG2_F_ACTION:
+        if (coreParamHandle(h, payload, h.length))
+            return;
         break;
     }
 

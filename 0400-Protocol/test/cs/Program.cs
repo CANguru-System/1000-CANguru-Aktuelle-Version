@@ -83,6 +83,21 @@ Pruefe(rd.U8() == 0x7F && rd.U16() == 0x1234 && rd.U32() == 0xA1B2C3D4, "Reader:
 Pruefe(rd.Str() == "Weiche" && rd.Ok && rd.Remaining == 0, "Reader: Text und Ende");
 Pruefe(rd.U16() == 0 && !rd.Ok, "Reader: Lesen über das Ende wird erkannt");
 
+// --- Beschreibung eines Auswahl-Parameters (PROTOKOLL.md 5.4), dieselben Bytes wie im C++-Test ---
+const string beschreibungHex =
+    "000102020000010000000100000C4C6175667269636874756E670209766F7277C3A47274730B72C3BC636B77C3A4727473";
+byte[] beschreibung = new Cg2Writer()
+    .U8((byte)ProtocolConstants.CG2_KIND_PARAM).U8(1).U8(2).U8((byte)ProtocolConstants.CG2_TYPE_CHOICE)
+    .U16(0).U16(1).U16(0).U16(1).Str("").Str("Laufrichtung").U8(2).Str("vorwärts").Str("rückwärts")
+    .ToArray();
+Pruefe(Convert.ToHexString(beschreibung) == beschreibungHex, "Beschreibung: Kodierung");
+var rb = new Cg2Reader(beschreibung);
+bool bOk = rb.U8() == ProtocolConstants.CG2_KIND_PARAM && rb.U8() == 1 && rb.U8() == 2 &&
+           rb.U8() == ProtocolConstants.CG2_TYPE_CHOICE && rb.U16() == 0 && rb.U16() == 1 && rb.U16() == 0 &&
+           rb.U16() == 1 && rb.Str() == "" && rb.Str() == "Laufrichtung" && rb.U8() == 2 &&
+           rb.Str() == "vorwärts" && rb.Str() == "rückwärts" && rb.Ok && rb.Remaining == 0;
+Pruefe(bOk, "Beschreibung: Zerlegung");
+
 // --- Kopf-Hilfen ---
 var kopf = new Cg2Header { Flags = (byte)ProtocolConstants.CG2_FLAG_ACK_REQ };
 kopf.AddrMode = ProtocolConstants.CG2_ADDR_TYPE;
