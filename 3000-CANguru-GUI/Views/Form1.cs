@@ -512,10 +512,10 @@ namespace CANguru.Views
             UiInvoke(() => txtBridgeIP.Text = ProtocolConfig.ipString);
             UiInvoke(() => btnStopGo.Enabled = true);
 
-            // Lokliste zur Bridge, damit WDP sie abholen kann
-            UiInvoke(() => dualBar.Visible = true);
+            // Lokliste zur Bridge, damit WDP sie abholen kann. Ohne Fortschrittsbalken:
+            // die Datei ist klein und in Sekundenbruchteilen übertragen (der Balken blitzte
+            // nur kurz auf und sah aus wie ein OTA-Update)
             bool ok = await uploader.StartUploadAsync("lokomotive.cs2");
-            UiInvoke(() => dualBar.Visible = false);
             if (ok)
                 Log("lokomotive.cs2 zur Bridge übertragen.");
 
@@ -1041,22 +1041,8 @@ namespace CANguru.Views
         {
             uploader = new Cs2FileUploader();
 
-            uploader.ProgressChanged += (offset, total) =>
-            {
-                int percent = total > 0 ? offset * 100 / total : 100;
-                UiInvoke(() =>
-                    { // Wert aktualisieren
-                        dualBar.SingleBarMode = true;
-                        dualBar.CurrentValue = percent;
-                        dualBar.CurrentText = $"{percent}%";
-                        dualBar.Invalidate();
-                    });
-            };
-
-            uploader.UploadCompleted += () =>
-            {
-                UiInvoke(() => dualBar.SingleBarMode = false);
-            };
+            // Kein Fortschrittsbalken für die kleine Lokliste: der Balken gehört dem OTA-Update
+            // und darf von hier nicht umgestellt werden
 
             uploader.UploadError += (msg) =>
             {
