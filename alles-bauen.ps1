@@ -10,6 +10,8 @@
     first (C# always, C++ when Visual Studio is installed).
     The finished firmware files are copied to _build\ with clear names
     (e.g. decoder-switch.bin, bridge.bin) so they can be used for OTA directly.
+    In addition, a complete image per target (e.g. decoder-switch-komplett.bin) with
+    bootloader, partition table and OTA reset is written for flashing over USB at 0x0.
 
 .PARAMETER Nur
     Optional: build only one part - Decoder, Bridge or GUI - or run only the protocol Test.
@@ -41,6 +43,44 @@ function Pruefe-Werkzeuge {
     }
 }
 
+# Chip of each PlatformIO environment (for esptool merge_bin)
+$chipJeUmgebung = @{ switch = 'esp32c3'; signal = 'esp32c3'; power = 'esp32c3'; feedback = 'esp32'; 'esp32-evb' = 'esp32' }
+
+# Writes _build\<zielname>-komplett.bin: bootloader, partition table, boot_app0 and
+# application merged into one image that is flashed at address 0x0. It works on an
+# erased chip and resets the OTA selection (otadata), so the new firmware really starts
+# even if the board last ran from the second app slot after an OTA update.
+# The offsets come from PlatformIO itself (project metadata).
+function Erzeuge-Komplettimage([string]$projekt, [string]$umgebung, [string]$zielname) {
+    Push-Location (Join-Path $wurzel $projekt)
+    try {
+        $json = & $python -m platformio project metadata -e $umgebung --json-output 2>$null
+        $meta = ($json | ConvertFrom-Json).$umgebung
+    }
+    finally {
+        Pop-Location
+    }
+    if (-not $meta) {
+        Write-Host "Komplettimage ${zielname}: PlatformIO-Metadaten nicht lesbar." -ForegroundColor Red
+        return $false
+    }
+    $teile = @()
+    foreach ($img in $meta.extra.flash_images) {
+        $teile += @($img.offset, $img.path)
+    }
+    $teile += @($meta.extra.application_offset, (Join-Path $wurzel "$projekt\.pio\build\$umgebung\firmware.bin"))
+
+    $esptool = Join-Path $env:USERPROFILE '.platformio\packages\tool-esptoolpy\esptool.py'
+    $ziel = Join-Path $ausgabe "$zielname-komplett.bin"
+    & $python $esptool --chip $chipJeUmgebung[$umgebung] merge_bin -o $ziel @teile | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Komplettimage $zielname konnte nicht erzeugt werden." -ForegroundColor Red
+        return $false
+    }
+    Write-Host "Komplettimage: $ziel"
+    return $true
+}
+
 # Runs a PlatformIO environment and copies firmware.bin to _build\<zielname>.bin
 function Baue-Firmware([string]$projekt, [string]$umgebung, [string]$zielname) {
     Write-Host "`n=== $zielname ($projekt, Umgebung $umgebung) ===" -ForegroundColor Cyan
@@ -58,6 +98,7 @@ function Baue-Firmware([string]$projekt, [string]$umgebung, [string]$zielname) {
     if ($ok) {
         $bin = Join-Path $wurzel "$projekt\.pio\build\$umgebung\firmware.bin"
         Copy-Item $bin (Join-Path $ausgabe "$zielname.bin") -Force
+        $ok = Erzeuge-Komplettimage $projekt $umgebung $zielname
     }
     $ergebnisse.Add([pscustomobject]@{
         Teil   = $zielname
