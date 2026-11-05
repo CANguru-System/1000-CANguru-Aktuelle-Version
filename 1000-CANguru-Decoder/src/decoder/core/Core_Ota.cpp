@@ -23,6 +23,9 @@ const char *OTA_URL = "http://192.168.4.1/firmware.bin";
 const char *OTA_SSID = "BridgeOTA";
 const char *OTA_PASS = "";
 
+// Verbindung zum WLAN der Bridge. Direkt auf dem bekannten Kanal (keine Suche über alle
+// Kanäle) und mit bis zu drei Versuchen: beim Serien-OTA kam der zweite Decoder mit einem
+// einzigen Versuch gelegentlich nicht ins WLAN.
 static bool connectToBridgeAP()
 {
     WiFi.mode(WIFI_MODE_STA);
@@ -31,30 +34,30 @@ static bool connectToBridgeAP()
     // Sleep AUS – sonst fliegt er bei großen Transfers gerne raus
     WiFi.setSleep(false);
 
-    WiFi.begin(OTA_SSID, OTA_PASS);
-
-    Serial.print("DECODER: Verbinde mit AP ");
-    Serial.println(OTA_SSID);
-
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 15000)
+    const uint8_t attempts = 3;
+    const unsigned long attemptMs = 8000;
+    for (uint8_t attempt = 1; attempt <= attempts; attempt++)
     {
-        delay(250);
-        Serial.print(".");
-    }
-    Serial.println();
+        Serial.printf("DECODER: Verbinde mit AP %s (Kanal %d), Versuch %u\r\n", OTA_SSID, BRIDGE_AP_CHANNEL, attempt);
+        WiFi.begin(OTA_SSID, OTA_PASS, BRIDGE_AP_CHANNEL);
 
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        Serial.print("DECODER: Verbunden, IP: ");
-        Serial.println(WiFi.localIP());
-        return true;
+        unsigned long start = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - start < attemptMs)
+            delay(100);
+
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            Serial.print("DECODER: Verbunden, IP: ");
+            Serial.println(WiFi.localIP());
+            return true;
+        }
+        // Status für die Fehlersuche: 1 = AP nicht gefunden, 4 = Verbindung abgelehnt, 6 = getrennt
+        Serial.printf("DECODER: keine Verbindung (Status %d)\r\n", (int)WiFi.status());
+        WiFi.disconnect(false, true);
+        delay(500);
     }
-    else
-    {
-        Serial.println("DECODER: WiFi-Verbindung fehlgeschlagen");
-        return false;
-    }
+    Serial.println("DECODER: WiFi-Verbindung fehlgeschlagen");
+    return false;
 }
 
 // Nach einem OTA-Fehler ist ESP-NOW abgebaut und das WLAN im Station-Modus.

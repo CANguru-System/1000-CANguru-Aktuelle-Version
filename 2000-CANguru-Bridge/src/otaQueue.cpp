@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <vector>
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <LittleFS.h>
 #include "protocol_constants_core.h"
 #include "otaQueue.h"
@@ -31,8 +32,19 @@ bool otaSuccessReceived = false;
 static uint8_t otaFailReason = CG2_OTA_FAIL_NONE; // Fehlergrund aus dem REJOIN
 static bool otaFailReceived = false;
 static unsigned long otaRetryAtMs = 0;
-static const unsigned long OTA_RETRY_DELAY_MS = 3000; // Decoder nach dem Neustart erst ankommen lassen
+static const unsigned long OTA_RETRY_DELAY_MS = 5000; // Decoder nach dem Neustart erst ankommen lassen
+static const unsigned long OTA_NEXT_DELAY_MS = 2000;  // Pause zwischen zwei Decodern beim Serien-OTA
 static const uint8_t OTA_MAX_ATTEMPTS = 2;
+
+// Ein Decoder startet nach dem Download neu, ohne sich vom WLAN der Bridge abzumelden.
+// Die Bridge führt ihn dann noch minutenlang als verbunden. Vor dem nächsten Decoder
+// (und vor einer Wiederholung) werden deshalb alle Geräte aus dem WLAN abgemeldet;
+// beim Serien-OTA kam der zweite Decoder sonst nicht ins WLAN.
+static void clearApStations()
+{
+    esp_err_t r = esp_wifi_deauth_sta(0); // 0 = alle
+    Serial.printf("OTA: WLAN-Geräte abgemeldet (%s)\r\n", esp_err_to_name(r));
+}
 
 // Verbindungsfehler lohnen eine Wiederholung, eine ungültige Datei nicht
 static bool otaRetryWorthwhile(uint8_t reason)
@@ -166,6 +178,7 @@ void processOta()
             if (otaRetryWorthwhile(otaFailReason) && currentOta.attempts < OTA_MAX_ATTEMPTS)
             {
                 // Der Decoder läuft mit der alten Firmware weiter: noch einmal versuchen
+                clearApStations();
                 otaRetryAtMs = millis() + OTA_RETRY_DELAY_MS;
                 otaState = OTA_START;
             }
@@ -196,6 +209,10 @@ void processOta()
         }
         else
         {
+            // Den fertigen Decoder aus dem WLAN der Bridge abmelden und kurz warten,
+            // bevor der nächste sich verbindet (siehe clearApStations)
+            clearApStations();
+            otaRetryAtMs = millis() + OTA_NEXT_DELAY_MS;
             otaState = OTA_START;
             Serial.printf("OTA finished for decoder ID %d, moving to next\r\n", currentOta.decoderId);
         }
