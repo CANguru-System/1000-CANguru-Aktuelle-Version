@@ -99,6 +99,15 @@
             return null;
         }
 
+        // Einen Parameter lesen (Feature Parameter, READ [nummer] -> [nummer][wert u16]);
+        // null, wenn der Decoder nicht antwortet oder die Nummer nicht kennt
+        public static ushort? ReadParam(byte decoderId, byte number)
+        {
+            var p = ReadPayload(decoderId, (byte)ProtocolConstants.CG2_F_PARAM,
+                                (byte)ProtocolConstants.CG2_PARAM_READ, 3, new[] { number });
+            return p == null ? null : new Cg2Reader(p[1..]).U16();
+        }
+
         // Grenzwert des Stromdecoders lesen (Little Endian)
         public static ushort ReadThreshold(byte decoderId, ushort defaultValue)
         {

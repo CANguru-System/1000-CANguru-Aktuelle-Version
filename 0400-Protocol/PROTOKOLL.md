@@ -151,9 +151,12 @@ Tabellen des Decodertyps (`DecoderBase::paramDef`, `actionDef`, `valueDef`).
 
 | Ereignis | Daten |
 |---|---|
-| `CG2_EV_POSITION` 0x01 | `[stellung]` |
+| `CG2_EV_POSITION` 0x01 | `[kanal][stellung]`. Stellung 0 = rot / abzweigend, 1 = grün / gerade. Gesendet, wenn die Stellung **erreicht** ist; erst dann geht auch die Rückmeldung `ACC_R` an WDP. |
 | `CG2_EV_OVERCURRENT` 0x02 | `[kanal][strom mA u16]`. Die Bridge sendet zusätzlich STOPP an die Gleisbox. |
-| `CG2_EV_CALIBRATED` 0x03 | `[laufweg u16]` |
+| `CG2_EV_CALIBRATED` 0x03 | `[kanal][laufweg u16]` |
+
+Zubehör-Decoder (Weiche, Formsignal, ab 3.3 LED-Signal) melden im Alive je Kanal die Stellung (0/1, 2 = unterwegs oder unbekannt).
+Der Status ist „Warnung“, solange eine Stellung nach einem Stromausfall während der Fahrt unsicher ist.
 
 ### 5.7 CAN-Tunnel `CG2_F_CAN` (0x07)
 Ein CAN-Frame ist immer das 13-Byte-Märklin-Format (ID 4 Byte, DLC, 8 Datenbytes).

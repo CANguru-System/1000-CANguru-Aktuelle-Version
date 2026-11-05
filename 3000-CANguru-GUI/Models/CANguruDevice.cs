@@ -118,22 +118,15 @@ namespace CANguru.Models
         public byte Address { get; set; }
         public int Delay { get; set; }
         public int StepsToEnd { get; set; }
+        // Zubehör-Decoder mit Stepper (Phase 3): Parameter 0 Adresse, 1 Verzögerung, 2 Laufweg
         public override void UpdateFromDecoder()
         {
-            var payload = DecoderProtocol.ReadPayload(
-                AssignedId,
-                (byte)ProtocolConstants.CG2_F_STEPPER,
-                (byte)ProtocolConstants.SWITCH_CMD_GET_SETTINGS,
-                expectedLength: ProtocolConstants.EXP_LNG_SWITCH_SETTINGS,
-                requestPayload: new byte[] { (byte)AssignedId }
-            );
-
-            if (payload == null)
+            var adr = DecoderProtocol.ReadParam((byte)AssignedId, 0);
+            if (adr == null)
                 return; // Decoder noch nicht bereit
-
-            Address = payload[1];
-            Delay = (payload[2] << 8) | payload[3];
-            StepsToEnd = (payload[4] << 8) | payload[5];
+            Address = (byte)adr.Value;
+            Delay = DecoderProtocol.ReadParam((byte)AssignedId, 1) ?? Delay;
+            StepsToEnd = DecoderProtocol.ReadParam((byte)AssignedId, 2) ?? StepsToEnd;
         }
 
         public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
@@ -151,22 +144,15 @@ namespace CANguru.Models
         public byte Address { get; set; }
         public int Delay { get; set; }
         public int StepsToEnd { get; set; }
+        // Zubehör-Decoder mit Stepper (Phase 3): Parameter 0 Adresse, 1 Verzögerung, 2 Laufweg
         public override void UpdateFromDecoder()
         {
-            var payload = DecoderProtocol.ReadPayload(
-                AssignedId,
-                (byte)ProtocolConstants.CG2_F_STEPPER,
-                (byte)ProtocolConstants.SWITCH_CMD_GET_SETTINGS,
-                expectedLength: ProtocolConstants.EXP_LNG_SIGNAL_SETTINGS  ,
-                requestPayload: new byte[] { (byte)AssignedId }
-            );
-
-            if (payload == null)
+            var adr = DecoderProtocol.ReadParam((byte)AssignedId, 0);
+            if (adr == null)
                 return; // Decoder noch nicht bereit
-
-            Address = payload[1];
-            Delay = (payload[2] << 8) | payload[3];
-            StepsToEnd = (payload[4] << 8) | payload[5];
+            Address = (byte)adr.Value;
+            Delay = DecoderProtocol.ReadParam((byte)AssignedId, 1) ?? Delay;
+            StepsToEnd = DecoderProtocol.ReadParam((byte)AssignedId, 2) ?? StepsToEnd;
         }
         public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
         {

@@ -860,18 +860,10 @@ namespace CANguru.Views
             switch (decoder.Type)
             {
                 case DecoderType.Switch:
-                    byte switchassignedId = (byte)decoder.AssignedId;
-
-                    activeSwitchForm = new SwitchDecoderSettingsForm(switchassignedId);
-                    activeSwitchForm.ShowDialog(this);
-                    activeSwitchForm = null; // nach dem Schließen aufräumen
-                    return;
                 case DecoderType.Signal:
-                    byte signalassignedId = (byte)decoder.AssignedId;
-
-                    activeSignalForm = new SignalDecoderSettingsForm(signalassignedId);
-                    activeSignalForm.ShowDialog(this);
-                    activeSignalForm = null; // nach dem Schließen aufräumen
+                    // Zubehör-Decoder (Phase 3): Einstellungen und Kalibrierung über das
+                    // Parameter-Fenster. Das Fenster mit Weichenbild kommt in Phase 5 zurück.
+                    OpenParameterForm(decoder);
                     return;
                 case DecoderType.Feedback:
                     {
@@ -1324,9 +1316,21 @@ namespace CANguru.Views
         // Kontextmenü der Decoderliste: allgemeines Parameter-Fenster aus der Selbstbeschreibung
         private void DecoderParameter_Click(object? sender, EventArgs e)
         {
-            if (listBoxDecoder.SelectedItem is not CANguruDecoder decoder)
-                return;
-            using var form = new ParameterForm((byte)decoder.AssignedId, decoder.Type.ToString());
+            if (listBoxDecoder.SelectedItem is CANguruDecoder decoder)
+                OpenParameterForm(decoder);
+        }
+
+        private void OpenParameterForm(CANguruDecoder decoder)
+        {
+            string title = decoder.Type switch
+            {
+                DecoderType.Switch => "Weiche",
+                DecoderType.Signal => "Formsignal",
+                DecoderType.Power => "Stromdecoder",
+                DecoderType.Feedback => "Rückmelder",
+                _ => decoder.Type.ToString()
+            };
+            using var form = new ParameterForm((byte)decoder.AssignedId, title);
             activeParameterForm = form;
             try
             {

@@ -2,10 +2,8 @@
 #include "DecoderBase.h"
 #include "DecoderFactory.h"
 
-#if DECODER_TYPE == DEVTYPE_SIGNAL
-#include "../features/signal/SignalDecoder.h"
-#elif DECODER_TYPE == DEVTYPE_SWITCH
-#include "../features/switch/SwitchDecoder.h"
+#if DECODER_TYPE == DEVTYPE_SIGNAL || DECODER_TYPE == DEVTYPE_SWITCH
+#include "../features/accessory/StepperAccessory.h"
 #elif DECODER_TYPE == DEVTYPE_POWER
 #include "../features/power/PowerDecoder.h"
 #elif DECODER_TYPE == DEVTYPE_RM
@@ -13,10 +11,9 @@
 #endif
 
 DecoderBase* createDecoder() {
-#if DECODER_TYPE == DEVTYPE_SIGNAL
-    return new SignalDecoder();
-#elif DECODER_TYPE == DEVTYPE_SWITCH
-    return new SwitchDecoder();
+#if DECODER_TYPE == DEVTYPE_SIGNAL || DECODER_TYPE == DEVTYPE_SWITCH
+    // Weiche und Formsignal: Zubehör-Decoder mit Stepper-Antrieb (ein Quelltext)
+    return new StepperAccessory();
 #elif DECODER_TYPE == DEVTYPE_POWER
     return new PowerDecoder();
 #elif DECODER_TYPE == DEVTYPE_RM

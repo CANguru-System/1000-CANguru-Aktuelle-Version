@@ -31,7 +31,11 @@ static void sendAlive()
     if (aliveGetDecoderID() == INVALID_ASSIGNED_ID || otaInProgress)
         return;
 
-    uint8_t status = (gDecoder->getStatus() == DecoderBase::AliveState::Online) ? CG2_STATUS_OK : CG2_STATUS_ERROR;
+    // Online = OK, Weak = Warnung (z. B. Stellung unsicher), Offline = Fehler (z. B. Überstrom)
+    DecoderBase::AliveState s = gDecoder->getStatus();
+    uint8_t status = (s == DecoderBase::AliveState::Online) ? CG2_STATUS_OK
+                   : (s == DecoderBase::AliveState::Weak) ? CG2_STATUS_WARNING
+                                                          : CG2_STATUS_ERROR;
     uint16_t values[8];
     uint8_t count = gDecoder->getAliveValues(values, 8);
     coreLinkSendAlive(status, values, count);
