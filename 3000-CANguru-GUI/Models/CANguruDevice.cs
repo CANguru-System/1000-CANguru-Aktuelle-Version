@@ -16,7 +16,8 @@ namespace CANguru.Models
         Signal = ProtocolConstants.DEVTYPE_SIGNAL,
         Switch = ProtocolConstants.DEVTYPE_SWITCH,
         Power = ProtocolConstants.DEVTYPE_POWER,
-        Feedback = ProtocolConstants.DEVTYPE_RM
+        Feedback = ProtocolConstants.DEVTYPE_RM,
+        LedSignal = ProtocolConstants.DEVTYPE_LEDSIGNAL
     }
 
     public abstract class CANguruDevice

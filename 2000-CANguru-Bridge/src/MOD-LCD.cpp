@@ -2407,7 +2407,7 @@ void clearDisplay()
   display9341.fillScreen(ILI9341_BLACK);
 }
 
-void drawAliveCounts(int power, int sw, int signal, int feedback)
+void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal)
 {
   const uint16_t offset = 70;
   // Beim ersten Aufruf den Hintergrund neu zeichnen (löscht die Startmeldungen);
@@ -2445,9 +2445,15 @@ void drawAliveCounts(int power, int sw, int signal, int feedback)
   display9341.print("Feedback: ");
   display9341.println(feedback);
 
-  // Gleisbox
+  // LED-Signale
   display9341.fillRect(0, offset + 100, 200, 20, COLOR_BG);
   display9341.setCursor(0, offset + 100);
+  display9341.print("LED-Sig.: ");
+  display9341.println(ledsignal);
+
+  // Gleisbox
+  display9341.fillRect(0, offset + 120, 200, 20, COLOR_BG);
+  display9341.setCursor(0, offset + 120);
   display9341.print("Gleisbox: ");
   if (GB_found)
     display9341.println("OK");

@@ -160,7 +160,8 @@ das OTA-WLAN. Standard 8,5 dBm bei ESP32-C3 (viele SuperMini-Module verbinden si
 | `CG2_EV_OVERCURRENT` 0x02 | `[kanal][strom mA u16]`. Die Bridge sendet zusätzlich STOPP an die Gleisbox. |
 | `CG2_EV_CALIBRATED` 0x03 | `[kanal][laufweg u16]` |
 
-Zubehör-Decoder (Weiche, Formsignal, ab 3.3 LED-Signal) melden im Alive je Kanal die Stellung (0/1, 2 = unterwegs oder unbekannt).
+Zubehör-Decoder (Weiche `0x52`, Formsignal `0x51`, LED-Signal `0x58` mit vier Kanälen) melden im Alive je Kanal die Stellung (0/1, 2 = unterwegs oder unbekannt).
+Märklin-Stellbefehle (`SWITCH_ACC`) gibt die Bridge an **alle** Decoder weiter; nur Zubehör-Decoder werten sie aus.
 Der Status ist „Warnung“, solange eine Stellung nach einem Stromausfall während der Fahrt unsicher ist.
 
 ### 5.7 CAN-Tunnel `CG2_F_CAN` (0x07)

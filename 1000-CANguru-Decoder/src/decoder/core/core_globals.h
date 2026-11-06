@@ -17,6 +17,9 @@ extern CANguruPreferences prefsSwitch;
 #if DECODER_TYPE == DEVTYPE_RM
 extern CANguruPreferences prefsFeedBack;
 #endif
+#if DECODER_TYPE == DEVTYPE_LEDSIGNAL
+extern CANguruPreferences prefsLedSignal;
+#endif
 // Funktion stellt sicher, dass keine unerlaubten 8-Bit-Werte geladen werden können
 uint8_t readValfromPreferences8(CANguruPreferences& pref, const char* key, uint8_t val, uint8_t min, uint8_t max);
 

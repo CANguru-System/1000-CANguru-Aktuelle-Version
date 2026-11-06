@@ -114,8 +114,10 @@ void readWDP()
       break;
 
     case SWITCH_ACC:
-      sendFrame2TypeDecoders(CANbuffer, CAN_FRAME_SIZE, DEVTYPE_SWITCH);
-      sendFrame2TypeDecoders(CANbuffer, CAN_FRAME_SIZE, DEVTYPE_SIGNAL);
+      // Stellbefehle an alle Decoder in einem Versand: Zubehör-Decoder (Weiche, Formsignal,
+      // LED-Signal) werten sie aus, alle anderen ignorieren sie. Bisher je Typ einzeln
+      // (je 50 ms Pause) - ein neuer Zubehörtyp wäre sonst leer ausgegangen.
+      sendFrame2allDecoders(CANbuffer, CAN_FRAME_SIZE);
       break;
 
     default:

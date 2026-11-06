@@ -23,6 +23,9 @@ CANguruPreferences prefsSwitch("switch");
 #if DECODER_TYPE == DEVTYPE_RM
 CANguruPreferences prefsFeedBack("feedback");
 #endif
+#if DECODER_TYPE == DEVTYPE_LEDSIGNAL
+CANguruPreferences prefsLedSignal("ledsignal");
+#endif
 
 
 bool parsePacket(const uint8_t* data, int len,

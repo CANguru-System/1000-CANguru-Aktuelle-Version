@@ -862,6 +862,7 @@ namespace CANguru.Views
             {
                 case DecoderType.Switch:
                 case DecoderType.Signal:
+                case DecoderType.LedSignal:
                     // Zubehör-Decoder (Phase 3): Einstellungen und Kalibrierung über das
                     // Parameter-Fenster. Das Fenster mit Weichenbild kommt in Phase 5 zurück.
                     OpenParameterForm(decoder);
@@ -1329,6 +1330,7 @@ namespace CANguru.Views
                 DecoderType.Signal => "Formsignal",
                 DecoderType.Power => "Stromdecoder",
                 DecoderType.Feedback => "Rückmelder",
+                DecoderType.LedSignal => "LED-Signale",
                 _ => decoder.Type.ToString()
             };
             using var form = new ParameterForm((byte)decoder.AssignedId, title);
@@ -1434,6 +1436,7 @@ namespace CANguru.Views
                     DecoderType.Signal => "Signaldecoder",
                     DecoderType.Power => "Stromwaechter",
                     DecoderType.Feedback => "Gleisbesetztmelder",
+                    DecoderType.LedSignal => "LED-Signaldecoder",
                     _ => "Decoder"
                 };
 

@@ -12,7 +12,7 @@
     itself; with several boards connected, give the port (e.g. COM5).
 
 .PARAMETER Typ
-    switch, signal, power, feedback (decoders) or bridge.
+    switch, signal, ledsignal, power, feedback (decoders) or bridge.
 
 .PARAMETER Port
     Optional: serial port, e.g. COM5.
@@ -30,7 +30,7 @@
 #>
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('switch', 'signal', 'power', 'feedback', 'bridge')]
+    [ValidateSet('switch', 'signal', 'ledsignal', 'power', 'feedback', 'bridge')]
     [string]$Typ,
     [string]$Port,
     [switch]$Loeschen,

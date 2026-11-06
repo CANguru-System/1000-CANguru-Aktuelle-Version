@@ -50,6 +50,6 @@ void initDisplayLCD28();
 // löscht den Bildschirm und zeigt das CANguru an
 void backgroundDisplayLCD28();
 // gibt die aktuelle Anzahl der Decoder aus
-void drawAliveCounts(int power, int sw, int signal, int feedback);
+void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal);
 
 #endif

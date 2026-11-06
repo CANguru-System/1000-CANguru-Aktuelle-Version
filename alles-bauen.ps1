@@ -31,7 +31,7 @@ $wurzel = $PSScriptRoot
 $ausgabe = Join-Path $wurzel '_build'
 $python = Join-Path $env:USERPROFILE '.platformio\penv\Scripts\python.exe'
 
-$decoderUmgebungen = @('switch', 'signal', 'power', 'feedback')
+$decoderUmgebungen = @('switch', 'signal', 'ledsignal', 'power', 'feedback')
 $ergebnisse = [System.Collections.Generic.List[object]]::new()
 
 function Pruefe-Werkzeuge {
@@ -44,7 +44,7 @@ function Pruefe-Werkzeuge {
 }
 
 # Chip of each PlatformIO environment (for esptool merge_bin)
-$chipJeUmgebung = @{ switch = 'esp32c3'; signal = 'esp32c3'; power = 'esp32c3'; feedback = 'esp32'; 'esp32-evb' = 'esp32' }
+$chipJeUmgebung = @{ switch = 'esp32c3'; signal = 'esp32c3'; power = 'esp32c3'; ledsignal = 'esp32'; feedback = 'esp32'; 'esp32-evb' = 'esp32' }
 
 # Writes _build\<zielname>-komplett.bin: bootloader, partition table, boot_app0 and
 # application merged into one image that is flashed at address 0x0. It works on an
