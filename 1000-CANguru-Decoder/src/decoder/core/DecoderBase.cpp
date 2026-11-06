@@ -20,6 +20,7 @@ void DecoderBase::setup()
 
     // GANZ AM ENDE: ESP-NOW initialisieren, danach darf gesendet werden
     coreEspNowInit();
+    coreRadioInit(); // Sendeleistung (Parameter des Kerns)
 
     // Nach einem OTA-Neustart kennt der Decoder seine ID noch und meldet sich zurück
     if (aliveGetDecoderID() != INVALID_ASSIGNED_ID)

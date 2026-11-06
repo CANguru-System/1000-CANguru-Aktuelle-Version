@@ -139,6 +139,11 @@ Ja/Nein wird zu 0 oder 1. Ein Auswahlindex außerhalb der Liste ergibt `CG2_ERR_
 den tatsächlich gespeicherten Wert. Die Bearbeitung übernimmt der Decoder-Kern (`Core_Param.cpp`) anhand der
 Tabellen des Decodertyps (`DecoderBase::paramDef`, `actionDef`, `valueDef`).
 
+**Parameter des Kerns** folgen bei jedem Decoder auf die Parameter des Typs (Nummern ab der Anzahl der Typ-Parameter;
+`anzahl gesamt` zählt sie mit). Bisher einer: **Sendeleistung** (Auswahl 8,5 / 11 / 15 / 19,5 dBm), gilt für ESP-NOW und
+das OTA-WLAN. Standard 8,5 dBm bei ESP32-C3 (viele SuperMini-Module verbinden sich bei voller Leistung schlecht),
+19,5 dBm beim klassischen ESP32. Bleibt bei Werkseinstellungen erhalten.
+
 ### 5.5 Aktion `CG2_F_ACTION` (0x05)
 | Kommando | Richtung | Nutzdaten |
 |---|---|---|

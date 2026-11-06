@@ -11,6 +11,7 @@
 #include "Core_EspNow.h"
 #include "protocol_constants_core.h"
 #include "Core_Config.h"
+#include "Core_Param.h"
 #include "Core_Logging.h"
 #include "Core_globals.h"
 #include "DecoderBase.h"
@@ -40,6 +41,7 @@ static bool connectToBridgeAP()
     {
         Serial.printf("DECODER: Verbinde mit AP %s (Kanal %d), Versuch %u\r\n", OTA_SSID, BRIDGE_AP_CHANNEL, attempt);
         WiFi.begin(OTA_SSID, OTA_PASS, BRIDGE_AP_CHANNEL);
+        coreRadioApplyTxPower(); // gilt auch für das OTA-WLAN
 
         unsigned long start = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - start < attemptMs)
