@@ -511,6 +511,7 @@ namespace CANguru.Views
             UdpClientSingleton.Instance.SetBridge(bridgeIp);
             UiInvoke(() => txtBridgeIP.Text = ProtocolConfig.ipString);
             UiInvoke(() => btnStopGo.Enabled = true);
+            UiInvoke(() => btnConnect.Text = "Verbunden");
 
             // Lokliste zur Bridge, damit WDP sie abholen kann. Ohne Fortschrittsbalken:
             // die Datei ist klein und in Sekundenbruchteilen übertragen (der Balken blitzte
@@ -1709,6 +1710,7 @@ namespace CANguru.Views
             try
             {
                 btnConnect.Enabled = false;
+                btnConnect.Text = "Verbinde ..."; // "Verbunden", sobald die Bridge antwortet (HandleBridgeFound)
 
                 StartUdp();
 
@@ -1718,6 +1720,8 @@ namespace CANguru.Views
             catch (Exception ex)
             {
                 Log("Fehler: " + ex.Message);
+                btnConnect.Text = "Verbinden";
+                btnConnect.Enabled = true;
             }
         }
 
