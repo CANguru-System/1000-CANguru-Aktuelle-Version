@@ -2,53 +2,62 @@
 #if DECODER_TYPE == DEVTYPE_LEDSIGNAL
 
 #include <Arduino.h>
+#include <Wire.h>
 #include "LedSignalAccessory.h"
 #include "Core_EspNow.h"
 #include "core_globals.h"
 
-// Pins laut alter Software und Schaltplan (LED-Signaldecoder.png): Signal 1 ... 4
-static const uint8_t PIN_RED[LedSignalAccessory::SIGNALS] = {GPIO_NUM_22, GPIO_NUM_19, GPIO_NUM_5, GPIO_NUM_16};
-static const uint8_t PIN_GREEN[LedSignalAccessory::SIGNALS] = {GPIO_NUM_21, GPIO_NUM_18, GPIO_NUM_17, GPIO_NUM_4};
-
-// PWM (LEDC): Kanal k = rot von Signal k, Kanal 4 + k = grün
-static const uint32_t PWM_FREQ = 5000;
-static const uint8_t PWM_BITS = 10;
-static const uint32_t PWM_MAX = (1 << PWM_BITS) - 1;
+// CANguru-Platine 1.0: PCA9685 an den Standard-I²C-Pins des ESP32, Adressbrücken offen
+static const uint8_t PIN_SDA = 21;
+static const uint8_t PIN_SCL = 22;
+static const uint8_t PCA_ADDRESS = 0x40;
+static const uint16_t PWM_FREQ = 1000; // Hz, flimmerfrei
 
 static const unsigned long TEST_STEP_MS = 1500;
+
+// Ausgänge am PCA9685: Signal k (0 ... 7): rot = 2k, grün = 2k + 1
+static inline uint8_t outRed(uint8_t ch) { return 2 * ch; }
+static inline uint8_t outGreen(uint8_t ch) { return 2 * ch + 1; }
 
 // ------------------------------------------------------------
 // Selbstbeschreibung
 // ------------------------------------------------------------
 enum ParamNr : uint8_t
 {
-    // je Signal k (0..3): Adresse = 2k, vorhanden = 2k + 1
-    P_BRIGHT_RED = 8,
+    // je Signal k (0 ... 7): Adresse = 2k, vorhanden = 2k + 1
+    P_BRIGHT_RED = 2 * LedSignalAccessory::SIGNALS,
     P_BRIGHT_GREEN,
     P_FADE,
+    P_WIRING,
     P_COUNT
 };
 
+static const char *const WIRING_CHOICES[] = {"gemeinsame Anode", "gemeinsame Kathode"};
+
+#define LED_SIGNAL_PARAMS(k)                                                                                    \
+    {CG2_TYPE_U8, 1, 255, k, 1, "", "Signal " #k ": Adresse", nullptr, 0, "adr" #k, CG2_PF_KEEP_ON_RESET},     \
+    {CG2_TYPE_BOOL, 0, 1, 1, 1, "", "Signal " #k ": vorhanden", nullptr, 0, "on" #k, CG2_PF_KEEP_ON_RESET}
+
 static const Cg2ParamDef ledParams[P_COUNT] = {
     // Typ, min, max, Standard, Schritt, Einheit, Name, Auswahl, Anzahl, NVS-Schlüssel, Merkmale
-    {CG2_TYPE_U8, 1, 255, 1, 1, "", "Signal 1: Adresse", nullptr, 0, "adr1", CG2_PF_KEEP_ON_RESET},
-    {CG2_TYPE_BOOL, 0, 1, 1, 1, "", "Signal 1: vorhanden", nullptr, 0, "on1", CG2_PF_KEEP_ON_RESET},
-    {CG2_TYPE_U8, 1, 255, 2, 1, "", "Signal 2: Adresse", nullptr, 0, "adr2", CG2_PF_KEEP_ON_RESET},
-    {CG2_TYPE_BOOL, 0, 1, 1, 1, "", "Signal 2: vorhanden", nullptr, 0, "on2", CG2_PF_KEEP_ON_RESET},
-    {CG2_TYPE_U8, 1, 255, 3, 1, "", "Signal 3: Adresse", nullptr, 0, "adr3", CG2_PF_KEEP_ON_RESET},
-    {CG2_TYPE_BOOL, 0, 1, 1, 1, "", "Signal 3: vorhanden", nullptr, 0, "on3", CG2_PF_KEEP_ON_RESET},
-    {CG2_TYPE_U8, 1, 255, 4, 1, "", "Signal 4: Adresse", nullptr, 0, "adr4", CG2_PF_KEEP_ON_RESET},
-    {CG2_TYPE_BOOL, 0, 1, 1, 1, "", "Signal 4: vorhanden", nullptr, 0, "on4", CG2_PF_KEEP_ON_RESET},
+    LED_SIGNAL_PARAMS(1),
+    LED_SIGNAL_PARAMS(2),
+    LED_SIGNAL_PARAMS(3),
+    LED_SIGNAL_PARAMS(4),
+    LED_SIGNAL_PARAMS(5),
+    LED_SIGNAL_PARAMS(6),
+    LED_SIGNAL_PARAMS(7),
+    LED_SIGNAL_PARAMS(8),
     {CG2_TYPE_U8, 1, 100, 60, 1, "%", "Helligkeit rot", nullptr, 0, "briR", 0},
     {CG2_TYPE_U8, 1, 100, 60, 1, "%", "Helligkeit grün", nullptr, 0, "briG", 0},
     {CG2_TYPE_U16, 0, 1000, 300, 50, "ms", "Überblendzeit (0 = hart)", nullptr, 0, "fadeMs", 0},
+    {CG2_TYPE_CHOICE, 0, 1, 0, 1, "", "LED-Anschluss", WIRING_CHOICES, 2, "wiring", CG2_PF_KEEP_ON_RESET},
 };
 
 enum ActionNr : uint8_t
 {
     A_TEST = 0,
-    // A_TOGGLE + k: Signal k umschalten
-    A_TOGGLE,
+    A_TOGGLE, // A_TOGGLE + k: Signal k umschalten
     A_COUNT = A_TOGGLE + LedSignalAccessory::SIGNALS
 };
 
@@ -58,6 +67,10 @@ static const Cg2InfoDef ledActions[A_COUNT] = {
     {"Signal 2 umschalten", ""},
     {"Signal 3 umschalten", ""},
     {"Signal 4 umschalten", ""},
+    {"Signal 5 umschalten", ""},
+    {"Signal 6 umschalten", ""},
+    {"Signal 7 umschalten", ""},
+    {"Signal 8 umschalten", ""},
 };
 
 LedSignalAccessory::LedSignalAccessory() : AccessoryDecoder(&prefsLedSignal) {}
@@ -66,7 +79,7 @@ void LedSignalAccessory::setup()
 {
     DEVTYPE = DEVTYPE_LEDSIGNAL;
     VERS_HIGH = 1;
-    VERS_LOW = 0;
+    VERS_LOW = 1; // 1.1: PCA9685, acht Signale
     AccessoryDecoder::setup();
 }
 
@@ -79,6 +92,14 @@ uint8_t LedSignalAccessory::channelAddress(uint8_t ch) const
 {
     // nicht angeschlossene Signale reagieren auf nichts und melden nichts an WDP
     return (ch < SIGNALS && present[ch]) ? address[ch] : 0;
+}
+
+// Ohne PCA9685 kann der Decoder nichts anzeigen: Fehler melden
+DecoderBase::AliveState LedSignalAccessory::getStatus() const
+{
+    if (ready && !pwm.ok())
+        return AliveState::Offline;
+    return AccessoryDecoder::getStatus();
 }
 
 void LedSignalAccessory::onParamChanged(uint8_t n, uint16_t value)
@@ -107,12 +128,15 @@ void LedSignalAccessory::onParamChanged(uint8_t n, uint16_t value)
     case P_FADE:
         fadeMs = value;
         return;
+    case P_WIRING:
+        commonAnode = (value == 0);
+        if (ready)
+            pwm.setOpenDrain(commonAnode);
+        break;
     }
-    // neue Helligkeit sofort zeigen
+    // neue Helligkeit bzw. Anschlussart sofort zeigen
     if (ready)
-        for (uint8_t ch = 0; ch < SIGNALS; ch++)
-            if (!fade[ch].active)
-                renderShown(ch);
+        renderAll();
 }
 
 // ------------------------------------------------------------
@@ -121,33 +145,38 @@ void LedSignalAccessory::onParamChanged(uint8_t n, uint16_t value)
 
 void LedSignalAccessory::driveSetup()
 {
-    for (uint8_t ch = 0; ch < SIGNALS; ch++)
-    {
-        ledcSetup(ch, PWM_FREQ, PWM_BITS);
-        ledcAttachPin(PIN_RED[ch], ch);
-        ledcSetup(SIGNALS + ch, PWM_FREQ, PWM_BITS);
-        ledcAttachPin(PIN_GREEN[ch], SIGNALS + ch);
-        render(ch, 0, 0);
-    }
+    Wire.begin(PIN_SDA, PIN_SCL, 400000);
+    // Gemeinsame Anode: Open-Drain, damit ausgeschaltete LEDs wirklich stromlos sind
+    if (pwm.begin(Wire, PCA_ADDRESS, PWM_FREQ, commonAnode))
+        Serial.printf("LED-SIGNAL: PCA9685 an Adresse 0x%02X gefunden\r\n", PCA_ADDRESS);
+    else
+        Serial.printf("LED-SIGNAL: PCA9685 an Adresse 0x%02X NICHT gefunden (SDA %u, SCL %u)\r\n",
+                      PCA_ADDRESS, PIN_SDA, PIN_SCL);
     ready = true;
     // nach dem Einschalten: Rot, bis die Bridge GO meldet
     showAll(false);
 }
 
-// Pegel 0..1 je Farbe. Gemeinsame Anode: die LED leuchtet, solange der Pin LOW ist,
-// also wird der Tastgrad umgekehrt. Quadratische Kennlinie, damit das Überblenden für
-// das Auge gleichmäßig wirkt.
+// Pegel 0..1 je Farbe; quadratische Kennlinie, damit das Überblenden für das Auge
+// gleichmäßig wirkt. Die Anschlussart (Anode/Kathode) berücksichtigt der Treiber.
 void LedSignalAccessory::render(uint8_t ch, float redLevel, float greenLevel)
 {
     float r = redLevel * brightRed / 100.0f;
     float g = greenLevel * brightGreen / 100.0f;
-    ledcWrite(ch, PWM_MAX - (uint32_t)(r * r * PWM_MAX));
-    ledcWrite(SIGNALS + ch, PWM_MAX - (uint32_t)(g * g * PWM_MAX));
+    pwm.setLevel(outRed(ch), (uint16_t)(r * r * Pca9685::MAX));
+    pwm.setLevel(outGreen(ch), (uint16_t)(g * g * Pca9685::MAX));
 }
 
 void LedSignalAccessory::renderShown(uint8_t ch)
 {
     render(ch, shown[ch] == RED ? 1 : 0, shown[ch] == GREEN ? 1 : 0);
+}
+
+void LedSignalAccessory::renderAll()
+{
+    for (uint8_t ch = 0; ch < SIGNALS; ch++)
+        if (!fade[ch].active && testPhase == 0)
+            renderShown(ch);
 }
 
 LedSignalAccessory::Aspect LedSignalAccessory::wanted(uint8_t ch) const
@@ -239,9 +268,7 @@ void LedSignalAccessory::driveTick()
         }
         // Test vorbei: wieder das richtige Signalbild
         testPhase = 0;
-        for (uint8_t ch = 0; ch < SIGNALS; ch++)
-            if (!fade[ch].active)
-                renderShown(ch);
+        renderAll();
         return;
     }
 

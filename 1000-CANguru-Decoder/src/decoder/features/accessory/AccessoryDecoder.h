@@ -19,7 +19,7 @@ class AccessoryDecoder : public DecoderBase
 {
 public:
     static const uint8_t POS_UNKNOWN = 2; // Messwert: unterwegs oder nach Stromausfall unsicher
-    static const uint8_t MAX_CHANNELS = 4;
+    static const uint8_t MAX_CHANNELS = 8; // Bitmasken unten sind 8 Bit breit
 
     void setup() override;
     void loop() override;
@@ -64,7 +64,7 @@ private:
     void reportToWdp(uint8_t ch);
     static const char *positionKey(uint8_t ch);
 
-    uint8_t positions[MAX_CHANNELS] = {0, 0, 0, 0};
+    uint8_t positions[MAX_CHANNELS] = {0};
     uint8_t moving = 0;    // Bitmaske: Kanal bewegt sich gerade
     uint8_t uncertain = 0; // Bitmaske: Stellung nach Stromausfall während der Fahrt unsicher
     char valueNames[MAX_CHANNELS][16];

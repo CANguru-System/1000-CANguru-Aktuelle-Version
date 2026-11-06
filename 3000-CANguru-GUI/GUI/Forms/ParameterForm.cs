@@ -52,7 +52,7 @@ namespace CANguru.GUI.Forms
             this.title = title;
             Text = $"Parameter – {title} (ID {decoderId})";
             StartPosition = FormStartPosition.CenterParent;
-            Size = new Size(520, 420);
+            Size = new Size(560, 620); // LED-Signaldecoder: rund 40 Zeilen, der Rest scrollt
             MinimumSize = new Size(420, 300);
             CancelButton = btnClose;
 

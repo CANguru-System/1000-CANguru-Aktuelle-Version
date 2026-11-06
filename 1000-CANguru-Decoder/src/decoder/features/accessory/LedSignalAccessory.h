@@ -3,22 +3,25 @@
 #if DECODER_TYPE == DEVTYPE_LEDSIGNAL
 
 #include "AccessoryDecoder.h"
+#include "Pca9685.h"
 
-// Zubehör-Decoder mit LED-Antrieb: vier Lichtsignale rot/grün an einem ESP32-DevKit
-// (vorhandene Platine, gemeinsame Anode an 3,3 V, jede LED mit eigenem Vorwiderstand;
-// eine LED leuchtet, wenn ihr GPIO auf LOW liegt).
+// Zubehör-Decoder mit LED-Antrieb: bis zu acht Lichtsignale rot/grün an einem
+// PWM-Baustein PCA9685 (CANguru-Platine 1.0 mit ESP32-DevKit, I²C an GPIO 21/22,
+// Adresse 0x40). Signal k (1 ... 8): rot an Ausgang 2(k-1), grün an Ausgang 2(k-1)+1.
+// Standard: gemeinsame Anode, die LED leuchtet, wenn der Ausgang nach Masse schaltet.
 //
-// Helligkeit je Farbe einstellbar (PWM), Wechsel mit einstellbarem Überblenden wie bei
-// einer Glühlampe: erst das alte Licht aus, dann das neue an. Nach dem Einschalten und
+// Helligkeit je Farbe einstellbar (12 Bit PWM), Wechsel mit einstellbarem Überblenden wie
+// bei einer Glühlampe: erst das alte Licht aus, dann das neue an. Nach dem Einschalten und
 // bei STOPP zeigen alle Signale Rot; nach GO wieder die gespeicherte Stellung.
 class LedSignalAccessory : public AccessoryDecoder
 {
 public:
-    static const uint8_t SIGNALS = 4;
+    static const uint8_t SIGNALS = 8;
 
     LedSignalAccessory();
     void setup() override;
     void onTrackPower(bool on) override;
+    AliveState getStatus() const override;
 
     // Selbstbeschreibung
     uint8_t paramCount() const override;
@@ -58,19 +61,23 @@ private:
     void show(uint8_t ch, Aspect target, bool report);
     void render(uint8_t ch, float redLevel, float greenLevel);
     void renderShown(uint8_t ch);
+    void renderAll();
     Aspect wanted(uint8_t ch) const; // Stellung, Gleisspannung und "vorhanden" berücksichtigt
     void showAll(bool animate);
 
+    Pca9685 pwm;
+
     // Parameter (Kopie aus dem Speicher des Kerns)
-    uint8_t address[SIGNALS] = {1, 2, 3, 4};
-    bool present[SIGNALS] = {true, true, true, true};
-    uint8_t brightRed = 60;    // %
-    uint8_t brightGreen = 60;  // %
+    uint8_t address[SIGNALS] = {1, 2, 3, 4, 5, 6, 7, 8};
+    bool present[SIGNALS] = {true, true, true, true, true, true, true, true};
+    uint8_t brightRed = 60;   // %
+    uint8_t brightGreen = 60; // %
     uint16_t fadeMs = 300;
+    bool commonAnode = true;
 
     bool trackOn = false; // bis GO alle rot
     bool ready = false;   // nach driveSetup()
-    Aspect shown[SIGNALS] = {DARK, DARK, DARK, DARK};
+    Aspect shown[SIGNALS] = {DARK, DARK, DARK, DARK, DARK, DARK, DARK, DARK};
     Fade fade[SIGNALS];
 
     // Aktion "Alle Signale testen": grün, dann rot, dann wie vorher

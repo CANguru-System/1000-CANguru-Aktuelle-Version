@@ -7,7 +7,8 @@
 
 // Speicherschlüssel: Kanal 0 wie bisher "acc_state", damit die Stellung beim Umstieg
 // erhalten bleibt; weitere Kanäle "acc_state1" ...
-static const char *const POSITION_KEYS[AccessoryDecoder::MAX_CHANNELS] = {"acc_state", "acc_state1", "acc_state2", "acc_state3"};
+static const char *const POSITION_KEYS[AccessoryDecoder::MAX_CHANNELS] = {
+    "acc_state", "acc_state1", "acc_state2", "acc_state3", "acc_state4", "acc_state5", "acc_state6", "acc_state7"};
 static const char *KEY_MOVING = "acc_moving"; // Bitmaske der Kanäle, die gerade fahren
 
 static AccessoryDecoder *instance = nullptr;
