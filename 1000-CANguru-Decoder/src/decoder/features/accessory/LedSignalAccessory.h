@@ -72,7 +72,7 @@ private:
     bool present[SIGNALS] = {true, true, true, true, true, true, true, true};
     uint8_t brightRed = 60;   // %
     uint8_t brightGreen = 60; // %
-    uint16_t fadeMs = 300;
+    uint16_t fadeMs = 1000;
     bool commonAnode = true;
 
     bool trackOn = false; // bis GO alle rot

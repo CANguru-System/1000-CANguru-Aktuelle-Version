@@ -6,16 +6,12 @@ namespace CANguru.Protocol
 {
     public class AliveManager
     {
-        public event Action<int, int, int, int> AliveSummaryReceived;
+        // bereite Decoder je Typ: Strom, Weichen, Formsignale, Rückmelder, LED-Signale
+        public event Action<int, int, int, int, int>? AliveSummaryReceived;
 
-        private int lastPower = -1;
-        private int lastSwitch = -1;
-        private int lastSignal = -1;
-        private int lastFeedback = -1;
-
-        public void ProcessAliveSummary(int power, int sw, int signal, int feedback)
+        public void ProcessAliveSummary(int power, int sw, int signal, int feedback, int ledSignal)
         {
-            AliveSummaryReceived?.Invoke(power, sw, signal, feedback);
+            AliveSummaryReceived?.Invoke(power, sw, signal, feedback, ledSignal);
         }
     }
 }

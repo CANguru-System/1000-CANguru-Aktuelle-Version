@@ -90,6 +90,8 @@
             label5 = new Label();
             label6 = new Label();
             label7 = new Label();
+            label8 = new Label();
+            cntLedSignal = new TextBox();
             headerPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             tabPage1.SuspendLayout();
@@ -633,9 +635,9 @@
             label6.AutoSize = true;
             label6.Location = new Point(499, 359);
             label6.Name = "label6";
-            label6.Size = new Size(48, 15);
+            label6.Size = new Size(77, 15);
             label6.TabIndex = 31;
-            label6.Text = "Signale:";
+            label6.Text = "Formsignale:";
             // 
             // label7
             // 
@@ -645,13 +647,31 @@
             label7.Size = new Size(73, 15);
             label7.TabIndex = 32;
             label7.Text = "Rückmelder:";
-            // 
+            //
+            // label8
+            //
+            label8.AutoSize = true;
+            label8.Location = new Point(499, 451);
+            label8.Name = "label8";
+            label8.Size = new Size(72, 15);
+            label8.TabIndex = 33;
+            label8.Text = "LED-Signale:";
+            //
+            // cntLedSignal
+            //
+            cntLedSignal.Location = new Point(499, 470);
+            cntLedSignal.Name = "cntLedSignal";
+            cntLedSignal.Size = new Size(100, 23);
+            cntLedSignal.TabIndex = 34;
+            //
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(245, 245, 245);
             ClientSize = new Size(604, 679);
+            Controls.Add(cntLedSignal);
+            Controls.Add(label8);
             Controls.Add(label7);
             Controls.Add(label6);
             Controls.Add(label5);
@@ -751,6 +771,8 @@
         private Label label5;
         private Label label6;
         private Label label7;
+        private Label label8;
+        private TextBox cntLedSignal;
         private Button showLokList;
         private Button showDecoderList;
     }

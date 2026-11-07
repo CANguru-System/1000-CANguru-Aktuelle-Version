@@ -75,6 +75,7 @@ namespace CANguru.Views
         private int lastSwitch = -1;
         private int lastSignal = -1;
         private int lastFeedback = -1;
+        private int lastLedSignal = -1;
 
         // CAN-Queues
         private readonly ConcurrentQueue<(uint seq, byte[] data)> incomingFrames = new();
@@ -178,12 +179,13 @@ namespace CANguru.Views
             aliveManager = new AliveManager();
 
             // Hier kommt die Registrierung hin:
-            aliveManager.AliveSummaryReceived += (power, sw, signal, feedback) =>
+            aliveManager.AliveSummaryReceived += (power, sw, signal, feedback, ledSignal) =>
             {
                 lastPower = UpdateAliveField(cntPower, lastPower, power);
                 lastSwitch = UpdateAliveField(cntSwitch, lastSwitch, sw);
                 lastSignal = UpdateAliveField(cntSignal, lastSignal, signal);
                 lastFeedback = UpdateAliveField(cntFeedback, lastFeedback, feedback);
+                lastLedSignal = UpdateAliveField(cntLedSignal, lastLedSignal, ledSignal);
             };
             // Parser-Callbacks
             mfxParser.LogMessage += OnParserLog;
@@ -633,7 +635,7 @@ namespace CANguru.Views
         {
             if (payload.Length < 1)
                 return;
-            int power = 0, sw = 0, signal = 0, feedback = 0;
+            int power = 0, sw = 0, signal = 0, feedback = 0, ledSignal = 0;
             int n = payload[0];
             for (int i = 0; i < n && 2 + 2 * i < payload.Length; i++)
             {
@@ -643,8 +645,9 @@ namespace CANguru.Views
                 else if (typ == ProtocolConstants.DEVTYPE_SWITCH) sw = zahl;
                 else if (typ == ProtocolConstants.DEVTYPE_SIGNAL) signal = zahl;
                 else if (typ == ProtocolConstants.DEVTYPE_RM) feedback = zahl;
+                else if (typ == ProtocolConstants.DEVTYPE_LEDSIGNAL) ledSignal = zahl;
             }
-            aliveManager.ProcessAliveSummary(power, sw, signal, feedback);
+            aliveManager.ProcessAliveSummary(power, sw, signal, feedback, ledSignal);
         }
 
         // Feature Strom: Gleisspannung (TRACK [an]) und Überstrom (SHUTDOWN [kanal][mA u16])

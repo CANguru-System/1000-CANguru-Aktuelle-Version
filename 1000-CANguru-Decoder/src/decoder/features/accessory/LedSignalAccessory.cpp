@@ -50,7 +50,7 @@ static const Cg2ParamDef ledParams[P_COUNT] = {
     LED_SIGNAL_PARAMS(8),
     {CG2_TYPE_U8, 1, 100, 60, 1, "%", "Helligkeit rot", nullptr, 0, "briR", 0},
     {CG2_TYPE_U8, 1, 100, 60, 1, "%", "Helligkeit grün", nullptr, 0, "briG", 0},
-    {CG2_TYPE_U16, 0, 1000, 300, 50, "ms", "Überblendzeit (0 = hart)", nullptr, 0, "fadeMs", 0},
+    {CG2_TYPE_U16, 0, 3000, 1000, 50, "ms", "Überblendzeit (0 = hart)", nullptr, 0, "fadeMs", 0},
     {CG2_TYPE_CHOICE, 0, 1, 0, 1, "", "LED-Anschluss", WIRING_CHOICES, 2, "wiring", CG2_PF_KEEP_ON_RESET},
 };
 
@@ -79,7 +79,7 @@ void LedSignalAccessory::setup()
 {
     DEVTYPE = DEVTYPE_LEDSIGNAL;
     VERS_HIGH = 1;
-    VERS_LOW = 1; // 1.1: PCA9685, acht Signale
+    VERS_LOW = 2; // 1.2: Überblendzeit Standard 1000 ms (bis 3000 ms)
     AccessoryDecoder::setup();
 }
 
