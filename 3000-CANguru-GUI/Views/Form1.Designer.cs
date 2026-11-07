@@ -74,7 +74,6 @@
             tabControl1 = new TabControl();
             canTimer = new System.Windows.Forms.Timer(components);
             aliveTimer = new System.Windows.Forms.Timer(components);
-            btnCopy = new Button();
             PINGtimer = new System.Windows.Forms.Timer(components);
             looptimer = new System.Windows.Forms.Timer(components);
             STOPP_Timer = new System.Windows.Forms.Timer(components);
@@ -529,16 +528,6 @@
             aliveTimer.Interval = 500;
             aliveTimer.Tick += aliveTimer_Tick;
             // 
-            // btnCopy
-            // 
-            btnCopy.Location = new Point(513, 606);
-            btnCopy.Name = "btnCopy";
-            btnCopy.Size = new Size(75, 23);
-            btnCopy.TabIndex = 8;
-            btnCopy.Text = "Copy";
-            btnCopy.UseVisualStyleBackColor = true;
-            btnCopy.Click += btnCopy_Click;
-            // 
             // PINGtimer
             // 
             PINGtimer.Enabled = true;
@@ -690,7 +679,6 @@
             Controls.Add(label3);
             Controls.Add(groupBox3);
             Controls.Add(lblBRIDGEStatus);
-            Controls.Add(btnCopy);
             Controls.Add(tabControl1);
             Controls.Add(btnExit);
             Name = "Form1";
@@ -734,7 +722,6 @@
         private Label label3;
         private System.Windows.Forms.Timer canTimer;
         private System.Windows.Forms.Timer aliveTimer;
-        private Button btnCopy;
         private System.Windows.Forms.Timer PINGtimer;
         private System.Windows.Forms.Timer looptimer;
         private TextBox tbMessages;

@@ -139,11 +139,11 @@ namespace CANguru.Views
             dualBar.DividerColor = Color.Black;
             dualBar.TextColor = Color.Black;
 
-            // Position irgendwo sinnvoll platzieren:
+            // rechte Spalte unter dem Zähler "LED-Signale" (endet bei 493), über "Exit" (ab 644)
             dualBar.Width = 100;
-            dualBar.Height = 105;
-            dualBar.Left = 500;   // z.B. an Stelle der alten Bars
-            dualBar.Top = 450;
+            dualBar.Height = 132;
+            dualBar.Left = 500;
+            dualBar.Top = 502;
 
             this.Controls.Add(dualBar);
         }
@@ -1765,12 +1765,6 @@ namespace CANguru.Views
         private void btnExit_Click(object sender, EventArgs e)
         {
             close_GUI();
-        }
-
-        // CAN-Log in Zwischenablage kopieren
-        private void btnCopy_Click(object sender, EventArgs e)
-        {
-            Clipboard.SetText(listBoxCAN.Text);
         }
 
         // UpDown: neuer Subscription-Counter
