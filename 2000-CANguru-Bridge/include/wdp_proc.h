@@ -13,5 +13,4 @@ void readWDP();
 // -------------------- lokomotive.cs2 übertragen -------------------
 void setupDownloadRoutesCS2();
 void setupUploadRoute();
-void onRequest(AsyncWebServerRequest *request);
 void iNetEvtCB(arduino_event_id_t event, arduino_event_info_t info);

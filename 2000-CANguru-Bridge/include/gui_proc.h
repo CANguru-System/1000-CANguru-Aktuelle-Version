@@ -1,10 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <PacketHandler.h>
 
-// Senden an die GUI. Meldungen im Protokoll Version 2 (Sitzung, CAN, Datei, OTA)
-// stehen in gui_link.h; hier nur noch das alte Format für Decoder-Nachrichten.
+// Rohes UDP-Paket an die GUI. Die Nachrichten im Protokoll Version 2 baut gui_link.cpp;
+// darf nur aus loop() aufgerufen werden (das UDP-Objekt verträgt keine zwei Tasks).
 void udpSendToGui(const uint8_t* data, int len);
-void sendPacketToGUI(const std::vector<uint8_t> &bytes);
-void sendPacketToGUI(const ParsedPacket &p);

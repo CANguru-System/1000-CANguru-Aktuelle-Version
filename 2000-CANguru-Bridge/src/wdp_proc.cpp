@@ -48,12 +48,22 @@ void wdpSendTask(void *pv)
   }
 }
 
+// Aus loop(): höchstens 20 ms warten, sonst den Frame verwerfen. Mit portMAX_DELAY konnte
+// eine volle Warteschlange (WDP nicht erreichbar, viele Frames) die Hauptschleife anhalten.
 void sendToWDP(const uint8_t *buffer)
 {
   if (wdpQueue == NULL)
     return;
 
-  xQueueSend(wdpQueue, buffer, portMAX_DELAY);
+  if (xQueueSend(wdpQueue, buffer, pdMS_TO_TICKS(20)) != pdTRUE)
+  {
+    static unsigned long lastWarnMs = 0;
+    if (millis() - lastWarnMs > 5000)
+    {
+      lastWarnMs = millis();
+      Serial.println("WDP: Warteschlange voll, Frame verworfen");
+    }
+  }
 }
 
 // -------------------- Empfangen von WDP -------------------
@@ -62,10 +72,7 @@ void readWDP()
 {
   uint8_t UDPbuffer[CAN_FRAME_SIZE]; // buffer to hold incoming packet
   uint8_t CANbuffer[CAN_FRAME_SIZE]; // buffer to hold incoming packet
-  uint8_t M_PING_RESPONSEx[] = {0x00, 0x30, 0x00, 0x00, 0x00};
   uint8_t CAN_PING_CS2[] = {0x00, 0x31, 0x47, 0x11, 0x08, 0x00, 0x00, 0x00, 0x00, 0x03, 0x08, 0xFF, 0xFF};
-  uint8_t CAN_PING_CS2_1[] = {0x00, 0x31, 0x63, 0x4A, 0x08, 0x00, 0x00, 0x00, 0x00, 0x04, 0x02, 0xFF, 0xF0};
-  uint8_t CAN_PING_CS2_2[] = {0x00, 0x31, 0x63, 0x4B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x03, 0x44, 0x00, 0x00};
   int packetSize = udpWDP.parsePacket();
   // if there's data available, read a packet
   if (packetSize)
@@ -92,20 +99,14 @@ void readWDP()
       break;
 
     case PING_R:
-      //    log_d("PING_R from WDP received");
+      // WDP meldet sich (Kennung EE EE): mit einem PING antworten, damit WDP die Geräte
+      // abfragt. Früher standen hier 250 ms Wartezeit und zwei Antworten, die nie
+      // gesendet wurden.
       if ((CANbuffer[data6] == 0xEE) && (CANbuffer[data7] == 0xEE))
       {
-        delay(wait_time_small);
-        UDPbuffer[0x00] = 0x00;
-        UDPbuffer[0x01] = PING;
-        UDPbuffer[0x02] = 0x00;
-        UDPbuffer[0x03] = 0x00;
-        UDPbuffer[0x04] = 0x00;
+        memset(UDPbuffer, 0, sizeof(UDPbuffer));
+        UDPbuffer[CANcmd] = PING;
         sendToWDP(UDPbuffer);
-        delay(100);
-        memcpy(&UDPbuffer, &CAN_PING_CS2_1, CAN_FRAME_SIZE);
-        delay(50);
-        memcpy(&UDPbuffer, &CAN_PING_CS2_2, CAN_FRAME_SIZE);
       }
       break;
 
@@ -113,15 +114,9 @@ void readWDP()
       sendConfigData(CANbuffer);
       break;
 
-    case SWITCH_ACC:
-      // Stellbefehle an alle Decoder in einem Versand: Zubehör-Decoder (Weiche, Formsignal,
-      // LED-Signal) werten sie aus, alle anderen ignorieren sie. Bisher je Typ einzeln
-      // (je 50 ms Pause) - ein neuer Zubehörtyp wäre sonst leer ausgegangen.
-      sendFrame2allDecoders(CANbuffer, CAN_FRAME_SIZE);
-      break;
-
     default:
-      // fast alles an die Decoder
+      // Stellbefehle und S88-Abfragen an die Decoder; alle übrigen Befehle (Loks)
+      // filtert sendFrame2allDecoders() heraus
       sendFrame2allDecoders(CANbuffer, CAN_FRAME_SIZE);
       break;
     }
@@ -170,12 +165,6 @@ void setupUploadRoute()
                 uploadFile.close();
                 request->send(200, "text/plain", "OK");
               } });
-}
-
-void onRequest(AsyncWebServerRequest *request)
-{
-  Serial.println("onRequest");
-  Serial.println(request->url());
 }
 
 // events

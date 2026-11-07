@@ -19,7 +19,6 @@
 #include "gui_link.h"
 #include "CAN_proc.h"
 #include "wdp_proc.h"
-#include "PacketHandler.h"
 
 bool otaRunning = false;
 
@@ -84,6 +83,86 @@ static void sendUnicast(const uint8_t *mac, const uint8_t *buf, size_t len)
         esp_now_send(mac, buf, len);
 }
 
+// ------------------------------------------------------------
+// Rundsendungen an die Decoder (Befund M5 aus Phase 0): bisher wartete die Bridge nach
+// jeder Rundsendung 50 ms (delay). Weil fast jeder WDP-Frame an alle Decoder ging,
+// stand die Hauptschleife bei mehreren fahrenden Loks ständig (höchstens 20 Frames/s,
+// währenddessen kein CAN- und UDP-Empfang). Jetzt: Warteschlange, die decoderLinkLoop()
+// im Abstand von BROADCAST_SPACING_MS abarbeitet, ohne die Schleife anzuhalten.
+// ------------------------------------------------------------
+struct BroadcastItem
+{
+    uint8_t len;
+    uint8_t data[CG2_ESPNOW_MAX];
+};
+static const uint8_t BROADCAST_QUEUE_SIZE = 24;
+static const unsigned long BROADCAST_SPACING_MS = 10;
+static BroadcastItem broadcastQueue[BROADCAST_QUEUE_SIZE];
+static uint8_t broadcastHead = 0, broadcastTail = 0;
+static unsigned long lastBroadcastMs = 0;
+
+static void queueBroadcast(const uint8_t *buf, size_t len)
+{
+    uint8_t next = (broadcastHead + 1) % BROADCAST_QUEUE_SIZE;
+    if (next == broadcastTail)
+    {
+        Serial.println("BRIDGE: Warteschlange fuer Rundsendungen voll, Nachricht verworfen");
+        return;
+    }
+    broadcastQueue[broadcastHead].len = (uint8_t)len;
+    memcpy(broadcastQueue[broadcastHead].data, buf, len);
+    broadcastHead = next;
+}
+
+// Eine Rundsendung aus der Warteschlange senden; false = nichts gesendet
+static bool sendNextBroadcast()
+{
+    if (broadcastHead == broadcastTail)
+        return false;
+    BroadcastItem &b = broadcastQueue[broadcastTail];
+    esp_err_t r = esp_now_send(Bridge_Mac, b.data, b.len);
+    if (r == ESP_ERR_ESPNOW_NO_MEM)
+        return false; // Sendepuffer voll: beim nächsten Durchlauf erneut versuchen
+    broadcastTail = (broadcastTail + 1) % BROADCAST_QUEUE_SIZE;
+    lastBroadcastMs = millis();
+    return true;
+}
+
+static void pumpBroadcasts()
+{
+    if (millis() - lastBroadcastMs >= BROADCAST_SPACING_MS)
+        sendNextBroadcast();
+}
+
+// Alle wartenden Rundsendungen sofort senden (vor einem Neustart der Bridge)
+static void flushBroadcasts()
+{
+    unsigned long start = millis();
+    while (broadcastHead != broadcastTail && millis() - start < 1000)
+    {
+        if (!sendNextBroadcast())
+            delay(2);
+        else
+            delay(BROADCAST_SPACING_MS);
+    }
+}
+
+// Die Decoder werten nur diese Märklin-Befehle aus: PING (Geräteerkennung für WDP),
+// Stellbefehle (Zubehör-Decoder) und S88-Abfragen (Rückmelder). CONFIG_Status geht gezielt
+// an einen Decoder (sendConfigData). Alles andere, z. B. Fahr- und Funktionsbefehle für
+// Loks, wäre nur unnötiger Funkverkehr.
+static bool decodersNeedCanFrame(const uint8_t *frame)
+{
+    switch (frame[CANcmd])
+    {
+    case PING:
+    case SWITCH_ACC:
+    case S88_EVENT:
+        return true;
+    }
+    return false;
+}
+
 static void sendV2(const uint8_t *mac, uint8_t feature, uint8_t command, uint8_t addrMode,
                    uint8_t decoder, uint8_t flags, uint8_t seq, const uint8_t *payload, size_t len)
 {
@@ -101,7 +180,7 @@ static void sendV2(const uint8_t *mac, uint8_t feature, uint8_t command, uint8_t
     if (addrMode == CG2_ADDR_ID)
         sendUnicast(mac, buf, n);
     else
-        esp_now_send(Bridge_Mac, buf, n); // Broadcast
+        queueBroadcast(buf, n);
 }
 
 static void broadcastV2(uint8_t feature, uint8_t command, uint8_t addrMode, uint8_t selector,
@@ -410,6 +489,9 @@ void decoderLinkLoop()
 {
     unsigned long now = millis();
 
+    // Rundsendungen getaktet abarbeiten
+    pumpBroadcasts();
+
     // START regelmäßig wiederholen: so melden sich auch Decoder an, die nach dem
     // Start der GUI eingeschaltet oder neu geflasht wurden (nur Protokoll Version 2)
     static unsigned long nextStartMs = 0;
@@ -502,24 +584,20 @@ void sendStartToDecoders()
     Serial.println("Sent START to all decoders");
 }
 
+// Wird direkt vor einem Neustart der Bridge aufgerufen: die Warteschlange muss noch raus
 void sendResetToDecoders()
 {
     broadcastV2(CG2_F_DECODER, CG2_DECODER_RESET, CG2_ADDR_ALL, 0, nullptr, 0);
+    flushBroadcasts();
     delay(50);
 }
 
-// Märklin-Frame an alle Decoder
+// Märklin-Frame an alle Decoder (nur Befehle, die Decoder auswerten)
 void sendFrame2allDecoders(uint8_t *data, int len)
 {
+    if (!decodersNeedCanFrame(data))
+        return;
     broadcastV2(CG2_F_CAN, CG2_CAN_TO_DECODERS, CG2_ADDR_ALL, 0, data, CAN_FRAME_SIZE);
-    delay(50);
-}
-
-// Märklin-Frame an alle Decoder eines Typs
-void sendFrame2TypeDecoders(uint8_t *data, int len, uint8_t decoderType)
-{
-    broadcastV2(CG2_F_CAN, CG2_CAN_TO_DECODERS, CG2_ADDR_TYPE, decoderType, data, CAN_FRAME_SIZE);
-    delay(50);
 }
 
 // CONFIG_Status aus WDP an den Decoder, dessen Hash im Frame steht

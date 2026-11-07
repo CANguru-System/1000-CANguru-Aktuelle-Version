@@ -171,7 +171,7 @@ Ein CAN-Frame ist immer das 13-Byte-Märklin-Format (ID 4 Byte, DLC, 8 Datenbyte
 |---|---|---|
 | `TO_TRACKBOX` 0x01 | G → B | `[frame 13]`. Die Bridge sendet ihn auf den CAN-Bus. |
 | `TO_GUI` 0x02 | B → G | `[folge u32][frame 13][quelle]`. Quelle: `M` Gleisbox, `W` WDP, `D` Decoder |
-| `TO_DECODERS` 0x03 | B → D (TYPE/ALL) | `[frame 13]` |
+| `TO_DECODERS` 0x03 | B → D (TYPE/ALL) | `[frame 13]`. Nur die Befehle, die Decoder auswerten: `PING`, `SWITCH_ACC`, `S88_EVENT` (CONFIG_Status geht gezielt an einen Decoder). Rundsendungen sendet die Bridge über eine Warteschlange im Abstand von 10 ms, ohne ihre Hauptschleife anzuhalten. |
 | `FROM_DECODER` 0x04 | D → B | `[frame 13]`. Die Bridge leitet an WDP und GUI weiter. |
 
 ### 5.8 Datei `CG2_F_FILE` (0x08) – `lokomotive.cs2`

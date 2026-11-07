@@ -138,30 +138,6 @@ void readGUI()
     Serial.println("GUI: Nachricht im alten Format ignoriert - GUI zu alt?");
 }
 
-// ----------------------------------------------------
-// Hilfsfunktion: lokomotive.cs2 anzeigen
-// ----------------------------------------------------
-void showLokomotiveFile()
-{
-  File f = LittleFS.open("/lokomotive.cs2", "r");
-  if (!f)
-  {
-    Serial.println("Fehler: lokomotive.cs2 konnte nicht geöffnet werden!");
-    return;
-  }
-
-  Serial.println("===== Inhalt von lokomotive.cs2 =====");
-
-  while (f.available())
-  {
-    String line = f.readStringUntil('\n');
-    Serial.println(line);
-  }
-
-  Serial.println("=====================================");
-  f.close();
-}
-
 // --------------------------------------------------
 // loop()
 // --------------------------------------------------
