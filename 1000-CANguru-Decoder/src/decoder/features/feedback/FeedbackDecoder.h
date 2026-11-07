@@ -4,52 +4,32 @@
 #include "DecoderBase.h"
 
 // Der FeedbackDecoder ist ein CANguru-Decoder für S88-Rückmeldungen.
-// Er nutzt Multiplexing über die Pins s0..s3 und zPin, um 16 Kanäle auszulesen.
-
+// Er nutzt Multiplexing über die Pins s0..s3 und zPin, um 16 Kontakte auszulesen.
+//
+// Ab Firmware 2.0 (Phase 3) sind die Meldeadressen der 16 Kontakte Parameter
+// (Parameter-Fenster der GUI); das Übergangs-Feature Rückmelder entfällt.
 class FeedbackDecoder : public DecoderBase
 {
 public:
-    // -----------------------------------------------------------------------
-    // Konstruktor
-    // -----------------------------------------------------------------------
+    static const uint8_t CONTACTS = 16;
+
     FeedbackDecoder() = default;
 
-    // -----------------------------------------------------------------------
-    // Setup – wird von DecoderBase::setup() aufgerufen
-    // -----------------------------------------------------------------------
     void setup() override;
-
-    // -----------------------------------------------------------------------
-    // Hauptschleife – ruft DecoderBase::loop() auf
-    // -----------------------------------------------------------------------
     void loop() override;
 
-    // -----------------------------------------------------------------------
-    // Befehle aus der GUI, CAN-Frames aus WDP, Werkseinstellungen
-    // -----------------------------------------------------------------------
-    bool onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen) override;
+    // Märklin-CAN-Frames aus WDP (S88-Abfrage)
     void onCanFrame(const uint8_t *frame) override;
-    bool factoryReset() override;
-
-    // -----------------------------------------------------------------------
-    // Status des Decoders (Alive / Offline / Error)
-    // -----------------------------------------------------------------------
     DecoderBase::AliveState getStatus() const override;
+    uint8_t getAliveValues(uint16_t *values, uint8_t maxValues) override;
+
+    // Selbstbeschreibung: Meldeadresse je Kontakt, Messwert Belegung
+    uint8_t paramCount() const override;
+    const Cg2ParamDef *paramDef(uint8_t n) const override;
+    CANguruPreferences *paramPrefs() override;
+    uint8_t valueCount() const override;
+    const Cg2InfoDef *valueDef(uint8_t n) const override;
 
 private:
-    // Alive-Status
     DecoderBase::AliveState currentStatus = DecoderBase::AliveState::Online;
 };
-
-extern void loadDefaultsWithAddress();              // setzt seine Standardwerte und behält die Adresse bei
-// z.B. im FeedbackDecoder
-constexpr const char* DECODER_NVS_NAMESPACE = "feedback";
-
-// Keys für NVS
-static const char *key_Adr = "decAdr";
-static const char *key_channel = "K%d";
-const uint8_t minadr = 1;
-const uint8_t maxadr = 0xFF;
-
-// im Servodecoder
-//constexpr const char* DECODER_NVS_NAMESPACE = "servo";

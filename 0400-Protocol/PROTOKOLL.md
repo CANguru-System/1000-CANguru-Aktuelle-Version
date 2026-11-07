@@ -207,5 +207,9 @@ Weichen- und Formsignaldecoder. **Die Kommandos sind die bisherigen Werte `SWITC
 (`GET_SETTINGS` 0x31 … `GET_VERSION` 0x3B), auch für Signaldecoder. **Die Nutzdaten bleiben unverändert**,
 einschließlich Big Endian und der ID in Nutzdaten[0]. So ändert sich in Phase 2 am Stepper-Code nur der Rahmen.
 
-### 5.12 Rückmelder `CG2_F_FEEDBACK` (0x0C) – Übergang bis Phase 3
-**Die Kommandos sind die bisherigen Werte `FEEDBACK_CMD_*`** (0x51 … 0x54). **Die Nutzdaten bleiben unverändert.**
+### 5.12 Rückmelder `CG2_F_FEEDBACK` (0x0C) – entfallen mit Schritt 3.5
+
+Wird nicht mehr verwendet; die Konstanten verschwinden mit Schritt 3.6. Der Rückmelder (ab Firmware 2.0) hat die
+Parameter 0 … 15 „Kontakt k: Meldeadresse“ (u8, 1–255, Standard k, bleiben bei Werkseinstellungen erhalten) im
+Namensraum „feedback“, Schlüssel `K1` … `K16` (bis Firmware 1.x im Namensraum „decoder“; beim ersten Start einmalig
+übernommen). Messwert: belegte Kontakte als Bitmaske (Kontakt 1 = Bit 0).

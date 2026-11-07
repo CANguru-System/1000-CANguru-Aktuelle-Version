@@ -74,12 +74,6 @@
                     expectedLength = ProtocolConstants.EXP_LNG_SWITCH_SETTINGS;
                     break;
 
-                case ProtocolConstants.DEVTYPE_RM:
-                    feature = (byte)ProtocolConstants.CG2_F_FEEDBACK;
-                    command = (byte)ProtocolConstants.FEEDBACK_CMD_GET_SETTINGS;
-                    expectedLength = ProtocolConstants.EXP_LNG_FEEDBACK_SETTINGS;
-                    break;
-
                 default:
                     return null;
             }

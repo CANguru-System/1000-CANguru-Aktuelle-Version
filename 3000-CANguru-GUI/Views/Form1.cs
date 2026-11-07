@@ -43,7 +43,6 @@ namespace CANguru.Views
         private DecoderList decoderController;
         private SwitchDecoderSettingsForm activeSwitchForm;
         private SignalDecoderSettingsForm activeSignalForm;
-        private FeedbackDecoderSettingsForm activeFeedbackForm;
         private volatile ParameterForm? activeParameterForm; // offenes allgemeines Parameter-Fenster
         private DecoderListForm decoderListForm;
         private LokListForm lokListForm;
@@ -870,14 +869,8 @@ namespace CANguru.Views
                     OpenParameterForm(decoder);
                     return;
                 case DecoderType.Feedback:
-                    {
-                        byte feedbackassignedId = (byte)decoder.AssignedId;
-
-                        activeFeedbackForm = new FeedbackDecoderSettingsForm(feedbackassignedId);
-                        activeFeedbackForm.ShowDialog(this);
-                        activeFeedbackForm = null;
-                        return;
-                    }
+                    // Rückmelder (Phase 3): Meldeadressen der 16 Kontakte im Parameter-Fenster
+                    OpenParameterForm(decoder);
                     return;
                 case DecoderType.Power:
                     // Stromdecoder (Phase 3): Abschaltgrenze und Ströme im Parameter-Fenster

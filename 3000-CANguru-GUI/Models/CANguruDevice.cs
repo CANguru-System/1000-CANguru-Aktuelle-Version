@@ -168,22 +168,16 @@ namespace CANguru.Models
     public class FeedbackDecoder : CANguruDecoder
     {
         public byte[] Channels = new byte[16];
+        // Rückmelder ab Firmware 2.0: Parameter 0 ... 15 = Meldeadresse der Kontakte 1 ... 16
         public override void UpdateFromDecoder()
         {
-            var payload = DecoderProtocol.ReadPayload(
-                AssignedId,
-                (byte)ProtocolConstants.CG2_F_FEEDBACK,
-                (byte)ProtocolConstants.FEEDBACK_CMD_GET_SETTINGS,
-                expectedLength: ProtocolConstants.EXP_LNG_FEEDBACK_SETTINGS,
-                requestPayload: new byte[] { (byte)AssignedId }
-            );
-
-            if (payload == null)
-                return; // Decoder noch nicht bereit
-
-            // 16 Werte übernehmen
-            for (int i = 0; i < 16; i++)
-                Channels[i] = payload[i];
+            for (byte i = 0; i < 16; i++)
+            {
+                var v = DecoderProtocol.ReadParam((byte)AssignedId, i);
+                if (v == null)
+                    return; // Decoder noch nicht bereit
+                Channels[i] = (byte)v.Value;
+            }
         }
 
         public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()

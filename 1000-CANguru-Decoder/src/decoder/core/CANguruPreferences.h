@@ -73,6 +73,11 @@ public:
         return prefs.isKey(key);
     }
 
+    bool remove(const char *key)
+    {
+        return prefs.remove(key);
+    }
+
 private:
     const char* _ns;
     Preferences prefs;

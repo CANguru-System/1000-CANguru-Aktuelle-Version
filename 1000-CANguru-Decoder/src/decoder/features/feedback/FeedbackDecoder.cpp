@@ -11,9 +11,6 @@
 #include "Core_Alive.h"
 #include "Core_globals.h"
 #include "DecoderBase.h"
-#include "DecoderResetUtility.h"
-
-uint8_t decoderadr;
 
 // ---------------------------------------------------------------------------
 // Hardware-Pins
@@ -77,73 +74,57 @@ void initFeedbackDecoder()
     registerConfigProvider(&provider);
 }
 
-void setFeedbackChannel(uint8_t channel, uint8_t status)
-{
-    if (channel < 1 || channel > maxCntChannels)
-        return;
-
-    char key[8];
-    sprintf(key, key_channel, channel);
-    prefs.putByte(key, status);
-}
-
-void saveFeedbackSettings(const uint8_t *values)
-{
-    for (int i = 0; i < maxCntChannels; i++)
-    {
-        setFeedbackChannel(i + 1, values[i]);
-    }
-}
-
 // ---------------------------------------------------------------------------
-// Feedback-Kanal aus Preferences
+// Selbstbeschreibung: Meldeadresse (Kontaktkennung für WDP) je Kontakt.
+// Speicherschlüssel wie bisher "K1" ... "K16", jetzt im Namensraum "feedback".
 // ---------------------------------------------------------------------------
-uint8_t getFeedbackChannel(uint8_t channel)
-{
-    char key[8];
-    sprintf(key, key_channel, channel);
-    return prefs.getByte(key, channel); // Default = Kanalnummer
-}
-void loadFeedbackSettings()
-{
+#define FEEDBACK_CONTACT(k) \
+    {CG2_TYPE_U8, 1, 255, k, 1, "", "Kontakt " #k ": Meldeadresse", nullptr, 0, "K" #k, CG2_PF_KEEP_ON_RESET}
 
-    for (int i = 0; i < maxCntChannels; i++)
+static const Cg2ParamDef feedbackParams[FeedbackDecoder::CONTACTS] = {
+    FEEDBACK_CONTACT(1), FEEDBACK_CONTACT(2), FEEDBACK_CONTACT(3), FEEDBACK_CONTACT(4),
+    FEEDBACK_CONTACT(5), FEEDBACK_CONTACT(6), FEEDBACK_CONTACT(7), FEEDBACK_CONTACT(8),
+    FEEDBACK_CONTACT(9), FEEDBACK_CONTACT(10), FEEDBACK_CONTACT(11), FEEDBACK_CONTACT(12),
+    FEEDBACK_CONTACT(13), FEEDBACK_CONTACT(14), FEEDBACK_CONTACT(15), FEEDBACK_CONTACT(16),
+};
+
+static const Cg2InfoDef feedbackValues[] = {
+    {"Belegt (Bitmaske, Kontakt 1 = 1, 2 = 2, 3 = 4 ...)", ""},
+};
+
+uint8_t FeedbackDecoder::paramCount() const { return CONTACTS; }
+const Cg2ParamDef *FeedbackDecoder::paramDef(uint8_t n) const { return n < CONTACTS ? &feedbackParams[n] : nullptr; }
+CANguruPreferences *FeedbackDecoder::paramPrefs() { return &prefsFeedBack; }
+uint8_t FeedbackDecoder::valueCount() const { return 1; }
+const Cg2InfoDef *FeedbackDecoder::valueDef(uint8_t n) const { return n == 0 ? &feedbackValues[0] : nullptr; }
+
+// Meldeadresse des Kontakts (1 ... 16) aus dem Arbeitsspeicher (nicht aus dem Flash:
+// wird aus dem Zeitgeber heraus bei jeder Besetztmeldung gebraucht)
+static uint8_t contactAddress(uint8_t contact)
+{
+    return (uint8_t)gDecoder->paramValue(contact - 1);
+}
+
+// Befund M7 (Phase 0): Bis Firmware 1.x lagen die Zuordnungen "K1" ... "K16" im
+// Namensraum "decoder" des Kerns. Einmalig in den Namensraum "feedback" umziehen.
+static void migrateContactKeys()
+{
+    uint8_t moved = 0;
+    for (uint8_t k = 1; k <= FeedbackDecoder::CONTACTS; k++)
     {
         char key[8];
-        sprintf(key, key_channel, i + 1);
-
-        uint8_t val = prefs.getByte(key, 0xFF);
-
-        if (val == 0xFF) // Wert existiert nicht → erster Start
+        snprintf(key, sizeof(key), "K%u", k);
+        if (!prefs.isKey(key))
+            continue;
+        if (!prefsFeedBack.isKey(key))
         {
-            // Wenn erster Start → Defaults speichern
-            setFeedbackChannel(i + 1, i + 1);
+            prefsFeedBack.putByte(key, prefs.getByte(key, k));
+            moved++;
         }
-        else
-        {
-            setFeedbackChannel(i + 1, val);
-        }
+        prefs.remove(key);
     }
-}
-
-void loadDefaults(bool keepAdr) // setzt seine Standardwerte
-{
-    // Hier können die Standardwerte für den FeedbackDecoder gesetzt werden
-    Serial.println("Loading default settings for FeedbackDecoder...");
-    prefsFeedBack.init();
-    //--------------------------------------------------- key -------------- Wert ------------min ----------max ---)
-    // Adresse
-    if (keepAdr)
-        prefsFeedBack.putByte(key_Adr, decoderadr);
-    else
-        decoderadr = 1;
-    decoderadr = readValfromPreferences8(prefsFeedBack, key_Adr, decoderadr, minadr, maxadr);
-    loadFeedbackSettings();
-}
-
-void loadDefaultsWithAddress() // setzt seine Standardwerte und behält die Adresse bei
-{
-    loadDefaults(true);
+    if (moved)
+        Serial.printf("RUECKMELDER: %u Kontakt-Zuordnungen in den Namensraum \"feedback\" uebernommen\r\n", moved);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +139,7 @@ void process_sensor_event(uint8_t channel)
     opFrame[Framelng] = 8;
 
     // Kontaktkennung
-    opFrame[data3] = getFeedbackChannel(channel + 1);
+    opFrame[data3] = contactAddress(channel + 1);
 
     // Zustand alt / neu
     if (channelStatus[channel] == isOccupied)
@@ -235,14 +216,16 @@ void FeedbackDecoder::setup()
     beforeRestartCallback = FeedbackDecoderBeforeRestart;
     afterstartCallback = FeedbackDecoderAfterStart;
     DEVTYPE = DEVTYPE_RM;
-    VERS_HIGH = 1;
+    VERS_HIGH = 2; // 2.0: Meldeadressen als Parameter, Speicher im Namensraum "feedback" (Phase 3)
     VERS_LOW = 0;
     wdpAlive = false;
     memset(msecs, 0, sizeof(msecs));
     memset(inputValue, 0, sizeof(inputValue));
     memset(channelStatus, isFree, sizeof(channelStatus));
-    // nach dem ersten Mal Einlesen der gespeicherten Werte
-    loadDefaults(false);
+    // Meldeadressen: einmalig umziehen (M7), dann über den Parameter-Speicher des Kerns laden
+    prefsFeedBack.init();
+    migrateContactKeys();
+    paramsLoad();
     // initialize digital pins as an input / output.
     pinMode(zPin, INPUT);
     for (uint8_t p = 0; p < sizeof(pins); p++)
@@ -266,7 +249,7 @@ void FeedbackDecoder::onCanFrame(const uint8_t *frame)
     Serial.printf("S88_EVENT: Gerätekenner %02X%02X, Kontaktkennung %02X\r\n", frame[hash0], frame[hash1], frame[data3]);
     for (uint8_t ch = 0; ch < maxCntChannels; ch++)
         // Kanal mit dieser Kontaktkennung data3 suchen
-        if (getFeedbackChannel(ch + 1) == frame[data3])
+        if (contactAddress(ch + 1) == frame[data3])
         {
             Serial.printf("S88_EVENT: Kanal %d gefunden für Kontaktkennung %02X\r\n", ch + 1, frame[data3]);
             // wenn gefunden, dann Meldung machen
@@ -275,50 +258,17 @@ void FeedbackDecoder::onCanFrame(const uint8_t *frame)
         }
 }
 
-// ---------------------------------------------------------------------------
-// Befehle aus der GUI (Feature Rückmelder, Kommandos FEEDBACK_CMD_*, Nutzdaten wie
-// bisher: Nutzdaten[0] = Decoder-ID). Jede Anfrage wird quittiert.
-// ---------------------------------------------------------------------------
-bool FeedbackDecoder::onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen)
+// Messwert: belegte Kontakte als Bitmaske (Kontakt 1 = Bit 0)
+uint8_t FeedbackDecoder::getAliveValues(uint16_t *values, uint8_t maxValues)
 {
-    if (h.feature != CG2_F_FEEDBACK)
-        return false;
-
-    if (payloadLen < 1 || payload[0] != aliveGetDecoderID())
-    {
-        reply(h, nullptr, 0, CG2_ERR_BAD_VALUE);
-        return true;
-    }
-
-    switch (h.command)
-    {
-    case FEEDBACK_CMD_GET_SETTINGS:
-    {
-        // Antwort: Kontaktkennung der 16 Kanäle
-        uint8_t pkt[maxCntChannels];
-        for (int i = 0; i < maxCntChannels; i++)
-            pkt[i] = getFeedbackChannel(i + 1);
-        reply(h, pkt, maxCntChannels);
-        return true;
-    }
-
-    case FEEDBACK_CMD_SET_SETTINGS:
-        // [ID][16 Kontaktkennungen]
-        if (payloadLen < 1 + maxCntChannels)
-        {
-            reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
-            return true;
-        }
-        saveFeedbackSettings(&payload[1]);
-        reply(h);
-        return true;
-    }
-    return false;
-}
-
-bool FeedbackDecoder::factoryReset()
-{
-    return DecoderReset::performReset(DECODER_NVS_NAMESPACE, loadDefaultsWithAddress);
+    if (maxValues < 1)
+        return 0;
+    uint16_t mask = 0;
+    for (uint8_t ch = 0; ch < maxCntChannels; ch++)
+        if (channelStatus[ch] == isOccupied)
+            mask |= (1 << ch);
+    values[0] = mask;
+    return 1;
 }
 
 DecoderBase::AliveState FeedbackDecoder::getStatus() const
