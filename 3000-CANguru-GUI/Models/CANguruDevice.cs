@@ -102,7 +102,8 @@ namespace CANguru.Models
 
         public override void UpdateFromDecoder()
         {
-            MaxCurrent = DecoderProtocol.ReadThreshold(AssignedId, 0);
+            // Parameter 0 = Abschaltgrenze in mA
+            MaxCurrent = DecoderProtocol.ReadParam((byte)AssignedId, 0) ?? MaxCurrent;
         }
 
         public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()

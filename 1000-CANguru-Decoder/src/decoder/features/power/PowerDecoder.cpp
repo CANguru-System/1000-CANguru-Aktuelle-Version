@@ -165,7 +165,7 @@ void PowerDecoder::setup()
     beforeRestartCallback = PowerDecoderBeforeRestart;
     afterstartCallback = PowerDecoderAfterStart;
     DEVTYPE = DEVTYPE_POWER;
-    VERS_HIGH = 1;
+    VERS_HIGH = 2; // 2.0: nur noch Parameter und Ereignisse (Phase 3)
     VERS_LOW = 0;
     pinMode(shutdownPin, OUTPUT);
 
@@ -292,62 +292,11 @@ void PowerDecoder::shutdown(uint8_t channel)
                   channel, lastRaw_mA[channel], threshold_mA, millis() - trackOnMs);
     setTrackPower(false);
 
-    // gemeldet wird der Strom der letzten Messung, die zur Abschaltung geführt hat:
-    // [kanal][strom mA u16]
-    uint8_t payload[3];
-    Cg2Writer w(payload, sizeof(payload));
-    w.u8(channel).u16(lastRaw_mA[channel]);
-    sendMessage(CG2_F_POWER, CG2_POWER_SHUTDOWN, payload, w.size());
-}
-
-// Befehle über Feature Strom (bis Phase 3). Zahlen in Little Endian.
-bool PowerDecoder::onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen)
-{
-    if (h.feature != CG2_F_POWER)
-        return false;
-
-    Cg2Reader r(payload, payloadLen);
-    switch (h.command)
-    {
-    case CG2_POWER_SET_THRESHOLD:
-    {
-        uint16_t value = r.u16();
-        if (!r.ok())
-        {
-            reply(h, nullptr, 0, CG2_ERR_BAD_LENGTH);
-            return true;
-        }
-        // derselbe Weg wie über das Parameter-Fenster (Bereich, Schrittweite, Speicher)
-        coreParamLimit(*paramDef(0), value);
-        paramWrite(0, value);
-        // Antwort: tatsächlich gesetzter Wert (ggf. begrenzt)
-        uint8_t resp[2];
-        Cg2Writer(resp, sizeof(resp)).u16(threshold_mA);
-        reply(h, resp, sizeof(resp));
-        return true;
-    }
-
-    case CG2_POWER_GET_THRESHOLD:
-    {
-        uint8_t resp[2];
-        Cg2Writer(resp, sizeof(resp)).u16(threshold_mA);
-        reply(h, resp, sizeof(resp));
-        return true;
-    }
-
-    case CG2_POWER_TRACK:
-    {
-        // alte Bridge-Firmware: STOPP/GO nur an den Stromdecoder (neu: Sitzung TRACK_POWER an alle)
-        uint8_t state = r.u8();
-        if (!r.ok())
-            return true;
-        onTrackPower(state == 1);
-        if (h.ackRequested())
-            reply(h);
-        return true;
-    }
-    }
-    return false;
+    // Ereignis OVERCURRENT [kanal][strom mA u16] mit dem Strom der letzten Messung, die zur
+    // Abschaltung geführt hat. Die Bridge sendet daraufhin STOPP an die Gleisbox.
+    uint8_t ev[3];
+    Cg2Writer(ev, sizeof(ev)).u8(channel).u16(lastRaw_mA[channel]);
+    sendEvent(CG2_EV_OVERCURRENT, ev, sizeof(ev));
 }
 
 // STOPP/GO (die Bridge leitet es vom CAN-Bus ab und meldet es allen Decodern)

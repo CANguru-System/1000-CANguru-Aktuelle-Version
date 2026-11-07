@@ -208,14 +208,14 @@ void sendCanFrame(uint8_t *data, bool hash)
 }
 
 // ---------------------------------------------------------
-// Gleisspannung an/aus (STOPP/GO am CAN-Bus) an GUI und Stromdecoder
-// CG2_F_POWER / CG2_POWER_TRACK [an 0/1]
+// Gleisspannung an/aus (STOPP/GO am CAN-Bus) an GUI und alle Decoder
+// CG2_F_SESSION / CG2_SESSION_TRACK_POWER [an 0/1]
 // ---------------------------------------------------------
 
 void sendPowerState(uint8_t state)
 {
   uint8_t payload[1] = {state};
-  cg2SendToGui(CG2_F_POWER, CG2_POWER_TRACK, CG2_ID_BRIDGE, payload, sizeof(payload));
+  cg2SendToGui(CG2_F_SESSION, CG2_SESSION_TRACK_POWER, CG2_ID_BRIDGE, payload, sizeof(payload));
   sendTrackPowerToDecoders(state);
 }
 

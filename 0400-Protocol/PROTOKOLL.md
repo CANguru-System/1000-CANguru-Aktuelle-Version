@@ -96,7 +96,7 @@ Richtung: G = GUI, B = Bridge, D = Decoder. „→ Antwort“ beschreibt die Nut
 | `DISCOVER_REPLY` 0x02 | B → G | `[fwMajor][fwMinor][protoMinor][gleisbox 0/1]` |
 | `START` 0x03 | G → B, B → D (ALL) | – . Die Bridge fordert alle Decoder zur Anmeldung auf: beim Start der Sitzung und danach alle 5 s (außer während OTA), damit sich auch später eingeschaltete Decoder anmelden. Jeder Decoder antwortet mit HELLO; ein angemeldeter, unveränderter Decoder erhält seine ID erneut, die GUI bekommt kein weiteres `ADDED`. |
 | `END` 0x04 | G → B | – . Die GUI wird beendet: Gleisbox STOPP, Decoder-Reset, Neustart der Bridge. |
-| `TRACK_POWER` 0x05 | B → D (ALL), B → D (ID) | `[an 0/1]`. Gleisspannung, abgeleitet aus STOPP/GO am CAN-Bus, an **alle** Decoder (z. B. LED-Signale bei STOPP auf Rot). Ein neu angemeldeter Decoder erhält den aktuellen Stand sofort per Unicast. |
+| `TRACK_POWER` 0x05 | B → D (ALL), B → D (ID), B → G | `[an 0/1]`. Gleisspannung, abgeleitet aus STOPP/GO am CAN-Bus, an **alle** Decoder (z. B. LED-Signale bei STOPP auf Rot) und an die GUI (Anzeige STOPP/GO). Ein neu angemeldeter Decoder erhält den aktuellen Stand sofort per Unicast. |
 
 ### 5.2 Decoder `CG2_F_DECODER` (0x02)
 | Kommando | Richtung | Nutzdaten |
@@ -190,13 +190,17 @@ Ein CAN-Frame ist immer das 13-Byte-Märklin-Format (ID 4 Byte, DLC, 8 Datenbyte
 | `RESULT` 0x05 | B → G | `[id][ergebnis][fehlergrund]`, Ergebnis: 0 ok, 1 fehlgeschlagen, 2 keine Rückmeldung; Fehlergrund wie bei `REJOIN`. Bei den Gründen 1, 2 und 4 versucht die Bridge es nach 3 s ein zweites Mal, bevor sie `RESULT` sendet. Nach dem letzten Decoder sendet sie `PROGRESS` mit Gesamt 100 %. |
 | `DECODER_START` 0x06 | B → D (Unicast) | – . Der Decoder verbindet sich mit dem WLAN der Bridge und lädt die Firmware per HTTP. |
 
-### 5.10 Strom `CG2_F_POWER` (0x0A) – bis Phase 3
-| Kommando | Richtung | Nutzdaten |
-|---|---|---|
-| `SET_THRESHOLD` 0x01 | G → D | `[grenzwert mA u16]` → Antwort `[grenzwert u16]` (tatsächlich gesetzt) |
-| `GET_THRESHOLD` 0x02 | G → D | – → Antwort `[grenzwert u16]` |
-| `SHUTDOWN` 0x03 | D → B → G | `[kanal][strom mA u16]` |
-| `TRACK` 0x04 | B → D, B → G | `[an 0/1]` (Gleisspannung, abgeleitet aus STOPP/GO am CAN-Bus). An Decoder nur noch für ältere Stromdecoder-Firmware, neu: Sitzung `TRACK_POWER` (5.1). Entfällt mit Schritt 3.4. |
+### 5.10 Strom `CG2_F_POWER` (0x0A) – entfallen mit Schritt 3.4
+
+Wird nicht mehr verwendet; die Konstanten verschwinden mit Schritt 3.6. Der Stromdecoder (ab Firmware 2.0) nutzt nur
+noch allgemeine Features:
+
+| früher | jetzt |
+|---|---|
+| `SET_THRESHOLD` / `GET_THRESHOLD` | Parameter 0 „Abschaltgrenze“ (mA) |
+| `SHUTDOWN [kanal][mA]` | Ereignis `CG2_EV_OVERCURRENT [kanal][mA]`; die Bridge sendet daraufhin STOPP an die Gleisbox |
+| `TRACK [an]` | Sitzung `TRACK_POWER [an]` (an alle Decoder und die GUI) |
+| Strom je Kanal | Messwerte im Alive laut Beschreibung („Strom Kanal 1/2“, mA, `0xFFFF` = nicht angeschlossen) |
 
 ### 5.11 Stepper `CG2_F_STEPPER` (0x0B) – Übergang bis Phase 3
 Weichen- und Formsignaldecoder. **Die Kommandos sind die bisherigen Werte `SWITCH_CMD_*`**

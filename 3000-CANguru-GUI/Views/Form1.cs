@@ -550,6 +550,8 @@ namespace CANguru.Views
                 case ProtocolConstants.CG2_F_SESSION:
                     if (h.Command == ProtocolConstants.CG2_SESSION_DISCOVER_REPLY)
                         HandleBridgeFound(remote.Address, payload);
+                    else if (h.Command == ProtocolConstants.CG2_SESSION_TRACK_POWER && payload.Length >= 1)
+                        HandleTrackPower(payload[0] != 0);
                     return;
 
                 case ProtocolConstants.CG2_F_CAN:
@@ -583,14 +585,14 @@ namespace CANguru.Views
                         HandleAliveSummary(payload);
                     return;
 
-                case ProtocolConstants.CG2_F_POWER:
-                    HandlePowerMessage(h, payload);
-                    return;
-
                 case ProtocolConstants.CG2_F_EVENT:
-                    // Ereignis eines Decoders (Stellung, Kalibrierung ...): [ereignis][daten]
+                    // Ereignis eines Decoders (Stellung, Kalibrierung, Überstrom ...): [ereignis][daten]
                     if (h.Command == ProtocolConstants.CG2_EVENT_EVENT && payload.Length >= 1)
+                    {
+                        if (payload[0] == ProtocolConstants.CG2_EV_OVERCURRENT)
+                            HandleOvercurrent(h.Decoder, payload[1..]);
                         activeParameterForm?.OnEvent(h.Decoder, payload[0], payload[1..]);
+                    }
                     return;
 
                 case ProtocolConstants.CG2_F_STEPPER:
@@ -650,38 +652,35 @@ namespace CANguru.Views
             aliveManager.ProcessAliveSummary(power, sw, signal, feedback, ledSignal);
         }
 
-        // Feature Strom: Gleisspannung (TRACK [an]) und Überstrom (SHUTDOWN [kanal][mA u16])
-        private void HandlePowerMessage(Cg2Header h, byte[] payload)
+        // Gleisspannung an/aus (Sitzung TRACK_POWER von der Bridge, abgeleitet aus STOPP/GO)
+        private void HandleTrackPower(bool on)
         {
-            var r = new Cg2Reader(payload);
-            if (h.Command == ProtocolConstants.CG2_POWER_TRACK)
+            if (on)
             {
-                byte on = r.U8();
-                if (!r.Ok)
-                    return;
-                if (on == 0)
-                {
-                    Log("STOPP – Gleisspannung ausgeschaltet.");
-                    UiInvoke(() => btnStopGo.SetMode(false));
-                }
-                else
-                {
-                    Log("GO – Gleisspannung liegt an.");
-                    UiInvoke(() => btnStopGo.SetMode(true));
-                }
+                Log("GO – Gleisspannung liegt an.");
+                UiInvoke(() => btnStopGo.SetMode(true));
             }
-            else if (h.Command == ProtocolConstants.CG2_POWER_SHUTDOWN)
+            else
             {
-                int channel = r.U8();
-                ushort mA = r.U16();
-                if (!r.Ok)
-                    return;
-                PowerCtrl.UpdateCurrent(channel, mA);
-                PowerCtrl.TriggerShutdown(channel);
-                Log($"ÜBERSTROM auf Kanal {channel}: {mA} mA – Gleisspannung abgeschaltet.");
-                // Knopf auf GO stellen, damit ein Klick wieder einschaltet
+                Log("STOPP – Gleisspannung ausgeschaltet.");
                 UiInvoke(() => btnStopGo.SetMode(false));
             }
+        }
+
+        // Ereignis Überstrom eines Stromdecoders: [kanal][strom mA u16].
+        // Den STOPP an die Gleisbox hat die Bridge schon gesendet.
+        private void HandleOvercurrent(byte decoderId, byte[] data)
+        {
+            var r = new Cg2Reader(data);
+            int channel = r.U8();
+            ushort mA = r.U16();
+            if (!r.Ok)
+                return;
+            PowerCtrl.UpdateCurrent(channel, mA);
+            PowerCtrl.TriggerShutdown(channel);
+            Log($"ÜBERSTROM auf Kanal {channel + 1} (Decoder {decoderId}): {mA} mA – Gleisspannung abgeschaltet.");
+            // Knopf auf GO stellen, damit ein Klick wieder einschaltet
+            UiInvoke(() => btnStopGo.SetMode(false));
         }
 
         // OTA-Fortschritt: [decoderId][prozent][gesamtProzent]
@@ -881,9 +880,9 @@ namespace CANguru.Views
                     }
                     return;
                 case DecoderType.Power:
-                    byte powerAssignedId = (byte)decoder.AssignedId;
-                    new PowerDecoderSettingsForm(powerAssignedId).ShowDialog(this);
-                    return; // weiter zu Power-Einstellungen
+                    // Stromdecoder (Phase 3): Abschaltgrenze und Ströme im Parameter-Fenster
+                    OpenParameterForm(decoder);
+                    return;
                 default:
                     MessageBox.Show("Diesen Decoder gibt es nicht.");
                     return;

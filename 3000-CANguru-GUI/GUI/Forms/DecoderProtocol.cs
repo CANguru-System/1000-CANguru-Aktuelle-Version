@@ -74,10 +74,6 @@
                     expectedLength = ProtocolConstants.EXP_LNG_SWITCH_SETTINGS;
                     break;
 
-                case ProtocolConstants.DEVTYPE_POWER:
-                    return ReadPayload(assignedId, (byte)ProtocolConstants.CG2_F_POWER,
-                                       (byte)ProtocolConstants.CG2_POWER_GET_THRESHOLD, 2, null);
-
                 case ProtocolConstants.DEVTYPE_RM:
                     feature = (byte)ProtocolConstants.CG2_F_FEEDBACK;
                     command = (byte)ProtocolConstants.FEEDBACK_CMD_GET_SETTINGS;
@@ -106,14 +102,6 @@
             var p = ReadPayload(decoderId, (byte)ProtocolConstants.CG2_F_PARAM,
                                 (byte)ProtocolConstants.CG2_PARAM_READ, 3, new[] { number });
             return p == null ? null : new Cg2Reader(p[1..]).U16();
-        }
-
-        // Grenzwert des Stromdecoders lesen (Little Endian)
-        public static ushort ReadThreshold(byte decoderId, ushort defaultValue)
-        {
-            var p = ReadPayload(decoderId, (byte)ProtocolConstants.CG2_F_POWER,
-                                (byte)ProtocolConstants.CG2_POWER_GET_THRESHOLD, 2, null);
-            return p == null ? defaultValue : new Cg2Reader(p).U16();
         }
     }
 }

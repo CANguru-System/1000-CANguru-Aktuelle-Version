@@ -16,7 +16,6 @@ public:
     void setup() override;
     void loop() override;
 
-    bool onMessage(const Cg2Header &h, const uint8_t *payload, uint16_t payloadLen) override;
     uint8_t getAliveValues(uint16_t *values, uint8_t maxValues) override;
     AliveState getStatus() const override;
     void onTrackPower(bool on) override;

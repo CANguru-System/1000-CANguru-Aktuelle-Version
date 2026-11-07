@@ -328,11 +328,12 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
         }
         return;
 
-    case CG2_F_POWER:
-        if (h.command == CG2_POWER_SHUTDOWN)
+    case CG2_F_EVENT:
+        if (h.command == CG2_EVENT_EVENT && h.length >= 1 && payload[0] == CG2_EV_OVERCURRENT)
         {
-            // Nothalt an die Gleisbox, damit auch WDP und alle Loks den Halt mitbekommen.
-            // Beim Senden meldet processCANFrames2CAN() den STOPP an GUI und Stromdecoder.
+            // Überstrom (Stromdecoder): Nothalt an die Gleisbox, damit auch WDP und alle Loks
+            // den Halt mitbekommen. Beim Senden meldet processCANFrames2CAN() den STOPP an
+            // GUI und Decoder. Das Ereignis selbst geht unten unverändert an die GUI.
             enqueueCANFrame2CAN(SysSTOPP, hashEnabled);
         }
         break;
@@ -539,8 +540,6 @@ void sendTrackPowerToDecoders(uint8_t on)
     trackPowerState = on ? 1 : 0;
     // an alle Decoder (LED-Signale, Stromdecoder ...)
     broadcastV2(CG2_F_SESSION, CG2_SESSION_TRACK_POWER, CG2_ADDR_ALL, 0, p, sizeof(p));
-    // Übergang bis Schritt 3.4: Stromdecoder mit älterer Firmware kennen nur POWER_TRACK
-    broadcastV2(CG2_F_POWER, CG2_POWER_TRACK, CG2_ADDR_TYPE, DEVTYPE_POWER, p, sizeof(p));
 }
 
 // OTA: Decoder lädt die Firmware per WLAN von der Bridge
