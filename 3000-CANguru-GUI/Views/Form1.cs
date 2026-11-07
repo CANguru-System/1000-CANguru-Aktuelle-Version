@@ -3,7 +3,6 @@ using CANguru.Communication;
 using CANguru.Controllers;
 using CANguru.Controls;
 using CANguru.GUI.Forms;
-using CANguru.GUI.Panels;
 using CANguru.Models;
 using CANguru.Networking;
 using CANguru.Protocol;
@@ -41,8 +40,6 @@ namespace CANguru.Views
         private LokStorage lokstorage;
         private DecoderStorage decoderStorage;
         private DecoderList decoderController;
-        private SwitchDecoderSettingsForm activeSwitchForm;
-        private SignalDecoderSettingsForm activeSignalForm;
         private volatile ParameterForm? activeParameterForm; // offenes allgemeines Parameter-Fenster
         private DecoderListForm decoderListForm;
         private LokListForm lokListForm;
@@ -427,12 +424,6 @@ namespace CANguru.Views
                                           new byte[] { (byte)ProtocolConstants.CG2_PROTO_MINOR });
         }
 
-        // Zum Senden an die Bridge
-        public void SendToBridge(byte[] frame)
-        {
-            UdpClientSingleton.Instance.Send(frame);
-        }
-
         private void OnUdpData(IAsyncResult ar)
         {
             if (guiClosing)
@@ -592,14 +583,6 @@ namespace CANguru.Views
                             HandleOvercurrent(h.Decoder, payload[1..]);
                         activeParameterForm?.OnEvent(h.Decoder, payload[0], payload[1..]);
                     }
-                    return;
-
-                case ProtocolConstants.CG2_F_STEPPER:
-                    // Meldungen von Weiche/Formsignal an das gerade offene Einstellungsfenster
-                    activeSwitchForm?.HandleSetEndAck(h.Decoder, h.Command, payload);
-                    activeSwitchForm?.HandleSetCurrPos(h.Decoder, h.Command, payload);
-                    activeSignalForm?.HandleSetEndAck(h.Decoder, h.Command, payload);
-                    activeSignalForm?.HandleSetCurrPos(h.Decoder, h.Command, payload);
                     return;
             }
         }
@@ -1294,20 +1277,12 @@ namespace CANguru.Views
             decoderStorage.AddOrUpdate(decoder);
             RefreshDecoderListBox();
 
-            // Einstellungen holen; der Stromdecoder liefert seine Werte per ALIVE
-            if (type != DecoderType.Power)
+            // Einstellungen holen (Liste, beim Stromdecoder die Abschaltgrenze für die Anzeige)
+            Task.Run(async () =>
             {
-                Task.Run(async () =>
-                {
-                    await Task.Delay(300); // Decoder Zeit geben
-                    switch (decoder)
-                    {
-                        case SwitchDecoder s: s.UpdateFromDecoder(); break;
-                        case SignalDecoder s: s.UpdateFromDecoder(); break;
-                        case FeedbackDecoder f: f.UpdateFromDecoder(); break;
-                    }
-                });
-            }
+                await Task.Delay(300); // Decoder Zeit geben
+                RefreshDecoderInfo(decoder);
+            });
         }
 
         // Kontextmenü der Decoderliste: allgemeines Parameter-Fenster aus der Selbstbeschreibung
@@ -1338,6 +1313,20 @@ namespace CANguru.Views
             {
                 activeParameterForm = null;
             }
+            // Einstellungen könnten geändert sein: Angaben in der Liste und Stromanzeige auffrischen
+            RefreshDecoderInfo(decoder);
+        }
+
+        // Liest die Einstellungen eines Decoders für Liste und Hauptseite (im Hintergrund).
+        // Stromdecoder: Abschaltgrenze für die Farbe der Stromanzeige.
+        private void RefreshDecoderInfo(CANguruDecoder decoder)
+        {
+            Task.Run(() =>
+            {
+                decoder.UpdateFromDecoder();
+                if (decoder is PowerDecoder p && p.MaxCurrent > 0)
+                    PowerCtrl.Threshold_mA = p.MaxCurrent;
+            });
         }
 
         // Kontextmenü der Decoderliste: Decoder aus der Liste der Bridge entfernen

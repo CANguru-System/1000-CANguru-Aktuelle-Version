@@ -50,8 +50,3 @@ private:
 
     unsigned long lastSendTime = 0;
 };
-
-extern void loadDefaultsWithAddress();              // setzt seine Standardwerte und behält die Adresse bei
-
-// im PowerDecoder
-constexpr const char* DECODER_NVS_NAMESPACE = "power";

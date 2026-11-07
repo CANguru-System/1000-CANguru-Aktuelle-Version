@@ -1,11 +1,9 @@
-﻿using CANguru.Views;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+﻿using System;
 
 namespace CANguru.Controllers
 {
+    // Stromanzeige auf der Hauptseite: Ströme aus dem Alive des Stromdecoders,
+    // Abschaltgrenze aus seinem Parameter 0 (für die Farbe der Anzeige)
     public class PowerDecoderController
     {
         public int Current0_mA { get; private set; }
@@ -29,17 +27,5 @@ namespace CANguru.Controllers
         {
             ShutdownTriggered?.Invoke(channel);
         }
-
-        public void SendThreshold()
-        {
-            byte[] frame = new byte[4];
-            frame[0] = ProtocolConstants.POWER_CMD_SET_THRESHOLD;
-            frame[1] = (byte)SelectedDecoderId;
-            frame[2] = (byte)(Threshold_mA >> 8);
-            frame[3] = (byte)(Threshold_mA & 0xFF);
-            Form1.Instance.SendToBridge(frame);
-        }
-
-        public int SelectedDecoderId { get; set; }
     }
 }

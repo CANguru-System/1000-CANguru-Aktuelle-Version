@@ -1,5 +1,4 @@
 ﻿using CANguru.GUI.Forms;
-using CANguru.GUI.Panels;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

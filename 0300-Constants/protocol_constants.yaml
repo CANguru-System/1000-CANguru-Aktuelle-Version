@@ -2,95 +2,14 @@ constants:
   INVALID_ASSIGNED_ID:
     value: '0x00'
     architecture: core
-  EXP_LNG_SWITCH_SETTINGS:
-    value: '8'
-    architecture: core
-  EXP_LNG_SIGNAL_SETTINGS:
-    value: '8'
-    architecture: core
-  EXP_LNG_POWER_SETTINGS:
-    value: '2'
-    architecture: core
-  EXP_LNG_FEEDBACK_SETTINGS:
-    value: '16'
-    architecture: core
-  EXP_LNG_ALIVE:
-    value: '3'
-    architecture: core
-  EXP_LNG_CAN_FRAME:
-    value: '13'
-    architecture: core
   canID:
     value: '0x00'
-    architecture: core
-  startByte:
-    value: '0x00'
-    architecture: core
-  featureByte:
-    value: '0x01'
-    architecture: core
-  commandByte:
-    value: '0x02'
-    architecture: core
-  FEATURE_BRIDGE:
-    value: '0x10'
-    architecture: core
-  BRIDGE_START:
-    value: '0x11'
-    architecture: core
-  FEATURE_POWER:
-    value: '0x20'
     architecture: core
   POWER_CMD_SET_THRESHOLD:
     value: '0x21'
     architecture: core
-  POWER_CMD_GET_THRESHOLD:
-    value: '0x22'
-    architecture: core
-  POWER_CMD_SHUTDOWN:
-    value: '0x23'
-    architecture: core
   POWER_CHG_TRACK_CURRENT:
     value: '0x24'
-    architecture: core
-  POWER_CMD_GET_VERSION:
-    value: '0x25'
-    architecture: core
-  FEATURE_SWITCH:
-    value: '0x30'
-    architecture: core
-  SWITCH_CMD_GET_SETTINGS:
-    value: '0x31'
-    architecture: core
-  SWITCH_CMD_SET_SETTINGS:
-    value: '0x32'
-    architecture: core
-  SWITCH_CMD_MOVE2START:
-    value: '0x33'
-    architecture: core
-  SWITCH_CMD_SET_ZERO:
-    value: '0x34'
-    architecture: core
-  SWITCH_CMD_MOVE2END:
-    value: '0x35'
-    architecture: core
-  SWITCH_CMD_SET_END:
-    value: '0x36'
-    architecture: core
-  SWITCH_CMD_SET_END_ACK:
-    value: '0x37'
-    architecture: core
-  SWITCH_CMD_TEST_RUN:
-    value: '0x38'
-    architecture: core
-  SWITCH_CMD_STOP_ALL:
-    value: '0x39'
-    architecture: core
-  SWITCH_CMD_SET_DIR:
-    value: '0x3A'
-    architecture: core
-  SWITCH_CMD_GET_VERSION:
-    value: '0x3B'
     architecture: core
   step_delay_min:
     value: '100'
@@ -116,189 +35,6 @@ constants:
   stepsToEnd_step:
     value: '10'
     architecture: core
-  FEATURE_SIGNAL:
-    value: '0x40'
-    architecture: core
-  SIGNAL_CMD_GET_SETTINGS:
-    value: '0x41'
-    architecture: core
-  SIGNAL_CMD_SET_SETTINGS:
-    value: '0x42'
-    architecture: core
-  SIGNAL_CMD_MOVE2START:
-    value: '0x43'
-    architecture: core
-  SIGNAL_CMD_SET_ZERO:
-    value: '0x44'
-    architecture: core
-  SIGNAL_CMD_MOVE2END:
-    value: '0x45'
-    architecture: core
-  SIGNAL_CMD_SET_END:
-    value: '0x46'
-    architecture: core
-  SIGNAL_CMD_SET_END_ACK:
-    value: '0x47'
-    architecture: core
-  SIGNAL_CMD_TEST_RUN:
-    value: '0x48'
-    architecture: core
-  SIGNAL_CMD_STOP_ALL:
-    value: '0x49'
-    architecture: core
-  SIGNAL_CMD_SET_DIR:
-    value: '0x4A'
-    architecture: core
-  SIGNAL_CMD_GET_VERSION:
-    value: '0x4B'
-    architecture: core
-  FEATURE_FEEDBACK:
-    value: '0x50'
-    architecture: core
-  FEEDBACK_CMD_GET_SETTINGS:
-    value: '0x51'
-    architecture: core
-  FEEDBACK_CMD_SET_SETTINGS:
-    value: '0x52'
-    architecture: core
-  FEEDBACK_CMD_SET_SETTINGS_ACK:
-    value: '0x53'
-    architecture: core
-  FEEDBACK_CMD_GET_VERSION:
-    value: '0x54'
-    architecture: core
-  FEATURE_FIRMWARE:
-    value: '0x60'
-    architecture: core
-  FRAME_GUI_OTA_RESULT:
-    value: '0x61'
-    architecture: core
-  FRAME_GUI_OTA_CURRENT_FINISHED:
-    value: '0x62'
-    architecture: core
-  FEATURE_ALIVE:
-    value: '0x70'
-    architecture: core
-  HANDLE_ALIVE:
-    value: '0x71'
-    architecture: core
-  FRAME_DECODER_ALIVE:
-    value: '0x72'
-    architecture: core
-  FRAME_DECODER_ALIVE_ACK:
-    value: '0x73'
-    architecture: core
-  FRAME_DECODER_HELLO:
-    value: '0x74'
-    architecture: core
-  FRAME_DECODER_ID_ASSIGN:
-    value: '0x75'
-    architecture: core
-  FRAME_DECODER_ID_ACK:
-    value: '0x76'
-    architecture: core
-  FEATURE_CS2:
-    value: '0x80'
-    architecture: core
-  CMD_FILE_ACK_CS2:
-    value: '0x81'
-    architecture: core
-  CMD_FILE_BLOCK_CS2:
-    value: '0x82'
-    architecture: core
-  FRAME_CAN_2DEC:
-    value: '0x83'
-    architecture: core
-  FRAME_CAN_2BRIDGE:
-    value: '0x84'
-    architecture: core
-  FRAME_CAN_2GUI:
-    value: '0x85'
-    architecture: core
-  FEATURE_SHOW_BAR:
-    value: '0x90'
-    architecture: core
-  FRAME_GUI_OTA_CURRENT_DECODER:
-    value: '0x91'
-    architecture: core
-  FRAME_GUI_OTA_OVERALL:
-    value: '0x92'
-    architecture: core
-  FEATURE_DECODER_UPLOAD:
-    value: '0xA0'
-    architecture: core
-  DECODER_UPLOAD_START:
-    value: '0xA1'
-    architecture: core
-  DECODER_UPLOAD_BLOCK:
-    value: '0xA2'
-    architecture: core
-  DECODER_UPLOAD_END:
-    value: '0xA3'
-    architecture: core
-  DECODER_UPLOAD_ERROR:
-    value: '0xA4'
-    architecture: core
-  FEATURE_SETTING:
-    value: '0xB0'
-    architecture: core
-  SETTING_CMD_RESET_TO_DEFAULTS:
-    value: '0xB1'
-    architecture: core
-  SETTING_CMD_RESET_ACK:
-    value: '0xB2'
-    architecture: core
-  FEATURE_OTA:
-    value: '0xC0'
-    architecture: core
-  OTA_START_WIFI:
-    value: '0xC1'
-    architecture: core
-  OTA_SUCCESS:
-    value: '0xC2'
-    architecture: core
-  OTA_ERROR:
-    value: '0xC3'
-    architecture: core
-  OTA_CURRENT_ERROR:
-    value: '0xC4'
-    architecture: core
-  OTA_FW_ACK:
-    value: '0xC5'
-    architecture: core
-  OTA_FW_DONE:
-    value: '0xC6'
-    architecture: core
-  OTA_UPLOAD_BLOCK:
-    value: '0xC7'
-    architecture: core
-  OTA_SINGLE_DECODER:
-    value: '0xC8'
-    architecture: core
-  OTA_GROUP_DECODERS:
-    value: '0xC9'
-    architecture: core
-  CMD_OTA_ACK:
-    value: '0xCA'
-    architecture: core
-  FEATURE_DECODER:
-    value: '0xD0'
-    architecture: core
-  MSG_START_DECODERS:
-    value: '0xD1'
-    architecture: core
-  CMD_DECODER_RESET:
-    value: '0xD2'
-    architecture: core
-  FRAME_DECODER_REJOIN:
-    value: '0xD3'
-    architecture: core
-  FRAME_DECODER_ADDED:
-    value: '0xD4'
-    architecture: core
-  CMD_ACK:
-    value: '0xF0'
-    architecture: core
   BlockSizeGUI:
     value: '1024'
     architecture: core
@@ -322,9 +58,6 @@ constants:
     architecture: core
   WDP_PORT_IN:
     value: '15731'
-    architecture: core
-  HTTPPORT:
-    value: '80'
     architecture: core
   bdrMonitor:
     value: '115200'
@@ -370,9 +103,6 @@ constants:
     architecture: core
   data7:
     value: '0x0C'
-    architecture: core
-  FEATURE_BRIDGE2DECODER:
-    value: '0xFF'
     architecture: core
   Sys_CMD:
     value: '0x00'
@@ -781,25 +511,4 @@ constants:
     architecture: core
   CG2_OTA_FAIL_INVALID:
     value: '0x05'
-    architecture: core
-  CG2_F_POWER:
-    value: '0x0A'
-    architecture: core
-  CG2_POWER_SET_THRESHOLD:
-    value: '0x01'
-    architecture: core
-  CG2_POWER_GET_THRESHOLD:
-    value: '0x02'
-    architecture: core
-  CG2_POWER_SHUTDOWN:
-    value: '0x03'
-    architecture: core
-  CG2_POWER_TRACK:
-    value: '0x04'
-    architecture: core
-  CG2_F_STEPPER:
-    value: '0x0B'
-    architecture: core
-  CG2_F_FEEDBACK:
-    value: '0x0C'
     architecture: core

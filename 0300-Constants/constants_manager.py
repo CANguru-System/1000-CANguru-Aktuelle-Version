@@ -14,57 +14,8 @@ dict(name="INVALID_ASSIGNED_ID", value="0x00", arch="core"),
 
 
 # ============================================================
-# payload_lengths
+# Stepper-Zubehör (Weiche, Formsignal): Bereiche der Parameter
 # ============================================================
-dict(name="EXP_LNG_SWITCH_SETTINGS",    value="8", arch="core"),
-dict(name="EXP_LNG_SIGNAL_SETTINGS",    value="8", arch="core"),
-dict(name="EXP_LNG_POWER_SETTINGS",     value="2", arch="core"),
-dict(name="EXP_LNG_FEEDBACK_SETTINGS",  value="16", arch="core"),
-dict(name="EXP_LNG_ALIVE",              value="3", arch="core"),
-dict(name="EXP_LNG_CAN_FRAME",          value="13", arch="core"),
-
-
-# ============================================================
-# BASE PROTOCOL FIELDS
-# ============================================================
-dict(name="canID",       value="0x00", arch="core"),
-dict(name="startByte",   value="0x00", arch="core"),
-dict(name="featureByte", value="0x01", arch="core"),
-dict(name="commandByte", value="0x02", arch="core"),
-
-
-# ============================================================
-# FEATURE: BRIDGE
-# ============================================================
-dict(name="FEATURE_BRIDGE",     value="0x10", arch="core"),
-dict(name="BRIDGE_START",       value="0x11", arch="core"), 
-
-
-# ============================================================
-# FEATURE: POWER DECODER
-# ============================================================
-dict(name="FEATURE_POWER",            value="0x20", arch="core"),
-dict(name="POWER_CMD_SET_THRESHOLD",  value="0x21", arch="core"),
-dict(name="POWER_CMD_GET_THRESHOLD",  value="0x22", arch="core"),
-dict(name="POWER_CMD_SHUTDOWN",       value="0x23", arch="core"),
-dict(name="POWER_CHG_TRACK_CURRENT",  value="0x24", arch="core"),
-dict(name="POWER_CMD_GET_VERSION",    value="0x25", arch="core"),
-
-# ============================================================
-# FEATURE: SWITCH
-# ============================================================
-dict(name="FEATURE_SWITCH",          value="0x30", arch="core"),
-dict(name="SWITCH_CMD_GET_SETTINGS", value="0x31", arch="core"),
-dict(name="SWITCH_CMD_SET_SETTINGS", value="0x32", arch="core"),
-dict(name="SWITCH_CMD_MOVE2START",   value="0x33", arch="core"),
-dict(name="SWITCH_CMD_SET_ZERO",     value="0x34", arch="core"),
-dict(name="SWITCH_CMD_MOVE2END",     value="0x35", arch="core"),
-dict(name="SWITCH_CMD_SET_END",      value="0x36", arch="core"),
-dict(name="SWITCH_CMD_SET_END_ACK",  value="0x37", arch="core"),
-dict(name="SWITCH_CMD_TEST_RUN",     value="0x38", arch="core"),
-dict(name="SWITCH_CMD_STOP_ALL",     value="0x39", arch="core"),
-dict(name="SWITCH_CMD_SET_DIR",      value="0x3A", arch="core"),
-dict(name="SWITCH_CMD_GET_VERSION",  value="0x3B", arch="core"),
 dict(name="step_delay_min",          value="100", arch="core"),
 dict(name="step_delay_std",          value="300", arch="core"),
 dict(name="step_delay_max",          value="1000", arch="core"),
@@ -73,119 +24,6 @@ dict(name="stepsToEnd_min",          value="100", arch="core"),
 dict(name="stepsToEnd_std",          value="1140", arch="core"),
 dict(name="stepsToEnd_max",          value="1300", arch="core"),
 dict(name="stepsToEnd_step",         value="10", arch="core"),
-
-# ============================================================
-# FEATURE: SIGNAL
-# ============================================================
-dict(name="FEATURE_SIGNAL",           value="0x40", arch="core"),
-dict(name="SIGNAL_CMD_GET_SETTINGS",  value="0x41", arch="core"),
-dict(name="SIGNAL_CMD_SET_SETTINGS",  value="0x42", arch="core"),
-dict(name="SIGNAL_CMD_MOVE2START",    value="0x43", arch="core"),
-dict(name="SIGNAL_CMD_SET_ZERO",      value="0x44", arch="core"),
-dict(name="SIGNAL_CMD_MOVE2END",      value="0x45", arch="core"),
-dict(name="SIGNAL_CMD_SET_END",       value="0x46", arch="core"),
-dict(name="SIGNAL_CMD_SET_END_ACK",   value="0x47", arch="core"),
-dict(name="SIGNAL_CMD_TEST_RUN",      value="0x48", arch="core"),
-dict(name="SIGNAL_CMD_STOP_ALL",      value="0x49", arch="core"),
-dict(name="SIGNAL_CMD_SET_DIR",       value="0x4A", arch="core"),
-dict(name="SIGNAL_CMD_GET_VERSION",  value="0x4B", arch="core"),
-
-# ============================================================
-# FEATURE: FEEDBACK
-# ============================================================
-dict(name="FEATURE_FEEDBACK",              value="0x50", arch="core"),
-dict(name="FEEDBACK_CMD_GET_SETTINGS",     value="0x51", arch="core"),
-dict(name="FEEDBACK_CMD_SET_SETTINGS",     value="0x52", arch="core"),
-dict(name="FEEDBACK_CMD_SET_SETTINGS_ACK", value="0x53", arch="core"),
-dict(name="FEEDBACK_CMD_GET_VERSION",      value="0x54", arch="core"),
-
-
-# ============================================================
-# FEATURE: FIRMWARE & OTA für GUI und Bridge
-# ============================================================
-dict(name="FEATURE_FIRMWARE",               value="0x60", arch="core"),
-dict(name="FRAME_GUI_OTA_RESULT",           value="0x61", arch="core"),
-dict(name="FRAME_GUI_OTA_CURRENT_FINISHED", value="0x62", arch="core"),
-
-
-# ============================================================
-# FEATURE: ALIVE / DISCOVERY
-# ============================================================
-dict(name="FEATURE_ALIVE",              value="0x70", arch="core"),
-dict(name="HANDLE_ALIVE",               value="0x71", arch="core"),
-dict(name="FRAME_DECODER_ALIVE",        value="0x72", arch="core"),
-dict(name="FRAME_DECODER_ALIVE_ACK",    value="0x73", arch="core"),
-dict(name="FRAME_DECODER_HELLO",        value="0x74", arch="core"),
-dict(name="FRAME_DECODER_ID_ASSIGN",    value="0x75", arch="core"),
-dict(name="FRAME_DECODER_ID_ACK",       value="0x76", arch="core"),
-
-
-# ============================================================
-# FEATURE: CS2
-# ============================================================
-dict(name="FEATURE_CS2",        value="0x80", arch="core"),
-dict(name="CMD_FILE_ACK_CS2",   value="0x81", arch="core"),
-dict(name="CMD_FILE_BLOCK_CS2", value="0x82", arch="core"),
-dict(name="FRAME_CAN_2DEC",     value="0x83", arch="core"),
-dict(name="FRAME_CAN_2BRIDGE",  value="0x84", arch="core"),
-dict(name="FRAME_CAN_2GUI",     value="0x85", arch="core"),
-
-
-# ============================================================
-# FEATURE: SHOW BAR
-# ============================================================
-dict(name="FEATURE_SHOW_BAR",               value="0x90", arch="core"),
-dict(name="FRAME_GUI_OTA_CURRENT_DECODER",  value="0x91", arch="core"),
-dict(name="FRAME_GUI_OTA_OVERALL",          value="0x92", arch="core"),
-
-
-# ============================================================
-# FEATURE: DECODER UPLOAD
-# ============================================================
-dict(name="FEATURE_DECODER_UPLOAD", value="0xA0", arch="core"),
-dict(name="DECODER_UPLOAD_START",   value="0xA1", arch="core"),
-dict(name="DECODER_UPLOAD_BLOCK",   value="0xA2", arch="core"),
-dict(name="DECODER_UPLOAD_END",     value="0xA3", arch="core"),
-dict(name="DECODER_UPLOAD_ERROR",   value="0xA4", arch="core"),
-
-
-# ============================================================
-# FEATURE: SETTINGS
-# ============================================================
-dict(name="FEATURE_SETTING", value="0xB0", arch="core"),
-dict(name="SETTING_CMD_RESET_TO_DEFAULTS", value="0xB1", arch="core"),
-dict(name="SETTING_CMD_RESET_ACK",    value="0xB2", arch="core"),
-
-
-# ============================================================
-# FEATURE: OTA (DECODER)
-# ============================================================
-dict(name="FEATURE_OTA",        value="0xC0", arch="core"),
-dict(name="OTA_START_WIFI",     value="0xC1", arch="core"),
-dict(name="OTA_SUCCESS",        value="0xC2", arch="core"),
-dict(name="OTA_ERROR",          value="0xC3", arch="core"),
-dict(name="OTA_CURRENT_ERROR",  value="0xC4", arch="core"),
-dict(name="OTA_FW_ACK",         value="0xC5", arch="core"),
-dict(name="OTA_FW_DONE",        value="0xC6", arch="core"),
-dict(name="OTA_UPLOAD_BLOCK",   value="0xC7", arch="core"),
-dict(name="OTA_SINGLE_DECODER", value="0xC8", arch="core"),
-dict(name="OTA_GROUP_DECODERS", value="0xC9", arch="core"),
-dict(name="CMD_OTA_ACK",        value="0xCA", arch="core"),
-
-# ============================================================
-# FEATURE: DECODER CONTROL
-# ============================================================
-dict(name="FEATURE_DECODER",      value="0xD0", arch="core"),
-dict(name="MSG_START_DECODERS",   value="0xD1", arch="core"),
-dict(name="CMD_DECODER_RESET",    value="0xD2", arch="core"),
-dict(name="FRAME_DECODER_REJOIN", value="0xD3", arch="core"),
-dict(name="FRAME_DECODER_ADDED",  value="0xD4", arch="core"),
-
-
-# ============================================================
-# GENERIC COMMANDS
-# ============================================================
-dict(name="CMD_ACK", value="0xF0", arch="core"),
 
 
 # ============================================================
@@ -199,7 +37,6 @@ dict(name="BRIDGE_PORT",       value="5000",   arch="core"),
 dict(name="GUI_PORT",          value="5001",   arch="core"),
 dict(name="WDP_PORT_OUT",      value="15730",  arch="core"),
 dict(name="WDP_PORT_IN",       value="15731",  arch="core"),
-dict(name="HTTPPORT",          value="80",     arch="core"),
 dict(name="bdrMonitor",        value="115200", arch="core"),
 dict(name="wait_time_small",    value="100",   arch="core"),
 
@@ -226,7 +63,6 @@ dict(name="data7",     value="0x0C", arch="core"),
 # ============================================================
 # LOK / MFX / S88 / CONFIG COMMANDS
 # ============================================================
-dict(name="FEATURE_BRIDGE2DECODER", value="0xFF", arch="core"),
 dict(name="Sys_CMD",                value="0x00", arch="core"),
 dict(name="LokDiscovery",           value="0x02", arch="core"),
 dict(name="LokDiscovery_R",         value="0x03", arch="core"),
@@ -294,7 +130,7 @@ dict(name="DEVTYPE_LastCANguru",  value="0x5F", arch="core"),
 
 # ============================================================
 # PROTOKOLL VERSION 2 (Phase 2) - Beschreibung: 0400-Protocol/PROTOKOLL.md
-# Präfix CG2_, damit die alten Konstanten während der Umstellung bestehen bleiben.
+# Präfix CG2_ (die Konstanten des alten Formats sind mit Phase 3 entfernt).
 # ============================================================
 
 # --- Nachrichtenkopf ---
@@ -409,18 +245,9 @@ dict(name="CG2_OTA_FAIL_SIZE",       value="0x03", arch="core"),  # Datei zu gro
 dict(name="CG2_OTA_FAIL_DOWNLOAD",   value="0x04", arch="core"),  # Download abgebrochen / unvollständig
 dict(name="CG2_OTA_FAIL_INVALID",    value="0x05", arch="core"),  # keine gültige Firmware
 
-# --- Feature 0x0A Strom (bis Phase 3) ---
-dict(name="CG2_F_POWER",             value="0x0A", arch="core"),
-dict(name="CG2_POWER_SET_THRESHOLD", value="0x01", arch="core"),
-dict(name="CG2_POWER_GET_THRESHOLD", value="0x02", arch="core"),
-dict(name="CG2_POWER_SHUTDOWN",      value="0x03", arch="core"),
-dict(name="CG2_POWER_TRACK",         value="0x04", arch="core"),
-
-# --- Feature 0x0B Stepper (Weiche/Formsignal, Übergang bis Phase 3, Nutzdaten wie bisher) ---
-dict(name="CG2_F_STEPPER",           value="0x0B", arch="core"),
-
-# --- Feature 0x0C Rückmelder (Übergang bis Phase 3, Nutzdaten wie bisher) ---
-dict(name="CG2_F_FEEDBACK",          value="0x0C", arch="core"),
+# Die Übergangs-Features 0x0A Strom, 0x0B Stepper und 0x0C Rückmelder sind mit Phase 3
+# entfallen (Parameter, Aktion, Ereignis). Die Nummern bleiben frei, damit ältere
+# Nachrichten nicht falsch gedeutet werden.
 
 ]
 

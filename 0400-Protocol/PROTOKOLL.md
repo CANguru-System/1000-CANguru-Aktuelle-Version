@@ -190,10 +190,13 @@ Ein CAN-Frame ist immer das 13-Byte-Märklin-Format (ID 4 Byte, DLC, 8 Datenbyte
 | `RESULT` 0x05 | B → G | `[id][ergebnis][fehlergrund]`, Ergebnis: 0 ok, 1 fehlgeschlagen, 2 keine Rückmeldung; Fehlergrund wie bei `REJOIN`. Bei den Gründen 1, 2 und 4 versucht die Bridge es nach 3 s ein zweites Mal, bevor sie `RESULT` sendet. Nach dem letzten Decoder sendet sie `PROGRESS` mit Gesamt 100 %. |
 | `DECODER_START` 0x06 | B → D (Unicast) | – . Der Decoder verbindet sich mit dem WLAN der Bridge und lädt die Firmware per HTTP. |
 
-### 5.10 Strom `CG2_F_POWER` (0x0A) – entfallen mit Schritt 3.4
+Die Feature-Nummern 0x0A–0x0C waren Übergangs-Features der Phase 2. Sie sind mit Phase 3 entfallen, ihre Konstanten
+sind entfernt, und die Nummern bleiben frei, damit ältere Nachrichten nicht falsch gedeutet werden. Die folgenden
+Abschnitte halten fest, was sie ersetzt.
 
-Wird nicht mehr verwendet; die Konstanten verschwinden mit Schritt 3.6. Der Stromdecoder (ab Firmware 2.0) nutzt nur
-noch allgemeine Features:
+### 5.10 Strom (0x0A) – entfallen
+
+Der Stromdecoder (ab Firmware 2.0) nutzt nur noch allgemeine Features:
 
 | früher | jetzt |
 |---|---|
@@ -202,14 +205,14 @@ noch allgemeine Features:
 | `TRACK [an]` | Sitzung `TRACK_POWER [an]` (an alle Decoder und die GUI) |
 | Strom je Kanal | Messwerte im Alive laut Beschreibung („Strom Kanal 1/2“, mA, `0xFFFF` = nicht angeschlossen) |
 
-### 5.11 Stepper `CG2_F_STEPPER` (0x0B) – Übergang bis Phase 3
-Weichen- und Formsignaldecoder. **Die Kommandos sind die bisherigen Werte `SWITCH_CMD_*`**
-(`GET_SETTINGS` 0x31 … `GET_VERSION` 0x3B), auch für Signaldecoder. **Die Nutzdaten bleiben unverändert**,
-einschließlich Big Endian und der ID in Nutzdaten[0]. So ändert sich in Phase 2 am Stepper-Code nur der Rahmen.
+### 5.11 Stepper (0x0B) – entfallen
 
-### 5.12 Rückmelder `CG2_F_FEEDBACK` (0x0C) – entfallen mit Schritt 3.5
+Weiche und Formsignal (Zubehör-Decoder ab Firmware 2.0): Parameter 0 Adresse, 1 Verzögerung, 2 Laufweg,
+3 Laufrichtung; Kalibrierung, Testfahrt und Stopp als Aktionen; Ereignisse `POSITION` und `CALIBRATED` (5.6).
 
-Wird nicht mehr verwendet; die Konstanten verschwinden mit Schritt 3.6. Der Rückmelder (ab Firmware 2.0) hat die
+### 5.12 Rückmelder (0x0C) – entfallen
+
+Der Rückmelder (ab Firmware 2.0) hat die
 Parameter 0 … 15 „Kontakt k: Meldeadresse“ (u8, 1–255, Standard k, bleiben bei Werkseinstellungen erhalten) im
 Namensraum „feedback“, Schlüssel `K1` … `K16` (bis Firmware 1.x im Namensraum „decoder“; beim ersten Start einmalig
 übernommen). Messwert: belegte Kontakte als Bitmaske (Kontakt 1 = Bit 0).

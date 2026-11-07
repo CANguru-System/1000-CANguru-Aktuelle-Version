@@ -20,18 +20,5 @@ extern CANguruPreferences prefsFeedBack;
 #if DECODER_TYPE == DEVTYPE_LEDSIGNAL
 extern CANguruPreferences prefsLedSignal;
 #endif
-// Funktion stellt sicher, dass keine unerlaubten 8-Bit-Werte geladen werden können
-uint8_t readValfromPreferences8(CANguruPreferences& pref, const char* key, uint8_t val, uint8_t min, uint8_t max);
-
-// Funktion stellt sicher, dass keine unerlaubten 16-Bit-Werte geladen werden können
-uint16_t readValfromPreferences16(CANguruPreferences& pref, const char* key, uint16_t val, uint16_t min, uint16_t max);
-
-// Mit testMinMax wird festgestellt, ob ein Wert innerhalb der
-// Grenzen von min und max liegt
-bool testMinMax(uint16_t oldval, uint16_t val, uint16_t min, uint16_t max);
-
-bool parsePacket(const uint8_t* data, int len,
-                 uint8_t& featureId,
-                 uint8_t& commandId,
-                 const uint8_t*& payload,
-                 uint8_t& payloadLen);
+// Laden, Begrenzen und Speichern der Einstellungen übernimmt der Parameter-Speicher
+// des Kerns (DecoderBase::paramsLoad, Cg2ParamDef mit NVS-Schlüssel).

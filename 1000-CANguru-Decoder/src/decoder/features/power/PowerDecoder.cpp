@@ -10,8 +10,6 @@
 #include "Core_Alive.h"
 #include "Core_globals.h"
 #include "DecoderBase.h"
-#include "DecoderResetUtility.h"
-#include "Core_Param.h"
 
 uint16_t threshold_mA = 1000;
 
@@ -21,9 +19,6 @@ DecoderBase::AliveState currentStatus = DecoderBase::AliveState::Online;
 // Globale Objekte
 static Adafruit_INA3221 ina3221;
 static const gpio_num_t shutdownPin = GPIO_NUM_20; // Define the GPIO pin for shutdown
-
-// Keys für NVS
-static const char *key_power_threshold = "pwrThreshold";
 
 // Widerstand der Shunts auf dem INA3221-Modul in Ohm.
 // Booster V2.0: INA3221-Modul mit Aufdruck R100 = 0,1 Ohm (Bibliothek nimmt 0,05 Ohm an).
@@ -70,18 +65,6 @@ static const char *power_getLine1()
     return "Booster";
 }
 
-// Konfig lesen
-int coreConfigGetUInt16(const char *key, int defaultValue)
-{
-    return prefsPower.getUInt(key, defaultValue);
-}
-
-// Konfig schreiben
-void coreConfigSetUInt16(const char *key, int value)
-{
-    prefsPower.putUInt(key, value);
-}
-
 void setTrackPower(bool state)
 {
     if (state && !trackOn)
@@ -89,12 +72,12 @@ void setTrackPower(bool state)
     trackOn = state;
     if (state)
     {
-        Serial.println("POWER_CHG_TRACK_CURRENT EIN received");
+        Serial.println("Gleisspannung EIN");
         gpio_set_level(shutdownPin, HIGH); // Strom EIN
     }
     else
     {
-        Serial.println("POWER_CHG_TRACK_CURRENT AUS received");
+        Serial.println("Gleisspannung AUS");
         gpio_set_level(shutdownPin, LOW); // Strom AUS
     }
 }
@@ -129,21 +112,6 @@ void initPowerDecoder()
 
     registerConfigProvider(&provider);
 }
-void loadDefaults() // setzt seine Standardwerte
-{
-    // Hier können die Standardwerte für den PowerDecoder gesetzt werden
-    Serial.println("Loading default settings for PowerDecoder...");
-    //--------------------------------------------------- key -------------- Wert ------------min ----------max ---)
-    // Adresse
-    prefsPower.init();
-    threshold_mA = limitThreshold(coreConfigGetUInt16(key_power_threshold, 1000));
-}
-
-void loadDefaultsWithAddress() // setzt seine Standardwerte und behält die Adresse bei
-{
-    loadDefaults();
-}
-
 void PowerDecoder::setup()
 {
     // 0. Basisklasse initialisieren (WICHTIG!)
@@ -170,9 +138,9 @@ void PowerDecoder::setup()
     pinMode(shutdownPin, OUTPUT);
 
     initPowerDecoder();
-    // NVS
-    loadDefaults();
-    paramsLoad(); // Abschaltgrenze über den Parameter-Speicher des Kerns
+    // Abschaltgrenze über den Parameter-Speicher des Kerns (Schlüssel "pwrThreshold")
+    prefsPower.init();
+    paramsLoad();
 }
 
 void PowerDecoder::readCurrent()
