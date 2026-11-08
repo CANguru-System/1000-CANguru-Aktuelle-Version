@@ -13,9 +13,11 @@
 #if DECODER_TYPE == DEVTYPE_SWITCH
 static CANguruPreferences &variantStore = prefsSwitch; // Namensraum wie bisher: Einstellungen bleiben erhalten
 static const char *VARIANT_LINE1 = "Switch";
+static const char *const POSITION_TEXTS[] = {"abzweigend", "gerade", "unterwegs / unsicher"};
 #else
 static CANguruPreferences &variantStore = prefsSignal;
 static const char *VARIANT_LINE1 = "Signal";
+static const char *const POSITION_TEXTS[] = {"Halt", "Fahrt", "unterwegs / unsicher"};
 #endif
 
 // ------------------------------------------------------------
@@ -72,11 +74,12 @@ void StepperAccessory::setup()
     DEVTYPE = DEVTYPE_SIGNAL;
 #endif
     VERS_HIGH = 2; // Zubehör-Decoder (Phase 3)
-    VERS_LOW = 0;
+    VERS_LOW = 1;  // 2.1: Stellung als Klartext (Protokoll 2.1)
     AccessoryDecoder::setup();
 }
 
 const char *StepperAccessory::line1() const { return VARIANT_LINE1; }
+const char *const *StepperAccessory::positionTexts() const { return POSITION_TEXTS; }
 
 uint8_t StepperAccessory::paramCount() const { return P_COUNT; }
 const Cg2ParamDef *StepperAccessory::paramDef(uint8_t n) const { return n < P_COUNT ? &stepperParams[n] : nullptr; }

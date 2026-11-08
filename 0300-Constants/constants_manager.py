@@ -135,7 +135,7 @@ dict(name="DEVTYPE_LastCANguru",  value="0x5F", arch="core"),
 
 # --- Nachrichtenkopf ---
 dict(name="CG2_MAGIC",          value="0xC2", arch="core"),  # Byte 0: CANguru, Hauptversion 2
-dict(name="CG2_PROTO_MINOR",    value="0",    arch="core"),  # Unterversion, in HELLO/DISCOVER_REPLY
+dict(name="CG2_PROTO_MINOR",    value="1",    arch="core"),  # Unterversion, in HELLO/DISCOVER_REPLY (1: Messwerte als Auswahl/Bitmaske)
 dict(name="CG2_HEADER_SIZE",    value="8",    arch="core"),
 dict(name="CG2_ESPNOW_MAX",     value="250",  arch="core"),  # max. Nachricht über ESP-NOW (Kopf + Nutzdaten)
 
@@ -204,6 +204,7 @@ dict(name="CG2_TYPE_U8",             value="0",    arch="core"),  # Datentyp ein
 dict(name="CG2_TYPE_U16",            value="1",    arch="core"),
 dict(name="CG2_TYPE_CHOICE",         value="2",    arch="core"),
 dict(name="CG2_TYPE_BOOL",           value="3",    arch="core"),
+dict(name="CG2_TYPE_BITS",           value="4",    arch="core"),  # nur Messwerte: Bitmaske, Auswahltexte = Namen der Bits
 
 # --- Feature 0x05 Aktion ---
 dict(name="CG2_F_ACTION",            value="0x05", arch="core"),

@@ -32,6 +32,7 @@ protected:
     void driveTick() override;
     bool driveBusy(uint8_t ch) const override { return running; } // Fahrt oder Kalibrierung
     const char *line1() const override;
+    const char *const *positionTexts() const override;
 
 private:
     enum class Phase : uint8_t

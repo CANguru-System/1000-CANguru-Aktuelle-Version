@@ -32,15 +32,19 @@ void AccessoryDecoder::setup()
     provider.getLine1 = accessoryLine1;
     registerConfigProvider(&provider);
 
-    // Namen der Messwerte: "Stellung" bzw. "Stellung Signal 2"
+    // Messwerte: Stellung je Kanal als Auswahl (Protokoll 2.1), Namen "Stellung" bzw.
+    // "Signal 2: Stellung" (Gruppenregel)
     for (uint8_t ch = 0; ch < channelCount() && ch < MAX_CHANNELS; ch++)
     {
         if (channelCount() == 1)
             snprintf(valueNames[ch], sizeof(valueNames[ch]), "Stellung");
         else
-            snprintf(valueNames[ch], sizeof(valueNames[ch]), "Stellung %u", ch + 1);
+            snprintf(valueNames[ch], sizeof(valueNames[ch]), "Signal %u: Stellung", ch + 1);
         valueDefs[ch].name = valueNames[ch];
-        valueDefs[ch].unit = "0/1";
+        valueDefs[ch].unit = "";
+        valueDefs[ch].type = CG2_TYPE_CHOICE;
+        valueDefs[ch].choices = positionTexts();
+        valueDefs[ch].choiceCount = 3;
     }
 
     paramsLoad();

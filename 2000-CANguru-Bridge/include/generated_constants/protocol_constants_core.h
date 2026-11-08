@@ -5,9 +5,6 @@
 // ------------------------------------------------------------
 
 #define INVALID_ASSIGNED_ID 0x00
-#define canID 0x00
-#define POWER_CMD_SET_THRESHOLD 0x21
-#define POWER_CHG_TRACK_CURRENT 0x24
 #define step_delay_min 100
 #define step_delay_std 300
 #define step_delay_max 1000
@@ -93,7 +90,7 @@
 #define DEVTYPE_FREE 0x5E
 #define DEVTYPE_LastCANguru 0x5F
 #define CG2_MAGIC 0xC2
-#define CG2_PROTO_MINOR 0
+#define CG2_PROTO_MINOR 1
 #define CG2_HEADER_SIZE 8
 #define CG2_ESPNOW_MAX 250
 #define CG2_FLAG_ACK_REQ 0x01
@@ -146,6 +143,7 @@
 #define CG2_TYPE_U16 1
 #define CG2_TYPE_CHOICE 2
 #define CG2_TYPE_BOOL 3
+#define CG2_TYPE_BITS 4
 #define CG2_F_ACTION 0x05
 #define CG2_ACTION_EXECUTE 0x01
 #define CG2_F_EVENT 0x06

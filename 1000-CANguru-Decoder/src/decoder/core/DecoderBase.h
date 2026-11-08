@@ -25,11 +25,19 @@ struct Cg2ParamDef
     uint8_t flags;               // CG2_PF_* (fehlt = 0)
 };
 
-// Beschreibung einer Aktion oder eines Messwerts (nur Name und Einheit)
+// Beschreibung einer Aktion oder eines Messwerts.
+// Messwerte können ab Protokoll 2.1 als Auswahl oder Bitmaske beschrieben werden:
+//   type CG2_TYPE_CHOICE: Wert = Index in choices (z. B. "abzweigend", "gerade", "unterwegs")
+//   type CG2_TYPE_BITS:   Wert = Bitmaske, choices = Namen der Bits (Bit 0 zuerst)
+// Ohne choices (choiceCount 0) ist der Messwert eine Zahl (u16) mit Einheit.
+// Namensregel für Gruppen: "Gruppe: Name", z. B. "Signal 3: Stellung".
 struct Cg2InfoDef
 {
     const char *name;
     const char *unit;
+    uint8_t type;                // nur bei choiceCount > 0: CG2_TYPE_CHOICE oder CG2_TYPE_BITS
+    const char *const *choices;  // Auswahltexte bzw. Namen der Bits (fehlt = nullptr)
+    uint8_t choiceCount;
 };
 
 // Basisklasse aller Decoder. Der Kern (Core_*) übernimmt Funk, Anmeldung, Alive,

@@ -98,6 +98,32 @@ bool bOk = rb.U8() == ProtocolConstants.CG2_KIND_PARAM && rb.U8() == 1 && rb.U8(
            rb.Str() == "vorwärts" && rb.Str() == "rückwärts" && rb.Ok && rb.Remaining == 0;
 Pruefe(bOk, "Beschreibung: Zerlegung");
 
+var dAuswahl = Cg2Description.Parse(beschreibung, out int nAuswahl);
+Pruefe(dAuswahl != null && nAuswahl == 2 && dAuswahl.Name == "Laufrichtung" && dAuswahl.Choices.Length == 2 &&
+       dAuswahl.FormatValue(1) == "rückwärts" && dAuswahl.FormatValue(7) == "7" && dAuswahl.FormatValue(0xFFFF) == "–",
+       "Beschreibung: Parse und Klartext einer Auswahl");
+Pruefe(dAuswahl != null && dAuswahl.Group == "" && dAuswahl.Label == "Laufrichtung", "Gruppenregel: ohne Gruppe");
+Pruefe(Cg2Description.Parse(beschreibung[..^3], out _) == null, "Beschreibung: abgeschnittene Nutzdaten erkannt");
+
+// --- Messwert als Bitmaske (Protokoll 2.1), dieselben Bytes wie im C++-Test ---
+const string bitsHex = "020001040000000000000000000642656C65677403024B31024B32024B33";
+byte[] bits = new Cg2Writer()
+    .U8((byte)ProtocolConstants.CG2_KIND_VALUE).U8(0).U8(1).U8((byte)ProtocolConstants.CG2_TYPE_BITS)
+    .U16(0).U16(0).U16(0).U16(0).Str("").Str("Belegt").U8(3).Str("K1").Str("K2").Str("K3")
+    .ToArray();
+Pruefe(Convert.ToHexString(bits) == bitsHex, "Bitmaske: Kodierung");
+var dBits = Cg2Description.Parse(bits, out int nBits);
+Pruefe(dBits != null && nBits == 1 && dBits.Kind == ProtocolConstants.CG2_KIND_VALUE &&
+       dBits.Type == ProtocolConstants.CG2_TYPE_BITS && dBits.Choices.Length == 3, "Bitmaske: Zerlegung");
+Pruefe(dBits != null && dBits.FormatValue(0) == "keine" && dBits.FormatValue(0b101) == "K1, K3" &&
+       dBits.FormatValue(0b1010) == "K2, 4", "Bitmaske: Klartext (Bit ohne Namen = Nummer)");
+
+// --- Gruppenregel ---
+var gruppe = new Cg2Description { Name = "Signal 3: Adresse" };
+Pruefe(gruppe.Group == "Signal 3" && gruppe.Label == "Adresse", "Gruppenregel: Gruppe und Name");
+var ohneLeer = new Cg2Description { Name = "Zeit:10" };
+Pruefe(ohneLeer.Group == "" && ohneLeer.Label == "Zeit:10", "Gruppenregel: Doppelpunkt ohne Leerzeichen zählt nicht");
+
 // --- Kopf-Hilfen ---
 var kopf = new Cg2Header { Flags = (byte)ProtocolConstants.CG2_FLAG_ACK_REQ };
 kopf.AddrMode = ProtocolConstants.CG2_ADDR_TYPE;

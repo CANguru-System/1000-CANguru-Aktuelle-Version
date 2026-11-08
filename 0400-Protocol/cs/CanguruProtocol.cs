@@ -140,6 +140,78 @@ namespace CANguru.Protocol
         public byte[] ToArray() => _buf.ToArray();
     }
 
+    // Eintrag aus der Selbstbeschreibung eines Decoders (PROTOKOLL.md 5.4):
+    // Parameter, Aktion oder Messwert
+    public sealed class Cg2Description
+    {
+        public byte Kind { get; init; }   // CG2_KIND_PARAM, _ACTION, _VALUE
+        public byte Number { get; init; }
+        public byte Type { get; init; }   // CG2_TYPE_U8, _U16, _CHOICE, _BOOL, _BITS (nur Messwerte)
+        public ushort Min { get; init; }
+        public ushort Max { get; init; }
+        public ushort Default { get; init; }
+        public ushort Step { get; init; }
+        public string Unit { get; init; } = "";
+        public string Name { get; init; } = "";
+        public string[] Choices { get; init; } = Array.Empty<string>();
+
+        // Gruppenregel: "Signal 3: Adresse" gehört zur Gruppe "Signal 3" und heißt dort "Adresse".
+        // Ohne ": " gibt es keine Gruppe (leer) und Label = Name.
+        public string Group
+        {
+            get { int i = Name.IndexOf(": ", StringComparison.Ordinal); return i > 0 ? Name.Substring(0, i) : ""; }
+        }
+        public string Label
+        {
+            get { int i = Name.IndexOf(": ", StringComparison.Ordinal); return i > 0 ? Name.Substring(i + 2) : Name; }
+        }
+
+        // Wert als Text (ohne Einheit): Auswahl als Klartext, Bitmaske als Namen der gesetzten
+        // Bits ("keine", wenn kein Bit gesetzt), Ja/Nein, sonst die Zahl. 0xFFFF = nicht verfügbar.
+        public string FormatValue(int value)
+        {
+            if (value == 0xFFFF)
+                return "–";
+            if (Type == ProtocolConstants.CG2_TYPE_CHOICE)
+                return value >= 0 && value < Choices.Length ? Choices[value] : value.ToString();
+            if (Type == ProtocolConstants.CG2_TYPE_BITS)
+            {
+                var set = new List<string>();
+                for (int bit = 0; bit < 16; bit++)
+                    if ((value & (1 << bit)) != 0)
+                        set.Add(bit < Choices.Length ? Choices[bit] : (bit + 1).ToString());
+                return set.Count == 0 ? "keine" : string.Join(", ", set);
+            }
+            if (Type == ProtocolConstants.CG2_TYPE_BOOL)
+                return value != 0 ? "ja" : "nein";
+            return value.ToString("N0");
+        }
+
+        // Antwort auf DESCRIBE_GET zerlegen:
+        // [art][nummer][anzahl][typ][min][max][standard][schritt][einheit][name][anzahlAuswahl][auswahl]...
+        // count = Anzahl der Einträge dieser Art. null = Nutzdaten fehlerhaft.
+        public static Cg2Description? Parse(byte[] payload, out int count)
+        {
+            var r = new Cg2Reader(payload);
+            byte kind = r.U8(), number = r.U8();
+            count = r.U8();
+            byte type = r.U8();
+            ushort min = r.U16(), max = r.U16(), def = r.U16(), step = r.U16();
+            string unit = r.Str(), name = r.Str();
+            int choiceCount = r.U8();
+            var choices = new string[choiceCount];
+            for (int i = 0; i < choiceCount; i++)
+                choices[i] = r.Str();
+            if (!r.Ok)
+                return null;
+            return new Cg2Description
+            {
+                Kind = kind, Number = number, Type = type, Min = min, Max = max, Default = def,
+                Step = step, Unit = unit, Name = name, Choices = choices
+            };
+        }
+    }
+
     // Lesen von Nutzdaten (Little Endian). Über das Ende hinaus: Ergebnis 0, Ok = false.
     public sealed class Cg2Reader
     {

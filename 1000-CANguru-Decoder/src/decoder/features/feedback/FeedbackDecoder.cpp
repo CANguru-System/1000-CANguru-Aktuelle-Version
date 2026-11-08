@@ -88,8 +88,13 @@ static const Cg2ParamDef feedbackParams[FeedbackDecoder::CONTACTS] = {
     FEEDBACK_CONTACT(13), FEEDBACK_CONTACT(14), FEEDBACK_CONTACT(15), FEEDBACK_CONTACT(16),
 };
 
+// Belegte Kontakte als Bitmaske (Kontakt 1 = Bit 0), die GUI zeigt sie als Leuchtpunkte (Protokoll 2.1)
+static const char *const CONTACT_NAMES[FeedbackDecoder::CONTACTS] = {
+    "K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8",
+    "K9", "K10", "K11", "K12", "K13", "K14", "K15", "K16"};
+
 static const Cg2InfoDef feedbackValues[] = {
-    {"Belegt (Bitmaske, Kontakt 1 = 1, 2 = 2, 3 = 4 ...)", ""},
+    {"Belegt", "", CG2_TYPE_BITS, CONTACT_NAMES, FeedbackDecoder::CONTACTS},
 };
 
 uint8_t FeedbackDecoder::paramCount() const { return CONTACTS; }
@@ -217,7 +222,7 @@ void FeedbackDecoder::setup()
     afterstartCallback = FeedbackDecoderAfterStart;
     DEVTYPE = DEVTYPE_RM;
     VERS_HIGH = 2; // 2.0: Meldeadressen als Parameter, Speicher im Namensraum "feedback" (Phase 3)
-    VERS_LOW = 0;
+    VERS_LOW = 1;  // 2.1: belegte Kontakte als Bitmaske mit Namen (Protokoll 2.1)
     wdpAlive = false;
     memset(msecs, 0, sizeof(msecs));
     memset(inputValue, 0, sizeof(inputValue));

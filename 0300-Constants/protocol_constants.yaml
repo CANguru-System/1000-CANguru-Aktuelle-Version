@@ -2,15 +2,6 @@ constants:
   INVALID_ASSIGNED_ID:
     value: '0x00'
     architecture: core
-  canID:
-    value: '0x00'
-    architecture: core
-  POWER_CMD_SET_THRESHOLD:
-    value: '0x21'
-    architecture: core
-  POWER_CHG_TRACK_CURRENT:
-    value: '0x24'
-    architecture: core
   step_delay_min:
     value: '100'
     architecture: core
@@ -267,7 +258,7 @@ constants:
     value: '0xC2'
     architecture: core
   CG2_PROTO_MINOR:
-    value: '0'
+    value: '1'
     architecture: core
   CG2_HEADER_SIZE:
     value: '8'
@@ -424,6 +415,9 @@ constants:
     architecture: core
   CG2_TYPE_BOOL:
     value: '3'
+    architecture: core
+  CG2_TYPE_BITS:
+    value: '4'
     architecture: core
   CG2_F_ACTION:
     value: '0x05'

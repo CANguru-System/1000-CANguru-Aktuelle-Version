@@ -163,9 +163,14 @@ static void describe(const Cg2Header &h, uint8_t kind, uint8_t n)
             gDecoder->reply(h, nullptr, 0, CG2_ERR_BAD_VALUE);
             return;
         }
-        // Aktionen und Messwerte: Datentyp u16, min/max/standard/schritt ohne Bedeutung
-        w.u8(CG2_TYPE_U16).u16(0).u16(0).u16(0).u16(0);
-        w.str(d->unit ? d->unit : "").str(d->name ? d->name : "").u8(0);
+        // Aktionen und Messwerte: min/max/standard/schritt ohne Bedeutung. Datentyp u16,
+        // bei Messwerten mit Auswahltexten Auswahl oder Bitmaske (Protokoll 2.1)
+        uint8_t choices = (d->choices != nullptr) ? d->choiceCount : 0;
+        uint8_t type = choices > 0 ? d->type : CG2_TYPE_U16;
+        w.u8(type).u16(0).u16(0).u16(0).u16(0);
+        w.str(d->unit ? d->unit : "").str(d->name ? d->name : "").u8(choices);
+        for (uint8_t i = 0; i < choices; i++)
+            w.str(d->choices[i]);
     }
 
     if (!w.ok())

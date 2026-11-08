@@ -182,6 +182,27 @@ static void testeBeschreibung()
            "Beschreibung: Zerlegung");
 }
 
+// Messwert als Bitmaske (Protokoll 2.1): so beschreibt der Rückmelder "Belegt";
+// dieselben Bytes prüft der C#-Test
+static const char *BITS_HEX = "020001040000000000000000000642656C65677403024B31024B32024B33";
+
+static void testeBitmaske()
+{
+    uint8_t buf[64];
+    Cg2Writer w(buf, sizeof(buf));
+    w.u8(CG2_KIND_VALUE).u8(0).u8(1).u8(CG2_TYPE_BITS).u16(0).u16(0).u16(0).u16(0);
+    w.str("").str("Belegt").u8(3).str("K1").str("K2").str("K3");
+    pruefe(w.ok() && bytesZuHex(buf, w.size()) == BITS_HEX, "Bitmaske: Kodierung");
+
+    Cg2Reader r(buf, w.size());
+    char einheit[8], name[16], b0[4], b1[4], b2[4];
+    bool ok = r.u8() == CG2_KIND_VALUE && r.u8() == 0 && r.u8() == 1 && r.u8() == CG2_TYPE_BITS;
+    ok = ok && r.u16() == 0 && r.u16() == 0 && r.u16() == 0 && r.u16() == 0;
+    ok = ok && r.str(einheit, sizeof(einheit)) && r.str(name, sizeof(name)) && r.u8() == 3;
+    ok = ok && r.str(b0, sizeof(b0)) && r.str(b1, sizeof(b1)) && r.str(b2, sizeof(b2)) && r.ok() && r.remaining() == 0;
+    pruefe(ok && std::strcmp(name, "Belegt") == 0 && std::strcmp(b2, "K3") == 0, "Bitmaske: Zerlegung");
+}
+
 static void testeKopfHilfen()
 {
     Cg2Header h;
@@ -225,6 +246,7 @@ int main(int argc, char **argv)
     testeVektoren(argc > 1 ? argv[1] : "testvektoren.txt");
     testeWriterReader();
     testeBeschreibung();
+    testeBitmaske();
     testeKopfHilfen();
     testeDuplikate();
     testeCrc();

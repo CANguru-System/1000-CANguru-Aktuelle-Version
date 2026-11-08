@@ -81,6 +81,8 @@ Texte haben die Form `[Länge][UTF-8-Bytes]`, höchstens 255 Byte.
 - Unbekannte Features und Kommandos werden **ignoriert**. Bei erbetener Quittung antwortet der Empfänger mit `CG2_ERR_UNKNOWN_FEATURE` bzw. `_COMMAND`.
 - Nutzdaten dürfen in neuen Versionen **nur hinten verlängert** werden. Empfänger lesen, was sie kennen, und ignorieren den Rest.
 - `CG2_MAGIC` ändert sich nur bei einem echten Bruch. Kleinere Erweiterungen zählen `CG2_PROTO_MINOR` hoch, mitgeteilt in `HELLO` und `DISCOVER_REPLY`.
+  - **2.0** erste Fassung.
+  - **2.1** Messwerte können als Auswahl oder Bitmaske beschrieben werden (5.4). Eine GUI für 2.0 zeigt sie weiter als Zahl.
 - **Altes Format:** Nachrichten, deren erstes Byte nicht `0xC2` ist, stammen von Firmware vor Version 2 (`cg2IsV2`). Sie werden ignoriert (die Bridge meldet das seriell); solche Decoder müssen einmal per USB aktualisiert werden.
 
 ---
@@ -129,8 +131,19 @@ Antwort auf `DESCRIBE_GET` (ein Eintrag je Anfrage, passt sicher in ein ESP-NOW-
 [min u16][max u16][standard u16][schritt u16]
 [einheit text][name text][anzahlAuswahl][auswahl text] × anzahlAuswahl
 ```
-Datentyp: 0 u8, 1 u16, 2 Auswahl (Wert = Index), 3 Ja/Nein.
+Datentyp: 0 u8, 1 u16, 2 Auswahl (Wert = Index), 3 Ja/Nein, 4 Bitmaske (nur Messwerte, ab 2.1).
 Bei Aktionen und Messwerten bleiben min/max/standard/schritt 0, sofern sie keine Bedeutung haben.
+
+**Messwerte** (ab 2.1) haben den Datentyp u16 (Zahl mit Einheit), Auswahl oder Bitmaske:
+- **Auswahl:** Der Wert ist der Index in die Auswahltexte, z. B. Stellung „abzweigend“, „gerade“, „unterwegs / unsicher“.
+- **Bitmaske:** Die Auswahltexte sind die Namen der Bits, Bit 0 zuerst. Beispiel: „Belegt“ mit „K1“ … „K16“; die GUI zeigt Leuchtpunkte oder die Namen der gesetzten Bits.
+
+`0xFFFF` bedeutet bei allen Datentypen „nicht verfügbar“.
+
+**Gruppenregel für Namen:** Ein Name der Form „Gruppe: Name“ (Doppelpunkt mit Leerzeichen) ordnet den
+Eintrag einer Gruppe zu, z. B. „Signal 3: Adresse“, „Signal 3: umschalten“, „Signal 3: Stellung“ oder
+„Kalibrieren: hier ist der Nullpunkt“. Das gilt für Parameter, Aktionen und Messwerte gleichermaßen und ist eine
+reine Namensregel; das Format der Nachrichten ändert sich dadurch nicht.
 Mit `nummer` ≥ `anzahl gesamt` antwortet der Decoder mit `CG2_ERR_BAD_VALUE`. Ein Decoder ohne Einträge einer Art
 antwortet also schon auf Nummer 0 mit diesem Fehler.
 
@@ -161,6 +174,10 @@ das OTA-WLAN. Standard 8,5 dBm bei ESP32-C3 (viele SuperMini-Module verbinden si
 | `CG2_EV_CALIBRATED` 0x03 | `[kanal][laufweg u16]` |
 
 Zubehör-Decoder (Weiche `0x52`, Formsignal `0x51`, LED-Signal `0x58` mit acht Kanälen am PCA9685) melden im Alive je Kanal die Stellung (0/1, 2 = unterwegs oder unbekannt).
+Ab 2.1 ist die Stellung als Auswahl beschrieben:
+- Weiche: „abzweigend / gerade / unterwegs / unsicher“
+- Formsignal: „Halt / Fahrt / unterwegs / unsicher“
+- LED-Signal: „rot / grün / wechselt“, Name „Signal k: Stellung“
 Märklin-Stellbefehle (`SWITCH_ACC`) gibt die Bridge an **alle** Decoder weiter; nur Zubehör-Decoder werten sie aus.
 Der Status ist „Warnung“, solange eine Stellung nach einem Stromausfall während der Fahrt unsicher ist.
 
@@ -216,4 +233,4 @@ Weiche und Formsignal (Zubehör-Decoder ab Firmware 2.0): Parameter 0 Adresse, 1
 Der Rückmelder (ab Firmware 2.0) hat die
 Parameter 0 … 15 „Kontakt k: Meldeadresse“ (u8, 1–255, Standard k, bleiben bei Werkseinstellungen erhalten) im
 Namensraum „feedback“, Schlüssel `K1` … `K16` (bis Firmware 1.x im Namensraum „decoder“; beim ersten Start einmalig
-übernommen). Messwert: belegte Kontakte als Bitmaske (Kontakt 1 = Bit 0).
+übernommen). Messwert „Belegt“: belegte Kontakte als Bitmaske (Kontakt 1 = Bit 0), ab Firmware 2.1 mit den Bitnamen „K1“ … „K16“.

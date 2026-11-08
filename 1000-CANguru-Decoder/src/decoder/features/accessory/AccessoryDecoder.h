@@ -47,6 +47,8 @@ protected:
     virtual void driveTick() {}                           // aus loop()
     virtual bool driveBusy(uint8_t ch) const = 0;
     virtual const char *line1() const = 0;                // Gerätename für die CS2-Konfiguration
+    // Klartext der Stellung für die GUI: [0] Stellung 0, [1] Stellung 1, [2] unterwegs/unsicher
+    virtual const char *const *positionTexts() const = 0;
 
     // ---- für den Antrieb ----
     // Stellung erreicht: speichern, Ereignis an die GUI, bei reportToWdp Rückmeldung an WDP
@@ -67,7 +69,7 @@ private:
     uint8_t positions[MAX_CHANNELS] = {0};
     uint8_t moving = 0;    // Bitmaske: Kanal bewegt sich gerade
     uint8_t uncertain = 0; // Bitmaske: Stellung nach Stromausfall während der Fahrt unsicher
-    char valueNames[MAX_CHANNELS][16];
+    char valueNames[MAX_CHANNELS][24];
     Cg2InfoDef valueDefs[MAX_CHANNELS];
 };
 

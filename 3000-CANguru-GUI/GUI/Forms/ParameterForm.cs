@@ -1,4 +1,4 @@
-using CANguru.Networking;
+﻿using CANguru.Networking;
 using CANguru.Protocol;
 using System;
 using System.Collections.Generic;
@@ -9,20 +9,6 @@ using System.Windows.Forms;
 
 namespace CANguru.GUI.Forms
 {
-    // Eintrag aus der Selbstbeschreibung eines Decoders (PROTOKOLL.md 5.4)
-    public sealed class Cg2Description
-    {
-        public byte Kind { get; init; }   // CG2_KIND_PARAM, _ACTION, _VALUE
-        public byte Number { get; init; }
-        public byte Type { get; init; }   // CG2_TYPE_U8, _U16, _CHOICE, _BOOL
-        public ushort Min { get; init; }
-        public ushort Max { get; init; }
-        public ushort Default { get; init; }
-        public ushort Step { get; init; }
-        public string Unit { get; init; } = "";
-        public string Name { get; init; } = "";
-        public string[] Choices { get; init; } = Array.Empty<string>();
-    }
 
     // Allgemeines Einstellungsfenster: baut sich aus der Selbstbeschreibung des Decoders
     // auf (Parameter, Aktionen, Messwerte). Kein eigener Code je Decodertyp nötig.
@@ -162,34 +148,12 @@ namespace CANguru.GUI.Forms
                         return list;
                     throw new InvalidOperationException(BridgeLink.ErrorText(r.ErrorCode));
                 }
-                var d = Parse(r.Payload, out count);
+                var d = Cg2Description.Parse(r.Payload, out count);
                 if (d == null)
                     throw new InvalidOperationException("Beschreibung fehlerhaft.");
                 list.Add(d);
             }
             return list;
-        }
-
-        // [art][nummer][anzahl][typ][min][max][standard][schritt][einheit][name][anzahlAuswahl][auswahl]...
-        private static Cg2Description? Parse(byte[] payload, out int count)
-        {
-            var r = new Cg2Reader(payload);
-            byte kind = r.U8(), number = r.U8();
-            count = r.U8();
-            byte type = r.U8();
-            ushort min = r.U16(), max = r.U16(), def = r.U16(), step = r.U16();
-            string unit = r.Str(), name = r.Str();
-            int choiceCount = r.U8();
-            var choices = new string[choiceCount];
-            for (int i = 0; i < choiceCount; i++)
-                choices[i] = r.Str();
-            if (!r.Ok)
-                return null;
-            return new Cg2Description
-            {
-                Kind = kind, Number = number, Type = type, Min = min, Max = max, Default = def,
-                Step = step, Unit = unit, Name = name, Choices = choices
-            };
         }
 
         private async Task<ushort?> ReadAsync(byte number)
@@ -442,7 +406,8 @@ namespace CANguru.GUI.Forms
             BeginInvoke(() =>
             {
                 for (int i = 0; i < valueLabels.Count && i < values.Length; i++)
-                    valueLabels[i].label.Text = values[i] == 0xFFFF ? "–" : values[i].ToString("N0");
+                    // Auswahl als Klartext, Bitmaske als Namen der gesetzten Bits (Protokoll 2.1)
+                    valueLabels[i].label.Text = valueLabels[i].desc.FormatValue(values[i]);
             });
         }
     }

@@ -63,15 +63,19 @@ enum ActionNr : uint8_t
 
 static const Cg2InfoDef ledActions[A_COUNT] = {
     {"Alle Signale testen (grün, rot)", ""},
-    {"Signal 1 umschalten", ""},
-    {"Signal 2 umschalten", ""},
-    {"Signal 3 umschalten", ""},
-    {"Signal 4 umschalten", ""},
-    {"Signal 5 umschalten", ""},
-    {"Signal 6 umschalten", ""},
-    {"Signal 7 umschalten", ""},
-    {"Signal 8 umschalten", ""},
+    // Gruppenregel "Signal k: ...": die GUI ordnet die Aktion der Gruppe des Signals zu
+    {"Signal 1: umschalten", ""},
+    {"Signal 2: umschalten", ""},
+    {"Signal 3: umschalten", ""},
+    {"Signal 4: umschalten", ""},
+    {"Signal 5: umschalten", ""},
+    {"Signal 6: umschalten", ""},
+    {"Signal 7: umschalten", ""},
+    {"Signal 8: umschalten", ""},
 };
+
+// Stellung im Alive (Protokoll 2.1); 2 = Überblenden läuft oder Stellung unsicher
+static const char *const POSITION_TEXTS[] = {"rot", "grün", "wechselt"};
 
 LedSignalAccessory::LedSignalAccessory() : AccessoryDecoder(&prefsLedSignal) {}
 
@@ -79,7 +83,7 @@ void LedSignalAccessory::setup()
 {
     DEVTYPE = DEVTYPE_LEDSIGNAL;
     VERS_HIGH = 1;
-    VERS_LOW = 2; // 1.2: Überblendzeit Standard 1000 ms (bis 3000 ms)
+    VERS_LOW = 3; // 1.3: Stellung als Klartext, Aktionen nach Signalen gruppiert (Protokoll 2.1)
     AccessoryDecoder::setup();
 }
 
@@ -87,6 +91,7 @@ uint8_t LedSignalAccessory::paramCount() const { return P_COUNT; }
 const Cg2ParamDef *LedSignalAccessory::paramDef(uint8_t n) const { return n < P_COUNT ? &ledParams[n] : nullptr; }
 uint8_t LedSignalAccessory::actionCount() const { return A_COUNT; }
 const Cg2InfoDef *LedSignalAccessory::actionDef(uint8_t n) const { return n < A_COUNT ? &ledActions[n] : nullptr; }
+const char *const *LedSignalAccessory::positionTexts() const { return POSITION_TEXTS; }
 
 uint8_t LedSignalAccessory::channelAddress(uint8_t ch) const
 {

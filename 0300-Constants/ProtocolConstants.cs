@@ -2,9 +2,6 @@
 public static class ProtocolConstants
 {
     public const int INVALID_ASSIGNED_ID = 0x00;
-    public const int canID = 0x00;
-    public const int POWER_CMD_SET_THRESHOLD = 0x21;
-    public const int POWER_CHG_TRACK_CURRENT = 0x24;
     public const int step_delay_min = 100;
     public const int step_delay_std = 300;
     public const int step_delay_max = 1000;
@@ -90,7 +87,7 @@ public static class ProtocolConstants
     public const int DEVTYPE_FREE = 0x5E;
     public const int DEVTYPE_LastCANguru = 0x5F;
     public const int CG2_MAGIC = 0xC2;
-    public const int CG2_PROTO_MINOR = 0;
+    public const int CG2_PROTO_MINOR = 1;
     public const int CG2_HEADER_SIZE = 8;
     public const int CG2_ESPNOW_MAX = 250;
     public const int CG2_FLAG_ACK_REQ = 0x01;
@@ -143,6 +140,7 @@ public static class ProtocolConstants
     public const int CG2_TYPE_U16 = 1;
     public const int CG2_TYPE_CHOICE = 2;
     public const int CG2_TYPE_BOOL = 3;
+    public const int CG2_TYPE_BITS = 4;
     public const int CG2_F_ACTION = 0x05;
     public const int CG2_ACTION_EXECUTE = 0x01;
     public const int CG2_F_EVENT = 0x06;

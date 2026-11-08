@@ -39,6 +39,7 @@ protected:
     void driveTick() override;
     bool driveBusy(uint8_t ch) const override { return ch < SIGNALS && fade[ch].active; }
     const char *line1() const override { return "LED-Signal"; }
+    const char *const *positionTexts() const override;
 
 private:
     // Was ein Signal zeigt
