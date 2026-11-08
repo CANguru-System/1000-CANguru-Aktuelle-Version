@@ -200,7 +200,8 @@ Der Stromdecoder (ab Firmware 2.0) nutzt nur noch allgemeine Features:
 
 | früher | jetzt |
 |---|---|
-| `SET_THRESHOLD` / `GET_THRESHOLD` | Parameter 0 „Abschaltgrenze“ (mA) |
+| `SET_THRESHOLD` / `GET_THRESHOLD` | Parameter 0 „Abschaltgrenze“ (mA); Obergrenze = 160 mV ÷ Shunt |
+| (fest einprogrammiert) | Parameter 1 „Shunt-Widerstand“ (Auswahl 0,1 / 0,05 / 0,02 Ω, ab Firmware 2.1, bleibt bei Werkseinstellungen erhalten) |
 | `SHUTDOWN [kanal][mA]` | Ereignis `CG2_EV_OVERCURRENT [kanal][mA]`; die Bridge sendet daraufhin STOPP an die Gleisbox |
 | `TRACK [an]` | Sitzung `TRACK_POWER [an]` (an alle Decoder und die GUI) |
 | Strom je Kanal | Messwerte im Alive laut Beschreibung („Strom Kanal 1/2“, mA, `0xFFFF` = nicht angeschlossen) |

@@ -20,13 +20,19 @@ DecoderBase::AliveState currentStatus = DecoderBase::AliveState::Online;
 static Adafruit_INA3221 ina3221;
 static const gpio_num_t shutdownPin = GPIO_NUM_20; // Define the GPIO pin for shutdown
 
-// Widerstand der Shunts auf dem INA3221-Modul in Ohm.
-// Booster V2.0: INA3221-Modul mit Aufdruck R100 = 0,1 Ohm (Bibliothek nimmt 0,05 Ohm an).
-static const float SHUNT_OHM = 0.1f;
+// Widerstand der Shunts auf dem INA3221-Modul, einstellbar (Parameter "Shunt-Widerstand"):
+// R100 = 0,1 Ohm (Booster V2.0 ab Werk), R050 = 0,05 Ohm, R020 = 0,02 Ohm.
+static const float SHUNT_OHMS[] = {0.1f, 0.05f, 0.02f};
+static const char *const SHUNT_CHOICES[] = {"0,1 Ω (R100, bis 1,6 A)", "0,05 Ω (R050, bis 3,2 A)", "0,02 Ω (R020, bis 8 A)"};
+static const char *KEY_SHUNT = "shunt";
+static uint8_t shuntIndex = 0;
+static float shuntOhm = 0.1f;
 
 // Der INA3221 misst höchstens 163,8 mV am Shunt; darüber bleibt der Wert stehen.
 // Ein höherer Grenzwert könnte nie erreicht werden, daher wird er begrenzt.
-static const uint16_t MAX_THRESHOLD_mA = (uint16_t)(0.160f / SHUNT_OHM * 1000.0f);
+static uint16_t maxThresholdFor(float ohm) { return (uint16_t)(0.160f / ohm * 1000.0f); }
+static uint16_t maxThreshold_mA = 1600;
+static void applyShunt(uint8_t index);
 
 // Glättung der Anzeige: gleitender Mittelwert, neuer Wert geht mit 5 % ein
 // (bei ca. 6 ms je Messung entspricht das etwa 120 ms Zeitkonstante).
@@ -52,7 +58,7 @@ static const uint16_t NOT_CONNECTED = 0xFFFF;
 
 static uint16_t limitThreshold(uint16_t value)
 {
-    return (value > MAX_THRESHOLD_mA) ? MAX_THRESHOLD_mA : value;
+    return (value > maxThreshold_mA) ? maxThreshold_mA : value;
 }
 
 static const char *power_getLine0()
@@ -127,19 +133,19 @@ void PowerDecoder::setup()
             delay(1000);
         }
     }
-    for (uint8_t ch = 0; ch < 2; ch++)
-        ina3221.setShuntResistance(ch, SHUNT_OHM);
-    // Grenzwert aus NVS laden
     beforeRestartCallback = PowerDecoderBeforeRestart;
     afterstartCallback = PowerDecoderAfterStart;
     DEVTYPE = DEVTYPE_POWER;
-    VERS_HIGH = 2; // 2.0: nur noch Parameter und Ereignisse (Phase 3)
-    VERS_LOW = 0;
+    VERS_HIGH = 2; // 2.1: Shunt-Widerstand als Parameter
+    VERS_LOW = 1;
     pinMode(shutdownPin, OUTPUT);
 
     initPowerDecoder();
-    // Abschaltgrenze über den Parameter-Speicher des Kerns (Schlüssel "pwrThreshold")
     prefsPower.init();
+    // Shunt zuerst: von ihm hängt die Obergrenze der Abschaltgrenze ab. Sonst würde eine
+    // gespeicherte Grenze über 1600 mA beim Laden auf den Bereich von R100 gekürzt.
+    applyShunt(prefsPower.getByte(KEY_SHUNT, 0));
+    // Abschaltgrenze und Shunt über den Parameter-Speicher des Kerns
     paramsLoad();
 }
 
@@ -229,16 +235,16 @@ void PowerDecoder::diagSample()
         {
             Serial.printf("DIAG CH%u: I = %5.0f mA (min %5.0f / max %5.0f) | %5.2f V | gemeldet %u mA\r\n",
                           ch + 1,
-                          shuntSum[ch] / samples / SHUNT_OHM,
-                          shuntMin[ch] / SHUNT_OHM,
-                          shuntMax[ch] / SHUNT_OHM,
+                          shuntSum[ch] / samples / shuntOhm,
+                          shuntMin[ch] / shuntOhm,
+                          shuntMax[ch] / shuntOhm,
                           bus_V,
                           (ch < 2) ? current_mA[ch] : 0);
         }
         else
         {
             char teil[24];
-            snprintf(teil, sizeof(teil), " CH%u (%.2f V, %.0f mA)", ch + 1, bus_V, shuntSum[ch] / samples / SHUNT_OHM);
+            snprintf(teil, sizeof(teil), " CH%u (%.2f V, %.0f mA)", ch + 1, bus_V, shuntSum[ch] / samples / shuntOhm);
             strncat(offen, teil, sizeof(offen) - strlen(offen) - 1);
         }
         shuntMin[ch] = 1e9f;
@@ -287,10 +293,34 @@ void PowerDecoder::onTrackPower(bool on)
 // Selbstbeschreibung (Feature Parameter, PROTOKOLL.md 5.4)
 // ------------------------------------------------------------
 
-static const Cg2ParamDef powerParams[] = {
-    // Typ, min, max, Standard, Schritt, Einheit, Name, Auswahl, Anzahl, NVS-Schlüssel (wie bisher)
-    {CG2_TYPE_U16, 100, MAX_THRESHOLD_mA, 1000, 50, "mA", "Abschaltgrenze", nullptr, 0, "pwrThreshold"},
+enum PowerParam : uint8_t
+{
+    P_THRESHOLD = 0, // Nummer 0 bleibt die Abschaltgrenze (GUI-Stromanzeige liest sie)
+    P_SHUNT,
+    P_COUNT
 };
+
+// nicht const: die Obergrenze der Abschaltgrenze hängt vom Shunt ab (applyShunt)
+static Cg2ParamDef powerParams[P_COUNT] = {
+    // Typ, min, max, Standard, Schritt, Einheit, Name, Auswahl, Anzahl, NVS-Schlüssel, Merkmale
+    {CG2_TYPE_U16, 100, 1600, 1000, 50, "mA", "Abschaltgrenze", nullptr, 0, "pwrThreshold", 0},
+    // Hardware-Bestückung: bleibt bei Werkseinstellungen erhalten
+    {CG2_TYPE_CHOICE, 0, 2, 0, 1, "", "Shunt-Widerstand", SHUNT_CHOICES, 3, KEY_SHUNT, CG2_PF_KEEP_ON_RESET},
+};
+
+// Shunt einstellen: INA3221, Messbereich und Obergrenze der Abschaltgrenze
+static void applyShunt(uint8_t index)
+{
+    if (index > 2)
+        index = 0;
+    shuntIndex = index;
+    shuntOhm = SHUNT_OHMS[index];
+    maxThreshold_mA = maxThresholdFor(shuntOhm);
+    powerParams[P_THRESHOLD].max = maxThreshold_mA;
+    for (uint8_t ch = 0; ch < 2; ch++)
+        ina3221.setShuntResistance(ch, shuntOhm);
+    Serial.printf("Shunt %.2f Ohm, Messbereich bis %u mA\r\n", shuntOhm, maxThreshold_mA);
+}
 
 // Reihenfolge wie in getAliveValues()
 static const Cg2InfoDef powerValues[] = {
@@ -306,10 +336,17 @@ CANguruPreferences *PowerDecoder::paramPrefs() { return &prefsPower; }
 // Speichern übernimmt der Kern; hier nur den Wert übernehmen
 void PowerDecoder::onParamChanged(uint8_t n, uint16_t value)
 {
-    if (n == 0)
+    if (n == P_THRESHOLD)
     {
         threshold_mA = limitThreshold(value);
         Serial.printf("Abschaltgrenze %u mA\r\n", threshold_mA);
+    }
+    else if (n == P_SHUNT && value != shuntIndex)
+    {
+        applyShunt((uint8_t)value);
+        // größerer Shunt = kleinerer Messbereich: zu hohe Abschaltgrenze herabsetzen
+        if (paramValue(P_THRESHOLD) > maxThreshold_mA)
+            paramWrite(P_THRESHOLD, maxThreshold_mA);
     }
 }
 
