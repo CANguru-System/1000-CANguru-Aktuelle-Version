@@ -27,6 +27,7 @@ uint8_t uid_device[4];
 bool GB_found;
 
 void sendCanFrame(uint8_t *data, bool hash);
+void sendPowerState(uint8_t state);
 
 void generateHash()
 {
@@ -124,11 +125,24 @@ void readCANMsg()
     memcpy(buffer, &msgReceived.identifier, 4);
     buffer[4] = msgReceived.data_length_code;
     memcpy(&buffer[5], msgReceived.data, msgReceived.data_length_code);
-    // An die GUI
+    // An die GUI (und von dort an WDP)
     enqueueCanToFifo(buffer, 'M');
     if (buffer[CANcmd]== PING_R && buffer[data7] == DEVTYPE_GB)
     {
       GB_found = true;
+    }
+    // Stellbefehle anderer Geräte am CAN-Bus (z. B. MS2 an der Gleisbox) auch an die
+    // CANguru-Decoder; bisher erreichten nur Befehle aus WDP und GUI die Decoder.
+    // Nur der Befehl selbst, nicht die Quittungen (SWITCH_ACC_R) und keine PINGs.
+    if (buffer[CANcmd] == SWITCH_ACC)
+    {
+      sendFrame2allDecoders(buffer, CAN_FRAME_SIZE);
+    }
+    // STOPP/GO anderer Geräte (z. B. MS2): Gleisspannung an GUI und Decoder melden,
+    // wie bei STOPP/GO aus WDP und GUI (processCANFrames2CAN)
+    if (buffer[CANcmd] == Sys_CMD && buffer[Framelng] == 0x05 && buffer[data4] <= 1)
+    {
+      sendPowerState(buffer[data4]);
     }
   }
 }

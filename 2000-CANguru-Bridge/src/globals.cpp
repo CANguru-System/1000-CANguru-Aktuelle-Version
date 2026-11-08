@@ -37,7 +37,7 @@ std::vector<DecoderInfo> decoders;
 
 // 5.0: Protokoll Version 2 zu GUI und Decodern
 uint8_t FW_MAJOR = 5;
-uint8_t FW_MINOR = 0;
+uint8_t FW_MINOR = 1; // 5.1: Stellbefehle und STOPP/GO vom CAN-Bus (z. B. MS2) auch an die Decoder
 
 // GUI-Kommunikation
 bool GUIipIsNotSet()
