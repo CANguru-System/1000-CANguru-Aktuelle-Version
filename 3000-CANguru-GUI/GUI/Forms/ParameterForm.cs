@@ -1,4 +1,5 @@
 ﻿using CANguru.Controllers;
+using CANguru.GUI.Forms.DecoderViews;
 using CANguru.Models;
 using CANguru.Networking;
 using CANguru.Protocol;
@@ -24,7 +25,11 @@ namespace CANguru.GUI.Forms
     //
     // The window appears at once and fills while loading. The description is cached
     // (DescriptionCache), so from the second opening on only the values are read.
-    public sealed class ParameterForm : Form
+    //
+    // On top: the view of the decoder type (DecoderView, e.g. stepper picture with
+    // calibration assistant); measured values and actions offered there are left out
+    // of the table below.
+    public sealed class ParameterForm : Form, IDecoderViewHost
     {
         private const int WideLabel = 250, WideControl = 190, WideUnit = 70;  // sections across the window
         private const int TileLabel = 110, TileControl = 110, TileUnit = 40;  // group frames side by side
@@ -60,6 +65,8 @@ namespace CANguru.GUI.Forms
         private readonly List<ParamRow> paramRows = new();
         private readonly Dictionary<int, (Cg2Description desc, Control view)> valueViews = new();
         private FlowLayoutPanel? tilePanel;
+        private DecoderView? view;
+        private DecoderDescription description = new();
         private bool loading = true;
         private bool busy;
 
@@ -133,6 +140,8 @@ namespace CANguru.GUI.Forms
                     ? "Dieser Decoder beschreibt (noch) keine Parameter."
                     : "";
                 loading = false;
+                if (view != null)
+                    view.Enabled = true;
                 UpdateButtons();
             }
             catch (Exception ex)
@@ -199,11 +208,34 @@ namespace CANguru.GUI.Forms
         private void Build(DecoderDescription desc)
         {
             content.SuspendLayout();
+            description = desc;
+
+            // view of the decoder type on top; it is usable once the values are read
+            view = DecoderView.Create(decoder.Type, this);
+            var covered = new HashSet<Cg2Description>();
+            if (view != null)
+            {
+                view.Enabled = false;
+                covered.UnionWith(view.Covered);
+                var frame = new GroupBox
+                {
+                    Text = "Übersicht",
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    Padding = new Padding(8, 6, 8, 6),
+                    Margin = new Padding(0, 0, 8, 8)
+                };
+                view.Location = new Point(8, 20);
+                frame.Controls.Add(view);
+                content.Controls.Add(frame);
+            }
+            var values = desc.Values.Where(d => !covered.Contains(d)).ToList();
+            var actions = desc.Actions.Where(d => !covered.Contains(d)).ToList();
 
             var looseParams = desc.Params.Where(d => d.Group == "").ToList();
-            var looseActions = desc.Actions.Where(d => d.Group == "").ToList();
-            var looseValues = desc.Values.Where(d => d.Group == "").ToList();
-            var groups = desc.Params.Concat(desc.Actions).Concat(desc.Values)
+            var looseActions = actions.Where(d => d.Group == "").ToList();
+            var looseValues = values.Where(d => d.Group == "").ToList();
+            var groups = desc.Params.Concat(actions).Concat(values)
                              .Select(d => d.Group).Where(g => g != "").Distinct().ToList();
 
             // order: settings, measured values and actions first (always visible without
@@ -228,8 +260,8 @@ namespace CANguru.GUI.Forms
                 foreach (var g in groups)
                 {
                     var items = desc.Params.Where(d => d.Group == g)
-                        .Concat(desc.Actions.Where(d => d.Group == g))
-                        .Concat(desc.Values.Where(d => d.Group == g)).ToList();
+                        .Concat(actions.Where(d => d.Group == g))
+                        .Concat(values.Where(d => d.Group == g)).ToList();
                     tilePanel.Controls.Add(MakeFrame(g, items, wide: false));
                 }
                 content.Controls.Add(tilePanel);
@@ -406,6 +438,7 @@ namespace CANguru.GUI.Forms
             if (!keepInput)
                 SetControlValue(row.Control, v);
             MarkDirty(row);
+            view?.ParamChanged(row.Desc, v);
         }
 
         private void MarkDirty(ParamRow row)
@@ -526,17 +559,58 @@ namespace CANguru.GUI.Forms
             b.Enabled = false;
             try
             {
-                var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_ACTION,
-                    (byte)ProtocolConstants.CG2_ACTION_EXECUTE, DecoderId, new[] { d.Number });
-                status.Text = r == null ? $"„{d.Name}“: keine Antwort."
-                            : r.IsError ? $"„{d.Name}“: {BridgeLink.ErrorText(r.ErrorCode)}."
-                            : $"„{d.Name}“ ausgeführt.";
+                await ExecuteAsync(d);
             }
             finally
             {
                 b.Enabled = true;
             }
         }
+
+        // ------------------------------------------------------------
+        // For the view of the decoder type (IDecoderViewHost)
+        // ------------------------------------------------------------
+
+        public DecoderDescription Description => description;
+
+        public ushort? ParamValue(Cg2Description param)
+        {
+            var row = paramRows.FirstOrDefault(r => r.Desc == param);
+            return row != null && row.HasValue ? row.Loaded : null;
+        }
+
+        public async Task<bool> ExecuteAsync(Cg2Description action)
+        {
+            var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_ACTION,
+                (byte)ProtocolConstants.CG2_ACTION_EXECUTE, DecoderId, new[] { action.Number });
+            status.Text = r == null ? $"„{action.Name}“: keine Antwort."
+                        : r.IsError ? $"„{action.Name}“: {BridgeLink.ErrorText(r.ErrorCode)}."
+                        : $"„{action.Name}“ ausgeführt.";
+            return r != null && !r.IsError;
+        }
+
+        // Write at once (e.g. slider in the view); the row in the table follows
+        public async Task<ushort?> WriteParamAsync(Cg2Description param, ushort value)
+        {
+            var row = paramRows.FirstOrDefault(r => r.Desc == param);
+            if (row == null)
+                return null;
+            var p = new Cg2Writer().U8(param.Number).U16(value).ToArray();
+            var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_PARAM,
+                (byte)ProtocolConstants.CG2_PARAM_WRITE, DecoderId, p);
+            if (r == null || r.IsError || r.Payload.Length < 3)
+            {
+                status.Text = $"„{param.Name}“ nicht gespeichert: " +
+                              (r == null ? "keine Antwort." : BridgeLink.ErrorText(r.ErrorCode));
+                return null;
+            }
+            ushort stored = new Cg2Reader(r.Payload[1..]).U16();
+            SetLoaded(row, stored, overwrite: true);
+            DescriptionCache.Invalidate(decoder);
+            return stored;
+        }
+
+        public void ShowStatus(string text) => status.Text = text;
 
         private void SetBusy(bool on)
         {
@@ -562,6 +636,7 @@ namespace CANguru.GUI.Forms
                     (byte)ProtocolConstants.CG2_EV_OVERCURRENT => "Überstrom – abgeschaltet.",
                     _ => $"Ereignis {ev}."
                 };
+                view?.EventReceived(ev, data);
                 // calibration stores the travel: read the parameters again
                 if (ev == ProtocolConstants.CG2_EV_CALIBRATED && !loading)
                     await ReloadParamsAsync();
@@ -588,6 +663,7 @@ namespace CANguru.GUI.Forms
                 return;
             BeginInvoke(() =>
             {
+                view?.ValuesChanged(values);
                 for (int i = 0; i < values.Length; i++)
                 {
                     if (!valueViews.TryGetValue(i, out var v))

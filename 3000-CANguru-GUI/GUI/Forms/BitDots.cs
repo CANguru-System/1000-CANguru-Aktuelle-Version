@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using System.ComponentModel;
+using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
@@ -6,12 +7,14 @@ namespace CANguru.GUI.Forms
 {
     // Measured value of type bit mask as a row of dots with the bit names below,
     // e.g. "Belegt" of the feedback decoder: red = set (occupied), white = clear,
-    // grey = no value yet. Eight dots per row.
+    // grey = no value yet. Eight dots per row. Optional second text line per dot
+    // (SubLabels, e.g. the feedback address of each contact).
     public sealed class BitDots : Control
     {
-        private const int CellW = 36, CellH = 34, Dot = 16, PerRow = 8;
+        private const int CellW = 40, Dot = 16, PerRow = 8, LineH = 13;
 
         private readonly string[] names;
+        private string[]? subLabels;
         private int value = -1; // -1 or 0xFFFF = unknown
 
         public BitDots(string[] names)
@@ -22,7 +25,7 @@ namespace CANguru.GUI.Forms
             Margin = new Padding(0, 4, 0, 4);
         }
 
-        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public int Value
         {
             get => value;
@@ -35,6 +38,20 @@ namespace CANguru.GUI.Forms
             }
         }
 
+        // Second text line below each dot (null = none)
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public string[]? SubLabels
+        {
+            get => subLabels;
+            set
+            {
+                subLabels = value;
+                Size = GetPreferredSize(Size.Empty);
+                Invalidate();
+            }
+        }
+
+        private int CellH => Dot + 4 + LineH * (subLabels == null ? 1 : 2) + 3;
         private int Rows => (names.Length + PerRow - 1) / PerRow;
 
         public override Size GetPreferredSize(Size proposedSize) =>
@@ -48,6 +65,7 @@ namespace CANguru.GUI.Forms
             bool known = value >= 0 && value != 0xFFFF;
             using var small = new Font(Font.FontFamily, 7.5f);
             using var outline = new Pen(Color.Gray);
+            const TextFormatFlags centered = TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.NoPadding;
             for (int i = 0; i < names.Length; i++)
             {
                 int x = (i % PerRow) * CellW, y = (i / PerRow) * CellH;
@@ -56,9 +74,10 @@ namespace CANguru.GUI.Forms
                 using var fill = new SolidBrush(!known ? Color.Gainsboro : on ? Color.Red : Color.White);
                 g.FillEllipse(fill, circle);
                 g.DrawEllipse(outline, circle);
-                var text = new Rectangle(x, y + Dot + 3, CellW, CellH - Dot - 3);
-                TextRenderer.DrawText(g, names[i], small, text, ForeColor,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.NoPadding);
+                int ty = y + Dot + 4;
+                TextRenderer.DrawText(g, names[i], small, new Rectangle(x, ty, CellW, LineH), ForeColor, centered);
+                if (subLabels != null && i < subLabels.Length)
+                    TextRenderer.DrawText(g, subLabels[i], small, new Rectangle(x, ty + LineH, CellW, LineH), Color.DimGray, centered);
             }
         }
     }
