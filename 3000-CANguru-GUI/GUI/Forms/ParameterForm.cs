@@ -1,4 +1,6 @@
-﻿using CANguru.Networking;
+﻿using CANguru.Controllers;
+using CANguru.Models;
+using CANguru.Networking;
 using CANguru.Protocol;
 using System;
 using System.Collections.Generic;
@@ -9,42 +11,66 @@ using System.Windows.Forms;
 
 namespace CANguru.GUI.Forms
 {
-
-    // Allgemeines Einstellungsfenster: baut sich aus der Selbstbeschreibung des Decoders
-    // auf (Parameter, Aktionen, Messwerte). Kein eigener Code je Decodertyp nötig.
+    // Settings window of a decoder, built entirely from its self-description
+    // (parameters, actions, measured values; PROTOKOLL.md 5.4). No code per decoder type.
+    //
+    // Layout:
+    //  - "Einstellungen": parameters without group
+    //  - one frame per group (name rule "Gruppe: Name", e.g. "Signal 3: Adresse"),
+    //    frames side by side; a frame holds the group's parameters, actions and values
+    //  - "Aktionen" and "Messwerte" without group
+    // Actions are buttons labelled with their name. Measured values are shown as text
+    // (choice) or dots (bit mask). Changed, unsaved values are marked.
+    //
+    // The window appears at once and fills while loading. The description is cached
+    // (DescriptionCache), so from the second opening on only the values are read.
     public sealed class ParameterForm : Form
     {
-        private readonly byte decoderId;
-        private readonly string title;
+        private const int WideLabel = 250, WideControl = 190, WideUnit = 70;  // sections across the window
+        private const int TileLabel = 110, TileControl = 110, TileUnit = 40;  // group frames side by side
 
-        private readonly TableLayoutPanel table = new()
+        private readonly CANguruDecoder decoder;
+        private byte DecoderId => (byte)decoder.AssignedId;
+
+        private readonly FlowLayoutPanel content = new()
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
-            ColumnCount = 3,
-            Padding = new Padding(10)
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Padding = new Padding(8)
         };
         private readonly Label status = new() { Dock = DockStyle.Bottom, Height = 24, Padding = new Padding(10, 4, 10, 0) };
         private readonly Button btnSave = new() { Text = "Speichern", AutoSize = true, Enabled = false };
+        private readonly Button btnDiscard = new() { Text = "Verwerfen", AutoSize = true, Enabled = false };
         private readonly Button btnDefaults = new() { Text = "Werkseinstellungen", AutoSize = true, Enabled = false };
         private readonly Button btnClose = new() { Text = "Schließen", AutoSize = true, DialogResult = DialogResult.Cancel };
+        private readonly ToolTip toolTip = new();
 
-        private readonly List<(Cg2Description desc, Control control, ushort loaded)> paramControls = new();
-        private readonly List<(Cg2Description desc, Label label)> valueLabels = new();
-
-        public ParameterForm(byte decoderId, string title)
+        private sealed class ParamRow
         {
-            this.decoderId = decoderId;
-            this.title = title;
-            Text = $"Parameter – {title} (ID {decoderId})";
-            StartPosition = FormStartPosition.CenterParent;
-            Size = new Size(560, 620); // LED-Signaldecoder: rund 40 Zeilen, der Rest scrollt
-            MinimumSize = new Size(420, 300);
-            CancelButton = btnClose;
+            public Cg2Description Desc = null!;
+            public Control Control = null!;
+            public Label Caption = null!;
+            public ushort Loaded;
+            public bool HasValue;
+            public bool Dirty => HasValue && ControlValue(Control) != Loaded;
+        }
 
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 15));
+        private readonly List<ParamRow> paramRows = new();
+        private readonly Dictionary<int, (Cg2Description desc, Control view)> valueViews = new();
+        private FlowLayoutPanel? tilePanel;
+        private bool loading = true;
+        private bool busy;
+
+        public ParameterForm(CANguruDecoder decoder)
+        {
+            this.decoder = decoder;
+            Text = $"Einstellungen – {decoder.DisplayName} (ID {decoder.AssignedId}, Firmware {decoder.Firmware})";
+            StartPosition = FormStartPosition.CenterParent;
+            Size = new Size(660, 720);
+            MinimumSize = new Size(480, 320);
+            CancelButton = btnClose;
 
             var buttons = new FlowLayoutPanel
             {
@@ -53,73 +79,61 @@ namespace CANguru.GUI.Forms
                 AutoSize = true,
                 Padding = new Padding(10, 6, 10, 6)
             };
-            buttons.Controls.AddRange(new Control[] { btnClose, btnSave, btnDefaults });
+            buttons.Controls.AddRange(new Control[] { btnClose, btnSave, btnDiscard, btnDefaults });
 
-            Controls.Add(table);
+            Controls.Add(content);
             Controls.Add(status);
             Controls.Add(buttons);
 
             btnSave.Click += async (s, e) => await SaveAsync();
+            btnDiscard.Click += (s, e) => Discard();
             btnDefaults.Click += async (s, e) => await FactoryResetAsync();
             Shown += async (s, e) => await LoadAsync();
+            FormClosing += OnFormClosing;
+            content.Resize += (s, e) => FitTilePanel();
         }
 
         // ------------------------------------------------------------
-        // Laden
+        // Loading
         // ------------------------------------------------------------
 
         private async Task LoadAsync()
         {
-            status.Text = "Lese die Beschreibung des Decoders ...";
             try
             {
-                var parameters = await DescribeAllAsync((byte)ProtocolConstants.CG2_KIND_PARAM);
-                var actions = await DescribeAllAsync((byte)ProtocolConstants.CG2_KIND_ACTION);
-                var values = await DescribeAllAsync((byte)ProtocolConstants.CG2_KIND_VALUE);
-                if (parameters == null || actions == null || values == null)
+                var desc = DescriptionCache.Get(decoder);
+                if (desc == null)
                 {
-                    status.Text = "Der Decoder antwortet nicht.";
-                    return;
-                }
-
-                table.SuspendLayout();
-                if (parameters.Count > 0)
-                {
-                    AddHeader("Einstellungen");
-                    foreach (var d in parameters)
+                    desc = await DescribeAsync();
+                    if (desc == null)
                     {
-                        ushort? v = await ReadAsync(d.Number);
-                        if (v == null)
-                        {
-                            status.Text = $"Wert „{d.Name}“ nicht lesbar.";
-                            return;
-                        }
-                        AddParam(d, v.Value);
+                        status.Text = "Der Decoder antwortet nicht.";
+                        return;
                     }
+                    DescriptionCache.Put(decoder, desc);
                 }
-                if (actions.Count > 0)
-                {
-                    AddHeader("Aktionen");
-                    foreach (var d in actions)
-                        AddAction(d);
-                }
-                if (values.Count > 0)
-                {
-                    AddHeader("Messwerte");
-                    foreach (var d in values)
-                        AddValue(d);
-                }
-                // letzte Zeile füllt den Rest, damit die Zeilen oben bündig stehen
-                table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-                table.Controls.Add(new Label(), 0, table.RowCount++);
-                table.ResumeLayout();
 
-                if (parameters.Count + actions.Count + values.Count == 0)
-                    status.Text = "Dieser Decoder beschreibt (noch) keine Parameter.";
-                else
-                    status.Text = "";
-                btnSave.Enabled = parameters.Count > 0;
-                btnDefaults.Enabled = true;
+                Build(desc);
+
+                for (int i = 0; i < paramRows.Count; i++)
+                {
+                    status.Text = $"Lese Werte {i + 1} von {paramRows.Count} ...";
+                    var row = paramRows[i];
+                    ushort? v = await ReadAsync(row.Desc.Number);
+                    if (v == null)
+                    {
+                        status.Text = $"Wert „{row.Desc.Name}“ nicht lesbar.";
+                        return;
+                    }
+                    SetLoaded(row, v.Value, overwrite: true);
+                    row.Control.Enabled = true;
+                }
+
+                status.Text = desc.Params.Count + desc.Actions.Count + desc.Values.Count == 0
+                    ? "Dieser Decoder beschreibt (noch) keine Parameter."
+                    : "";
+                loading = false;
+                UpdateButtons();
             }
             catch (Exception ex)
             {
@@ -127,23 +141,36 @@ namespace CANguru.GUI.Forms
             }
         }
 
-        // Alle Einträge einer Art; null = keine Antwort
-        private async Task<List<Cg2Description>?> DescribeAllAsync(byte kind)
+        // Whole description; null = no answer
+        private async Task<DecoderDescription?> DescribeAsync()
+        {
+            var parameters = await DescribeAllAsync((byte)ProtocolConstants.CG2_KIND_PARAM, "Einstellungen");
+            if (parameters == null) return null;
+            var actions = await DescribeAllAsync((byte)ProtocolConstants.CG2_KIND_ACTION, "Aktionen");
+            if (actions == null) return null;
+            var values = await DescribeAllAsync((byte)ProtocolConstants.CG2_KIND_VALUE, "Messwerte");
+            if (values == null) return null;
+            return new DecoderDescription { Params = parameters, Actions = actions, Values = values };
+        }
+
+        // All entries of one kind; null = no answer
+        private async Task<List<Cg2Description>?> DescribeAllAsync(byte kind, string what)
         {
             var list = new List<Cg2Description>();
             int count = 1;
             for (int n = 0; n < count; n++)
             {
+                status.Text = $"Lese die Beschreibung des Decoders: {what} {n + 1}" + (n > 0 ? $" von {count}" : "") + " ...";
                 var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_PARAM,
-                    (byte)ProtocolConstants.CG2_PARAM_DESCRIBE_GET, decoderId, new[] { kind, (byte)n });
+                    (byte)ProtocolConstants.CG2_PARAM_DESCRIBE_GET, DecoderId, new[] { kind, (byte)n });
                 if (r == null)
                     return null;
                 if (r.IsError)
                 {
-                    // Nummer 0 gibt es nicht: der Decoder hat keine Einträge dieser Art
+                    // number 0 does not exist: the decoder has no entries of this kind
                     if (n == 0 && r.ErrorCode == ProtocolConstants.CG2_ERR_BAD_VALUE)
                         return list;
-                    // ältere Firmware ohne Parameter-Feature
+                    // older firmware without the parameter feature
                     if (n == 0 && r.ErrorCode == ProtocolConstants.CG2_ERR_UNKNOWN_COMMAND)
                         return list;
                     throw new InvalidOperationException(BridgeLink.ErrorText(r.ErrorCode));
@@ -159,85 +186,198 @@ namespace CANguru.GUI.Forms
         private async Task<ushort?> ReadAsync(byte number)
         {
             var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_PARAM,
-                (byte)ProtocolConstants.CG2_PARAM_READ, decoderId, new[] { number });
+                (byte)ProtocolConstants.CG2_PARAM_READ, DecoderId, new[] { number });
             if (r == null || r.IsError || r.Payload.Length < 3)
                 return null;
             return new Cg2Reader(r.Payload[1..]).U16();
         }
 
         // ------------------------------------------------------------
-        // Aufbau der Zeilen
+        // Layout
         // ------------------------------------------------------------
 
-        private void AddHeader(string text)
+        private void Build(DecoderDescription desc)
         {
-            var l = new Label
+            content.SuspendLayout();
+
+            var looseParams = desc.Params.Where(d => d.Group == "").ToList();
+            var looseActions = desc.Actions.Where(d => d.Group == "").ToList();
+            var looseValues = desc.Values.Where(d => d.Group == "").ToList();
+            var groups = desc.Params.Concat(desc.Actions).Concat(desc.Values)
+                             .Select(d => d.Group).Where(g => g != "").Distinct().ToList();
+
+            // order: settings, measured values and actions first (always visible without
+            // scrolling), then the group frames (can be many, e.g. 16 contacts)
+            if (looseParams.Count > 0)
+                content.Controls.Add(MakeFrame("Einstellungen", looseParams, wide: true));
+            if (looseValues.Count > 0)
+                content.Controls.Add(MakeFrame("Messwerte", looseValues, wide: true));
+            if (looseActions.Count > 0)
+                content.Controls.Add(MakeFrame("Aktionen", looseActions, wide: true));
+
+            if (groups.Count > 0)
             {
-                Text = text,
-                Font = new Font(Font, FontStyle.Bold),
-                AutoSize = true,
-                Margin = new Padding(0, table.RowCount == 0 ? 0 : 12, 0, 4)
-            };
-            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            table.Controls.Add(l, 0, table.RowCount);
-            table.SetColumnSpan(l, 3);
-            table.RowCount++;
+                tilePanel = new FlowLayoutPanel
+                {
+                    FlowDirection = FlowDirection.LeftToRight,
+                    WrapContents = true,
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    Margin = new Padding(0)
+                };
+                foreach (var g in groups)
+                {
+                    var items = desc.Params.Where(d => d.Group == g)
+                        .Concat(desc.Actions.Where(d => d.Group == g))
+                        .Concat(desc.Values.Where(d => d.Group == g)).ToList();
+                    tilePanel.Controls.Add(MakeFrame(g, items, wide: false));
+                }
+                content.Controls.Add(tilePanel);
+            }
+
+            content.ResumeLayout();
+            FitTilePanel();
         }
 
-        private void AddRow(string name, Control control, string unit)
+        // Group frames wrap at the width of the window
+        private void FitTilePanel()
         {
-            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            table.Controls.Add(new Label { Text = name, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) }, 0, table.RowCount);
-            control.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-            table.Controls.Add(control, 1, table.RowCount);
-            table.Controls.Add(new Label { Text = unit, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(4, 6, 0, 0) }, 2, table.RowCount);
-            table.RowCount++;
+            if (tilePanel != null)
+                tilePanel.MaximumSize = new Size(Math.Max(200, content.ClientSize.Width - content.Padding.Horizontal - 4), 0);
         }
 
-        private void AddParam(Cg2Description d, ushort value)
+        private GroupBox MakeFrame(string title, List<Cg2Description> items, bool wide)
+        {
+            int wl = wide ? WideLabel : TileLabel, wc = wide ? WideControl : TileControl, wu = wide ? WideUnit : TileUnit;
+            var table = new TableLayoutPanel
+            {
+                ColumnCount = 3,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Dock = DockStyle.Fill,
+                Padding = new Padding(4, 2, 4, 4)
+            };
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, wl));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, wc));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, wu));
+
+            foreach (var d in items)
+            {
+                if (d.Kind == ProtocolConstants.CG2_KIND_PARAM)
+                    AddParam(table, d);
+                else if (d.Kind == ProtocolConstants.CG2_KIND_ACTION)
+                    AddAction(table, d);
+                else
+                    AddValue(table, d);
+            }
+
+            var box = new GroupBox
+            {
+                Text = title,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(6, 4, 6, 4),
+                Margin = new Padding(0, 0, 8, 8)
+            };
+            box.Controls.Add(table);
+            return box;
+        }
+
+        private static Label Caption(string text) =>
+            new() { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) };
+
+        private static Label Unit(string text) =>
+            new() { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(4, 6, 0, 0) };
+
+        private void AddParam(TableLayoutPanel table, Cg2Description d)
         {
             Control c;
             if (d.Type == ProtocolConstants.CG2_TYPE_BOOL)
-                c = new CheckBox { Checked = value != 0, AutoSize = true };
+                c = new CheckBox { AutoSize = true };
             else if (d.Type == ProtocolConstants.CG2_TYPE_CHOICE)
             {
                 var cb = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 cb.Items.AddRange(d.Choices);
-                if (value < d.Choices.Length)
-                    cb.SelectedIndex = value;
                 c = cb;
             }
             else
             {
-                var nud = new NumericUpDown
+                c = new NumericUpDown
                 {
                     Minimum = d.Min,
                     Maximum = Math.Max(d.Min, d.Max),
                     Increment = Math.Max((ushort)1, d.Step),
                     ThousandsSeparator = true
                 };
-                nud.Value = Math.Clamp(value, nud.Minimum, nud.Maximum);
-                c = nud;
             }
-            new ToolTip().SetToolTip(c, $"Standard: {(d.Type == ProtocolConstants.CG2_TYPE_CHOICE && d.Default < d.Choices.Length ? d.Choices[d.Default] : d.Default.ToString())}" +
-                                        (d.Type <= ProtocolConstants.CG2_TYPE_U16 ? $", Bereich {d.Min}–{d.Max}" : ""));
-            paramControls.Add((d, c, value));
-            AddRow(d.Name, c, d.Unit);
+            c.Enabled = false; // until the value is read
+            c.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            toolTip.SetToolTip(c, $"Standard: {d.FormatValue(d.Default)}" +
+                                  (d.Type <= ProtocolConstants.CG2_TYPE_U16 ? $", Bereich {d.Min}–{d.Max}" : ""));
+
+            var row = new ParamRow { Desc = d, Control = c, Caption = Caption(d.Label) };
+            paramRows.Add(row);
+            switch (c)
+            {
+                case CheckBox cb: cb.CheckedChanged += (s, e) => MarkDirty(row); break;
+                case ComboBox co: co.SelectedIndexChanged += (s, e) => MarkDirty(row); break;
+                case NumericUpDown n: n.ValueChanged += (s, e) => MarkDirty(row); break;
+            }
+
+            int r = table.RowCount++;
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            table.Controls.Add(row.Caption, 0, r);
+            table.Controls.Add(c, 1, r);
+            table.Controls.Add(Unit(d.Unit), 2, r);
         }
 
-        private void AddAction(Cg2Description d)
+        private void AddAction(TableLayoutPanel table, Cg2Description d)
         {
-            var b = new Button { Text = "Ausführen", AutoSize = true };
+            var b = new Button { Text = d.Label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 4, 0, 2) };
+            if (d.Group != "")
+                toolTip.SetToolTip(b, d.Name);
             b.Click += async (s, e) => await ExecuteAsync(d, b);
-            AddRow(d.Name, b, d.Unit);
+
+            int r = table.RowCount++;
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            table.Controls.Add(b, 0, r);
+            table.SetColumnSpan(b, 3);
         }
 
-        private void AddValue(Cg2Description d)
+        private void AddValue(TableLayoutPanel table, Cg2Description d)
         {
-            var l = new Label { Text = "–", AutoSize = true, Margin = new Padding(0, 6, 0, 0) };
-            valueLabels.Add((d, l));
-            AddRow(d.Name, l, d.Unit);
+            int r = table.RowCount++;
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            table.Controls.Add(Caption(d.Label), 0, r);
+
+            if (d.Type == ProtocolConstants.CG2_TYPE_BITS)
+            {
+                // dots in their own row below the caption, across the whole frame
+                var dots = new BitDots(d.Choices) { Anchor = AnchorStyles.Left };
+                valueViews[d.Number] = (d, dots);
+                r = table.RowCount++;
+                table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                table.Controls.Add(dots, 0, r);
+                table.SetColumnSpan(dots, 3);
+                return;
+            }
+
+            var l = new Label
+            {
+                Text = "–",
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, 6, 0, 0),
+                Font = new Font(Font, FontStyle.Bold)
+            };
+            valueViews[d.Number] = (d, l);
+            table.Controls.Add(l, 1, r);
+            table.Controls.Add(Unit(d.Unit), 2, r);
         }
+
+        // ------------------------------------------------------------
+        // Values and change marks
+        // ------------------------------------------------------------
 
         private static ushort ControlValue(Control c) => c switch
         {
@@ -257,8 +397,57 @@ namespace CANguru.GUI.Forms
             }
         }
 
+        // New value from the decoder. overwrite = false keeps unsaved input of the user.
+        private void SetLoaded(ParamRow row, ushort v, bool overwrite)
+        {
+            bool keepInput = !overwrite && row.Dirty;
+            row.Loaded = v;
+            row.HasValue = true;
+            if (!keepInput)
+                SetControlValue(row.Control, v);
+            MarkDirty(row);
+        }
+
+        private void MarkDirty(ParamRow row)
+        {
+            bool dirty = row.Dirty;
+            row.Caption.Font = new Font(Font, dirty ? FontStyle.Bold : FontStyle.Regular);
+            row.Caption.ForeColor = dirty ? Color.DarkOrange : SystemColors.ControlText;
+            UpdateButtons();
+        }
+
+        private int DirtyCount => paramRows.Count(r => r.Dirty);
+
+        private void UpdateButtons()
+        {
+            bool idle = !loading && !busy;
+            int dirty = DirtyCount;
+            btnSave.Enabled = idle && dirty > 0;
+            btnDiscard.Enabled = idle && dirty > 0;
+            btnDefaults.Enabled = idle && paramRows.Count > 0;
+            if (idle && dirty > 0)
+                status.Text = dirty == 1 ? "1 Änderung nicht gespeichert." : $"{dirty} Änderungen nicht gespeichert.";
+        }
+
+        private void Discard()
+        {
+            foreach (var row in paramRows.Where(r => r.HasValue))
+                SetControlValue(row.Control, row.Loaded);
+            status.Text = "Änderungen verworfen.";
+            UpdateButtons();
+        }
+
+        private void OnFormClosing(object? sender, FormClosingEventArgs e)
+        {
+            if (DirtyCount == 0)
+                return;
+            if (MessageBox.Show(this, "Es gibt nicht gespeicherte Änderungen. Fenster trotzdem schließen?",
+                    "Einstellungen", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                e.Cancel = true;
+        }
+
         // ------------------------------------------------------------
-        // Speichern, Werkseinstellungen, Aktionen
+        // Save, factory reset, actions
         // ------------------------------------------------------------
 
         private async Task SaveAsync()
@@ -268,15 +457,13 @@ namespace CANguru.GUI.Forms
             var hints = new List<string>();
             try
             {
-                for (int i = 0; i < paramControls.Count; i++)
+                foreach (var row in paramRows.Where(r => r.Dirty).ToList())
                 {
-                    var (d, c, loaded) = paramControls[i];
-                    ushort wanted = ControlValue(c);
-                    if (wanted == loaded)
-                        continue;
+                    var d = row.Desc;
+                    ushort wanted = ControlValue(row.Control);
                     var p = new Cg2Writer().U8(d.Number).U16(wanted).ToArray();
                     var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_PARAM,
-                        (byte)ProtocolConstants.CG2_PARAM_WRITE, decoderId, p);
+                        (byte)ProtocolConstants.CG2_PARAM_WRITE, DecoderId, p);
                     if (r == null || r.IsError || r.Payload.Length < 3)
                     {
                         status.Text = $"„{d.Name}“ nicht gespeichert: " +
@@ -284,12 +471,14 @@ namespace CANguru.GUI.Forms
                         return;
                     }
                     ushort stored = new Cg2Reader(r.Payload[1..]).U16();
-                    SetControlValue(c, stored);
-                    paramControls[i] = (d, c, stored);
+                    SetLoaded(row, stored, overwrite: true);
                     saved++;
                     if (stored != wanted)
-                        hints.Add($"„{d.Name}“ auf {stored} {d.Unit} begrenzt");
+                        hints.Add($"„{d.Name}“ auf {d.FormatValue(stored)} {d.Unit}".TrimEnd() + " begrenzt");
                 }
+                // a setting can change the description itself (e.g. shunt -> maximum threshold)
+                if (saved > 0)
+                    DescriptionCache.Invalidate(decoder);
                 status.Text = saved == 0 ? "Nichts geändert."
                             : $"{saved} Wert(e) gespeichert." + (hints.Count > 0 ? " " + string.Join(", ", hints) + "." : "");
             }
@@ -302,29 +491,27 @@ namespace CANguru.GUI.Forms
         private async Task FactoryResetAsync()
         {
             if (MessageBox.Show(this, "Alle Einstellungen dieses Decoders auf die Standardwerte zurücksetzen? " +
-                                      "Die Zubehöradresse bleibt erhalten.",
+                                      "Adressen und Hardware-Einstellungen bleiben erhalten.",
                     "Werkseinstellungen", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
             SetBusy(true);
             try
             {
                 var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_PARAM,
-                    (byte)ProtocolConstants.CG2_PARAM_FACTORY_RESET, decoderId, null, timeoutMs: 1500);
+                    (byte)ProtocolConstants.CG2_PARAM_FACTORY_RESET, DecoderId, null, timeoutMs: 1500);
                 if (r == null || r.IsError)
                 {
                     status.Text = "Werkseinstellungen nicht übernommen: " +
                                   (r == null ? "keine Antwort." : BridgeLink.ErrorText(r.ErrorCode));
                     return;
                 }
-                // Werte neu lesen (Eingaben verwerfen: es gelten jetzt die Standardwerte)
-                for (int i = 0; i < paramControls.Count; i++)
+                DescriptionCache.Invalidate(decoder);
+                // read again, discarding input: the defaults apply now
+                foreach (var row in paramRows)
                 {
-                    var (d, c, _) = paramControls[i];
-                    ushort? v = await ReadAsync(d.Number);
-                    if (v == null)
-                        continue;
-                    SetControlValue(c, v.Value);
-                    paramControls[i] = (d, c, v.Value);
+                    ushort? v = await ReadAsync(row.Desc.Number);
+                    if (v != null)
+                        SetLoaded(row, v.Value, overwrite: true);
                 }
                 status.Text = "Standardwerte geladen.";
             }
@@ -340,7 +527,7 @@ namespace CANguru.GUI.Forms
             try
             {
                 var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_ACTION,
-                    (byte)ProtocolConstants.CG2_ACTION_EXECUTE, decoderId, new[] { d.Number });
+                    (byte)ProtocolConstants.CG2_ACTION_EXECUTE, DecoderId, new[] { d.Number });
                 status.Text = r == null ? $"„{d.Name}“: keine Antwort."
                             : r.IsError ? $"„{d.Name}“: {BridgeLink.ErrorText(r.ErrorCode)}."
                             : $"„{d.Name}“ ausgeführt.";
@@ -351,63 +538,66 @@ namespace CANguru.GUI.Forms
             }
         }
 
-        private void SetBusy(bool busy)
+        private void SetBusy(bool on)
         {
-            btnSave.Enabled = !busy && paramControls.Count > 0;
-            btnDefaults.Enabled = !busy;
-            UseWaitCursor = busy;
+            busy = on;
+            UseWaitCursor = on;
+            UpdateButtons();
         }
 
         // ------------------------------------------------------------
-        // Ereignisse des Decoders (Aufruf aus dem Empfangsthread)
+        // Events of the decoder (called from the receive thread)
         // ------------------------------------------------------------
 
-        // Ein Ereignis (z. B. Kalibrierung fertig) kann Parameter geändert haben: neu lesen
         public void OnEvent(byte fromDecoder, byte ev, byte[] data)
         {
-            if (fromDecoder != decoderId || IsDisposed || !IsHandleCreated)
+            if (fromDecoder != DecoderId || IsDisposed || !IsHandleCreated)
                 return;
             BeginInvoke(async () =>
             {
                 status.Text = ev switch
                 {
-                    (byte)ProtocolConstants.CG2_EV_POSITION => "Stellung geändert.",
+                    (byte)ProtocolConstants.CG2_EV_POSITION => "Stellung erreicht.",
                     (byte)ProtocolConstants.CG2_EV_CALIBRATED => "Kalibrierung gespeichert.",
                     (byte)ProtocolConstants.CG2_EV_OVERCURRENT => "Überstrom – abgeschaltet.",
                     _ => $"Ereignis {ev}."
                 };
-                await ReloadParamsAsync();
+                // calibration stores the travel: read the parameters again
+                if (ev == ProtocolConstants.CG2_EV_CALIBRATED && !loading)
+                    await ReloadParamsAsync();
             });
         }
 
         private async Task ReloadParamsAsync()
         {
-            for (int i = 0; i < paramControls.Count; i++)
+            foreach (var row in paramRows)
             {
-                var (d, c, loaded) = paramControls[i];
-                ushort? v = await ReadAsync(d.Number);
-                if (v == null)
-                    continue;
-                // ungespeicherte Eingaben des Nutzers nicht überschreiben
-                if (ControlValue(c) == loaded)
-                    SetControlValue(c, v.Value);
-                paramControls[i] = (d, c, v.Value);
+                ushort? v = await ReadAsync(row.Desc.Number);
+                if (v != null)
+                    SetLoaded(row, v.Value, overwrite: false);
             }
         }
 
         // ------------------------------------------------------------
-        // Messwerte aus dem Alive (Aufruf aus dem Empfangsthread)
+        // Measured values from the alive (called from the receive thread)
         // ------------------------------------------------------------
 
         public void UpdateValues(byte fromDecoder, int[] values)
         {
-            if (fromDecoder != decoderId || IsDisposed || !IsHandleCreated)
+            if (fromDecoder != DecoderId || IsDisposed || !IsHandleCreated)
                 return;
             BeginInvoke(() =>
             {
-                for (int i = 0; i < valueLabels.Count && i < values.Length; i++)
-                    // Auswahl als Klartext, Bitmaske als Namen der gesetzten Bits (Protokoll 2.1)
-                    valueLabels[i].label.Text = valueLabels[i].desc.FormatValue(values[i]);
+                for (int i = 0; i < values.Length; i++)
+                {
+                    if (!valueViews.TryGetValue(i, out var v))
+                        continue;
+                    switch (v.view)
+                    {
+                        case BitDots dots: dots.Value = values[i]; break;
+                        case Label l: l.Text = v.desc.FormatValue(values[i]); break;
+                    }
+                }
             });
         }
     }

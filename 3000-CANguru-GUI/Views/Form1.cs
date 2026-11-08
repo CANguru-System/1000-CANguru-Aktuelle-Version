@@ -852,16 +852,8 @@ namespace CANguru.Views
 
         private void OpenParameterForm(CANguruDecoder decoder)
         {
-            string title = decoder.Type switch
-            {
-                DecoderType.Switch => "Weiche",
-                DecoderType.Signal => "Formsignal",
-                DecoderType.Power => "Stromdecoder",
-                DecoderType.Feedback => "Rückmelder",
-                DecoderType.LedSignal => "LED-Signale",
-                _ => decoder.Type.ToString()
-            };
-            using var form = new ParameterForm((byte)decoder.AssignedId, title);
+            // one settings window at a time (modal)
+            using var form = new ParameterForm(decoder);
             activeParameterForm = form;
             try
             {
