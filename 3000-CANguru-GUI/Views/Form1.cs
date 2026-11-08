@@ -984,6 +984,7 @@ namespace CANguru.Views
                 else if (radioType2.Checked) type = ProtocolConstants.DEVTYPE_SIGNAL;
                 else if (radioType3.Checked) type = ProtocolConstants.DEVTYPE_POWER;
                 else if (radioType4.Checked) type = ProtocolConstants.DEVTYPE_RM;
+                else if (radioType5.Checked) type = ProtocolConstants.DEVTYPE_LEDSIGNAL;
 
                 if (type == null)
                 {
@@ -1263,6 +1264,7 @@ namespace CANguru.Views
                 DecoderType.Switch => new SwitchDecoder(),
                 DecoderType.Signal => new SignalDecoder(),
                 DecoderType.Feedback => new FeedbackDecoder(),
+                DecoderType.LedSignal => new LedSignalDecoder(),
                 _ => new CANguruDecoder()
             };
 

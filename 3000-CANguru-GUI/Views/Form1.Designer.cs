@@ -49,6 +49,7 @@
             radioType3 = new RadioButton();
             radioType4 = new RadioButton();
             radioSingle = new RadioButton();
+            radioType5 = new RadioButton();
             tabPage2 = new TabPage();
             showLokList = new Button();
             listBoxMFX = new TextBox();
@@ -178,17 +179,18 @@
             tabPage1.Controls.Add(radioType3);
             tabPage1.Controls.Add(radioType4);
             tabPage1.Controls.Add(radioSingle);
+            tabPage1.Controls.Add(radioType5);
             tabPage1.Location = new Point(4, 4);
             tabPage1.Name = "tabPage1";
             tabPage1.Padding = new Padding(3);
-            tabPage1.Size = new Size(485, 335);
+            tabPage1.Size = new Size(485, 360);
             tabPage1.TabIndex = 2;
             tabPage1.Text = "Decoder";
             tabPage1.UseVisualStyleBackColor = true;
             // 
             // showDecoderList
             // 
-            showDecoderList.Location = new Point(6, 268);
+            showDecoderList.Location = new Point(6, 320);
             showDecoderList.Name = "showDecoderList";
             showDecoderList.Size = new Size(144, 23);
             showDecoderList.TabIndex = 16;
@@ -198,7 +200,7 @@
             // 
             // buttonSettings
             // 
-            buttonSettings.Location = new Point(377, 268);
+            buttonSettings.Location = new Point(377, 320);
             buttonSettings.Name = "buttonSettings";
             buttonSettings.Size = new Size(95, 23);
             buttonSettings.TabIndex = 15;
@@ -208,7 +210,7 @@
             // 
             // btnOtaUpdate
             // 
-            btnOtaUpdate.Location = new Point(377, 226);
+            btnOtaUpdate.Location = new Point(377, 274);
             btnOtaUpdate.Name = "btnOtaUpdate";
             btnOtaUpdate.Size = new Size(95, 23);
             btnOtaUpdate.TabIndex = 1;
@@ -222,16 +224,16 @@
             listBoxDecoder.Font = new Font("Consolas", 10F);
             listBoxDecoder.FormattingEnabled = true;
             listBoxDecoder.ItemHeight = 18;
-            listBoxDecoder.Location = new Point(6, 64);
+            listBoxDecoder.Location = new Point(6, 6);
             listBoxDecoder.Name = "listBoxDecoder";
-            listBoxDecoder.Size = new Size(473, 130);
+            listBoxDecoder.Size = new Size(473, 238);
             listBoxDecoder.TabIndex = 0;
             listBoxDecoder.DrawItem += ListBoxDecoder_DrawItem;
             // 
             // radioType1
             // 
             radioType1.AutoSize = true;
-            radioType1.Location = new Point(10, 205);
+            radioType1.Location = new Point(10, 252);
             radioType1.Name = "radioType1";
             radioType1.Size = new Size(114, 19);
             radioType1.TabIndex = 10;
@@ -242,18 +244,18 @@
             // radioType2
             // 
             radioType2.AutoSize = true;
-            radioType2.Location = new Point(10, 230);
+            radioType2.Location = new Point(10, 277);
             radioType2.Name = "radioType2";
             radioType2.Size = new Size(100, 19);
             radioType2.TabIndex = 11;
             radioType2.TabStop = true;
-            radioType2.Text = "Signaldecoder";
+            radioType2.Text = "Formsignal";
             radioType2.UseVisualStyleBackColor = true;
             // 
             // radioType3
             // 
             radioType3.AutoSize = true;
-            radioType3.Location = new Point(132, 205);
+            radioType3.Location = new Point(132, 252);
             radioType3.Name = "radioType3";
             radioType3.Size = new Size(65, 19);
             radioType3.TabIndex = 12;
@@ -264,7 +266,7 @@
             // radioType4
             // 
             radioType4.AutoSize = true;
-            radioType4.Location = new Point(132, 230);
+            radioType4.Location = new Point(132, 277);
             radioType4.Name = "radioType4";
             radioType4.Size = new Size(124, 19);
             radioType4.TabIndex = 13;
@@ -275,13 +277,24 @@
             // radioSingle
             // 
             radioSingle.AutoSize = true;
-            radioSingle.Location = new Point(264, 200);
+            radioSingle.Location = new Point(264, 252);
             radioSingle.Name = "radioSingle";
             radioSingle.Size = new Size(123, 19);
             radioSingle.TabIndex = 14;
             radioSingle.TabStop = true;
             radioSingle.Text = "Einzeldecoder OTA";
             radioSingle.UseVisualStyleBackColor = true;
+            // 
+            // radioType5
+            // 
+            radioType5.AutoSize = true;
+            radioType5.Location = new Point(264, 277);
+            radioType5.Name = "radioType5";
+            radioType5.Size = new Size(85, 19);
+            radioType5.TabIndex = 17;
+            radioType5.TabStop = true;
+            radioType5.Text = "LED-Signale";
+            radioType5.UseVisualStyleBackColor = true;
             // 
             // tabPage2
             // 
@@ -298,7 +311,7 @@
             tabPage2.Location = new Point(4, 4);
             tabPage2.Name = "tabPage2";
             tabPage2.Padding = new Padding(3);
-            tabPage2.Size = new Size(485, 335);
+            tabPage2.Size = new Size(485, 360);
             tabPage2.TabIndex = 1;
             tabPage2.Text = "Lok-Ctrl";
             tabPage2.UseVisualStyleBackColor = true;
@@ -400,7 +413,7 @@
             tabMain.Location = new Point(4, 4);
             tabMain.Name = "tabMain";
             tabMain.Padding = new Padding(3);
-            tabMain.Size = new Size(485, 335);
+            tabMain.Size = new Size(485, 360);
             tabMain.TabIndex = 0;
             tabMain.Text = "CAN-Msg";
             tabMain.UseVisualStyleBackColor = true;
@@ -412,7 +425,7 @@
             listBoxCAN.Location = new Point(9, 6);
             listBoxCAN.Multiline = true;
             listBoxCAN.Name = "listBoxCAN";
-            listBoxCAN.Size = new Size(466, 326);
+            listBoxCAN.Size = new Size(466, 351);
             listBoxCAN.TabIndex = 0;
             // 
             // listBoxLoks
@@ -421,9 +434,9 @@
             listBoxLoks.Font = new Font("Consolas", 10F);
             listBoxLoks.FormattingEnabled = true;
             listBoxLoks.ItemHeight = 18;
-            listBoxLoks.Location = new Point(7, 159);
+            listBoxLoks.Location = new Point(7, 114);
             listBoxLoks.Name = "listBoxLoks";
-            listBoxLoks.Size = new Size(485, 148);
+            listBoxLoks.Size = new Size(485, 168);
             listBoxLoks.TabIndex = 10;
             listBoxLoks.DrawItem += listBoxLoks_DrawItem;
             // 
@@ -432,7 +445,7 @@
             tbMessages.Location = new Point(7, 47);
             tbMessages.Multiline = true;
             tbMessages.Name = "tbMessages";
-            tbMessages.Size = new Size(484, 107);
+            tbMessages.Size = new Size(484, 62);
             tbMessages.TabIndex = 9;
             tbMessages.Text = "Zum Starten bitte 'Verbinden' klicken\r\n";
             // 
@@ -511,10 +524,10 @@
             tabControl1.Controls.Add(tabMain);
             tabControl1.Controls.Add(tabPage2);
             tabControl1.Controls.Add(tabPage1);
-            tabControl1.Location = new Point(3, 313);
+            tabControl1.Location = new Point(3, 288);
             tabControl1.Name = "tabControl1";
             tabControl1.SelectedIndex = 0;
-            tabControl1.Size = new Size(493, 363);
+            tabControl1.Size = new Size(493, 388);
             tabControl1.SizeMode = TabSizeMode.Fixed;
             tabControl1.TabIndex = 7;
             // 
@@ -742,6 +755,7 @@
         private RadioButton radioType3;
         private RadioButton radioType4;
         private RadioButton radioSingle;
+        private RadioButton radioType5;
         private TextBox labelCurrent0;
         private TextBox labelCurrent1;
         private Panel panelCurrent0;

@@ -95,6 +95,39 @@ namespace CANguru.Models
             // Basis: macht nichts
         }
     }
+    // LED-Signaldecoder (PCA9685, bis zu 8 Signale). Parameter je Signal k (0 ... 7):
+    // 2k = Adresse, 2k + 1 = vorhanden
+    public class LedSignalDecoder : CANguruDecoder
+    {
+        public const int Signals = 8;
+        public byte[] Addresses = new byte[Signals];
+        public bool[] Present = new bool[Signals];
+
+        public override void UpdateFromDecoder()
+        {
+            for (int k = 0; k < Signals; k++)
+            {
+                var adr = DecoderProtocol.ReadParam((byte)AssignedId, (byte)(2 * k));
+                var on = DecoderProtocol.ReadParam((byte)AssignedId, (byte)(2 * k + 1));
+                if (adr == null || on == null)
+                    return; // Decoder noch nicht bereit
+                Addresses[k] = (byte)adr.Value;
+                Present[k] = on.Value != 0;
+            }
+        }
+
+        public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
+        {
+            var used = Enumerable.Range(0, Signals).Where(k => Present[k])
+                                 .Select(k => $"S{k + 1}:{Addresses[k]}").ToList();
+            string details = used.Count == 0 ? "keine Signale angeschlossen"
+                                             : $"{used.Count} Signale, Adressen " + string.Join(" ", used);
+            string macStr = $"{Mac[0]:X2}:{Mac[1]:X2}:{Mac[2]:X2}:{Mac[3]:X2}:{Mac[4]:X2}:{Mac[5]:X2}";
+            int hexadr = 0xd715 + AssignedId;
+            return ("LED-Signal", macStr, AssignedId.ToString(), hexadr.ToString("X4"), details);
+        }
+    }
+
     public class PowerDecoder : CANguruDecoder
     {
         public ushort MaxCurrent { get; set; }
