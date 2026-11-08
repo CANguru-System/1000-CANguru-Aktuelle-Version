@@ -7,7 +7,8 @@ using System.Windows.Forms;
 namespace CANguru.GUI.Forms.DecoderViews
 {
     // LED signal decoder: one small signal per channel (red/green, grey = not present);
-    // a click switches it. Brightness and fade time as sliders with immediate effect.
+    // a click switches it (the decoder then also tells WDP). Brightness and fade time as
+    // sliders with immediate effect; they replace the rows in the table.
     // Uses: actions "Signal k: umschalten", values "Signal k: Stellung", parameters
     // "Signal k: vorhanden", "Signal k: Adresse", "Helligkeit rot/grün", "Überblendzeit …".
     public sealed class LedSignalView : DecoderView
@@ -20,10 +21,6 @@ namespace CANguru.GUI.Forms.DecoderViews
         }
 
         private readonly List<Channel> channels = new();
-        private readonly List<(Cg2Description desc, TrackBar bar, Label text)> sliders = new();
-        private readonly System.Windows.Forms.Timer writeDelay = new() { Interval = 400 };
-        private readonly HashSet<TrackBar> pending = new();
-        private bool updating; // value set from the decoder, not by the user
 
         public static LedSignalView? TryCreate(IDecoderViewHost host)
         {
@@ -58,10 +55,7 @@ namespace CANguru.GUI.Forms.DecoderViews
                 lamps.Controls.Add(ch.Lamp);
             }
 
-            var table = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Margin = new Padding(0) };
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+            var table = SliderTable();
             foreach (var name in new[] { "Helligkeit rot", "Helligkeit grün" })
                 AddSlider(table, Param(name));
             AddSlider(table, Host.Description.Params.FirstOrDefault(p => p.Name.StartsWith("Überblendzeit")));
@@ -71,83 +65,19 @@ namespace CANguru.GUI.Forms.DecoderViews
             all.Controls.Add(lamps);
             all.Controls.Add(table);
             Controls.Add(all);
-
-            writeDelay.Tick += async (s, e) => await WritePending();
         }
 
-        private void AddSlider(TableLayoutPanel table, Cg2Description? d)
-        {
-            if (d == null)
-                return;
-            int step = Math.Max(1, (int)d.Step);
-            var bar = new TrackBar
-            {
-                Minimum = d.Min,
-                Maximum = Math.Max(d.Min, d.Max),
-                SmallChange = step,
-                LargeChange = step * 5,
-                TickStyle = TickStyle.None,
-                AutoSize = false,
-                Height = 28,
-                Dock = DockStyle.Fill,
-                Enabled = false
-            };
-            var text = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(4, 6, 0, 0) };
-            bar.ValueChanged += (s, e) =>
-            {
-                // snap to the step width (counted from min), as the decoder does
-                int snapped = d.Min + (bar.Value - d.Min + step / 2) / step * step;
-                if (snapped != bar.Value && snapped <= bar.Maximum)
-                {
-                    bar.Value = snapped;
-                    return;
-                }
-                text.Text = $"{bar.Value:N0} {d.Unit}".TrimEnd();
-                if (updating)
-                    return;
-                pending.Add(bar);
-                writeDelay.Stop();
-                writeDelay.Start(); // write shortly after the user stops moving
-            };
-            sliders.Add((d, bar, text));
-            int r = table.RowCount++;
-            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            table.Controls.Add(new Label { Text = d.Label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) }, 0, r);
-            table.Controls.Add(bar, 1, r);
-            table.Controls.Add(text, 2, r);
-        }
-
-        private async Task WritePending()
-        {
-            writeDelay.Stop();
-            foreach (var bar in pending.ToList())
-            {
-                pending.Remove(bar);
-                var s = sliders.First(x => x.bar == bar);
-                ushort? stored = await Host.WriteParamAsync(s.desc, (ushort)bar.Value);
-                if (stored != null)
-                    Host.ShowStatus($"{s.desc.Name}: {stored:N0} {s.desc.Unit}".TrimEnd() + " – sofort wirksam.");
-            }
-        }
-
-        public override IEnumerable<Cg2Description> Covered => channels.SelectMany(c => new[] { c.Position, c.Toggle });
+        public override IEnumerable<Cg2Description> Covered => base.Covered.Concat(channels.SelectMany(c => new[] { c.Position, c.Toggle }));
 
         public override void ParamChanged(Cg2Description param, ushort value)
         {
+            base.ParamChanged(param, value); // sliders
             foreach (var ch in channels)
             {
                 if (param == ch.Present)
                     ch.Lamp.Present = value != 0;
                 else if (param == ch.Address)
                     ch.Lamp.Subtitle = $"Adr. {value}";
-            }
-            foreach (var s in sliders.Where(x => x.desc == param))
-            {
-                updating = true;
-                s.bar.Value = Math.Clamp(value, s.bar.Minimum, s.bar.Maximum);
-                s.bar.Enabled = true;
-                s.text.Text = $"{value:N0} {s.desc.Unit}".TrimEnd();
-                updating = false;
             }
         }
 
@@ -161,12 +91,6 @@ namespace CANguru.GUI.Forms.DecoderViews
             }
         }
 
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-                writeDelay.Dispose();
-            base.Dispose(disposing);
-        }
     }
 
     // One light signal: dark housing with a red (top) and a green (bottom) lamp.

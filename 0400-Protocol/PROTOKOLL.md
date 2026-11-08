@@ -179,6 +179,7 @@ Ab 2.1 ist die Stellung als Auswahl beschrieben:
 - Formsignal: „Halt / Fahrt / unterwegs / unsicher“
 - LED-Signal: „rot / grün / wechselt“, Name „Signal k: Stellung“
 Märklin-Stellbefehle (`SWITCH_ACC`) gibt die Bridge an **alle** Decoder weiter; nur Zubehör-Decoder werten sie aus.
+Wird eine Stellung aus der GUI ausgelöst (Aktion „umschalten“, Testfahrt, Ende der Kalibrierung), sendet der Decoder nach Erreichen der Stellung zuerst einen Stellbefehl `SWITCH_ACC` und danach die Rückmeldung `ACC_R` an WDP (ab Weiche/Formsignal 2.2, LED-Signal 1.4). Eine Rückmeldung allein übernimmt WDP nicht in sein Stellpult. Die Bridge gibt diese Frames nur an WDP und GUI weiter, nicht auf das Gleis.
 Der Status ist „Warnung“, solange eine Stellung nach einem Stromausfall während der Fahrt unsicher ist.
 
 ### 5.7 CAN-Tunnel `CG2_F_CAN` (0x07)

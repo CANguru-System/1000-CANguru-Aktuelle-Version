@@ -74,7 +74,7 @@ void StepperAccessory::setup()
     DEVTYPE = DEVTYPE_SIGNAL;
 #endif
     VERS_HIGH = 2; // Zubehör-Decoder (Phase 3)
-    VERS_LOW = 1;  // 2.1: Stellung als Klartext (Protokoll 2.1)
+    VERS_LOW = 2;  // 2.2: Testfahrt und Kalibrierung aus der GUI erreichen auch das Stellpult von WDP
     AccessoryDecoder::setup();
 }
 
@@ -242,6 +242,7 @@ bool StepperAccessory::actionExecute(uint8_t n, const uint8_t *args, uint16_t le
     case A_SET_ZERO:
         stop();
         steps = 0;
+        markFromGui(0); // WDP soll die neue Stellung übernehmen
         positionReached(0, 0);
         return true;
 
@@ -257,12 +258,13 @@ bool StepperAccessory::actionExecute(uint8_t n, const uint8_t *args, uint16_t le
         steps = travel;
         uint8_t ev[3] = {0, (uint8_t)(travel & 0xFF), (uint8_t)(travel >> 8)};
         sendEvent(CG2_EV_CALIBRATED, ev, sizeof(ev));
+        markFromGui(0);
         positionReached(0, 1);
         return true;
     }
 
     case A_TOGGLE:
-        requestPosition(0, position(0) ? 0 : 1);
+        requestPosition(0, position(0) ? 0 : 1, true); // Testfahrt aus der GUI: WDP erhält einen Stellbefehl
         return true;
 
     case A_STOP:

@@ -6,7 +6,7 @@ using System.Windows.Forms;
 namespace CANguru.GUI.Forms.DecoderViews
 {
     // Power decoder: one current bar per channel with a mark at the threshold;
-    // below: threshold, shunt and measuring range.
+    // threshold as a slider (immediate effect); shunt and measuring range as text.
     // Uses: values "Strom Kanal k" (mA, 0xFFFF = not connected), parameters
     // "Abschaltgrenze" (its maximum is the measuring range) and "Shunt-Widerstand".
     public sealed class PowerView : DecoderView
@@ -40,21 +40,23 @@ namespace CANguru.GUI.Forms.DecoderViews
                 table.Controls.Add(bar, 1, r);
             }
 
+            // threshold as a slider with immediate effect (replaces the row in the table)
+            var sliderTable = SliderTable(110);
+            AddSlider(sliderTable, threshold);
+
             var all = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
             all.Controls.Add(table);
+            all.Controls.Add(sliderTable);
             all.Controls.Add(lblInfo);
             Controls.Add(all);
             ShowInfo();
         }
 
-        public override IEnumerable<Cg2Description> Covered => bars.Select(b => b.desc);
+        public override IEnumerable<Cg2Description> Covered => base.Covered.Concat(bars.Select(b => b.desc));
 
         private void ShowInfo()
         {
             var parts = new List<string>();
-            ushort? t = threshold != null ? Host.ParamValue(threshold) : null;
-            if (t != null)
-                parts.Add($"Abschaltgrenze {t:N0} mA");
             ushort? s = shunt != null ? Host.ParamValue(shunt) : null;
             if (s != null)
                 parts.Add($"Shunt {shunt!.FormatValue(s.Value)}");
@@ -65,6 +67,7 @@ namespace CANguru.GUI.Forms.DecoderViews
 
         public override void ParamChanged(Cg2Description param, ushort value)
         {
+            base.ParamChanged(param, value); // slider
             if (param == threshold)
                 foreach (var b in bars)
                     b.bar.Threshold = value;

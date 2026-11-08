@@ -83,7 +83,7 @@ void LedSignalAccessory::setup()
 {
     DEVTYPE = DEVTYPE_LEDSIGNAL;
     VERS_HIGH = 1;
-    VERS_LOW = 3; // 1.3: Stellung als Klartext, Aktionen nach Signalen gruppiert (Protokoll 2.1)
+    VERS_LOW = 4; // 1.4: Umschalten aus der GUI erreicht auch das Stellpult von WDP
     AccessoryDecoder::setup();
 }
 
@@ -318,7 +318,7 @@ bool LedSignalAccessory::actionExecute(uint8_t n, const uint8_t *args, uint16_t 
         uint8_t ch = n - A_TOGGLE;
         if (!present[ch])
             return false; // nicht angeschlossen
-        requestPosition(ch, position(ch) ? 0 : 1);
+        requestPosition(ch, position(ch) ? 0 : 1, true); // aus der GUI: WDP erhält einen Stellbefehl
         return true;
     }
     return false;

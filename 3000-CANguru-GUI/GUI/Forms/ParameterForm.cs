@@ -51,6 +51,7 @@ namespace CANguru.GUI.Forms
         private readonly Button btnDefaults = new() { Text = "Werkseinstellungen", AutoSize = true, Enabled = false };
         private readonly Button btnClose = new() { Text = "Schließen", AutoSize = true, DialogResult = DialogResult.Cancel };
         private readonly ToolTip toolTip = new();
+        private readonly FlowLayoutPanel buttons;
 
         private sealed class ParamRow
         {
@@ -79,7 +80,7 @@ namespace CANguru.GUI.Forms
             MinimumSize = new Size(480, 320);
             CancelButton = btnClose;
 
-            var buttons = new FlowLayoutPanel
+            buttons = new FlowLayoutPanel
             {
                 Dock = DockStyle.Bottom,
                 FlowDirection = FlowDirection.RightToLeft,
@@ -121,6 +122,7 @@ namespace CANguru.GUI.Forms
                 }
 
                 Build(desc);
+                FitHeight();
 
                 for (int i = 0; i < paramRows.Count; i++)
                 {
@@ -229,13 +231,18 @@ namespace CANguru.GUI.Forms
                 frame.Controls.Add(view);
                 content.Controls.Add(frame);
             }
+            // parameters taken over by the view (sliders): rows without a place in the table,
+            // so they are read, written and reset like all others
+            foreach (var d in desc.Params.Where(covered.Contains))
+                CreateParamRow(d);
+            var parameters = desc.Params.Where(d => !covered.Contains(d)).ToList();
             var values = desc.Values.Where(d => !covered.Contains(d)).ToList();
             var actions = desc.Actions.Where(d => !covered.Contains(d)).ToList();
 
-            var looseParams = desc.Params.Where(d => d.Group == "").ToList();
+            var looseParams = parameters.Where(d => d.Group == "").ToList();
             var looseActions = actions.Where(d => d.Group == "").ToList();
             var looseValues = values.Where(d => d.Group == "").ToList();
-            var groups = desc.Params.Concat(actions).Concat(values)
+            var groups = parameters.Concat(actions).Concat(values)
                              .Select(d => d.Group).Where(g => g != "").Distinct().ToList();
 
             // order: settings, measured values and actions first (always visible without
@@ -259,7 +266,7 @@ namespace CANguru.GUI.Forms
                 };
                 foreach (var g in groups)
                 {
-                    var items = desc.Params.Where(d => d.Group == g)
+                    var items = parameters.Where(d => d.Group == g)
                         .Concat(actions.Where(d => d.Group == g))
                         .Concat(values.Where(d => d.Group == g)).ToList();
                     tilePanel.Controls.Add(MakeFrame(g, items, wide: false));
@@ -269,6 +276,21 @@ namespace CANguru.GUI.Forms
 
             content.ResumeLayout();
             FitTilePanel();
+        }
+
+        // Window only as high as its content (at most the screen), centred on the old position
+        private void FitHeight()
+        {
+            content.PerformLayout();
+            int needed = content.Padding.Vertical;
+            foreach (Control c in content.Controls)
+                needed += c.Height + c.Margin.Vertical;
+            var area = Screen.FromControl(this).WorkingArea;
+            int chrome = Height - ClientSize.Height;
+            int h = Math.Clamp(needed + status.Height + buttons.Height + chrome + 4, MinimumSize.Height, area.Height - 40);
+            int dy = Height - h;
+            Height = h;
+            Top = Math.Clamp(Top + dy / 2, area.Top, area.Bottom - h);
         }
 
         // Group frames wrap at the width of the window
@@ -323,6 +345,17 @@ namespace CANguru.GUI.Forms
 
         private void AddParam(TableLayoutPanel table, Cg2Description d)
         {
+            var row = CreateParamRow(d);
+            int r = table.RowCount++;
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            table.Controls.Add(row.Caption, 0, r);
+            table.Controls.Add(row.Control, 1, r);
+            table.Controls.Add(Unit(d.Unit), 2, r);
+        }
+
+        // Row for a parameter (control and caption); placed in the table by AddParam
+        private ParamRow CreateParamRow(Cg2Description d)
+        {
             Control c;
             if (d.Type == ProtocolConstants.CG2_TYPE_BOOL)
                 c = new CheckBox { AutoSize = true };
@@ -355,12 +388,7 @@ namespace CANguru.GUI.Forms
                 case ComboBox co: co.SelectedIndexChanged += (s, e) => MarkDirty(row); break;
                 case NumericUpDown n: n.ValueChanged += (s, e) => MarkDirty(row); break;
             }
-
-            int r = table.RowCount++;
-            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            table.Controls.Add(row.Caption, 0, r);
-            table.Controls.Add(c, 1, r);
-            table.Controls.Add(Unit(d.Unit), 2, r);
+            return row;
         }
 
         private void AddAction(TableLayoutPanel table, Cg2Description d)

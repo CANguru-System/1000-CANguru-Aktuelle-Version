@@ -30,8 +30,11 @@ public:
     uint8_t valueCount() const override { return channelCount(); }
     const Cg2InfoDef *valueDef(uint8_t n) const override;
 
-    // Stellung anfordern (WDP, Testfahrt aus der GUI); nach Ankunft Rückmeldung an WDP
-    void requestPosition(uint8_t ch, uint8_t pos);
+    // Stellung anfordern; nach Ankunft Rückmeldung an WDP.
+    // fromGui = true: Auslöser ist die GUI (Aktion), nicht WDP. Dann erhält WDP nach Ankunft
+    // zusätzlich einen Stellbefehl, damit sein Stellpult die neue Stellung übernimmt
+    // (eine Rückmeldung allein übernimmt WDP nicht).
+    void requestPosition(uint8_t ch, uint8_t pos, bool fromGui = false);
 
     // Gerätename für die CS2-Konfiguration (Zeile 2), z. B. "Switch"
     const char *line1Public() const { return line1(); }
@@ -53,6 +56,8 @@ protected:
     // ---- für den Antrieb ----
     // Stellung erreicht: speichern, Ereignis an die GUI, bei reportToWdp Rückmeldung an WDP
     void positionReached(uint8_t ch, uint8_t pos, bool reportToWdp = true);
+    // Die nächste erreichte Stellung dieses Kanals stammt aus der GUI (z. B. Kalibrierung)
+    void markFromGui(uint8_t ch) { if (ch < MAX_CHANNELS) fromGuiMask |= (1 << ch); }
     // Bewegung abgebrochen (Stopp): Stellung unbekannt, bis sie wieder erreicht wird
     void positionLost(uint8_t ch) { if (ch < MAX_CHANNELS) uncertain |= (1 << ch); }
     uint8_t position(uint8_t ch) const { return ch < MAX_CHANNELS ? positions[ch] : 0; }
@@ -63,12 +68,13 @@ protected:
 private:
     void loadPositions();
     void setMoving(uint8_t ch, bool moving);
-    void reportToWdp(uint8_t ch);
+    void reportToWdp(uint8_t ch, bool asCommand);
     static const char *positionKey(uint8_t ch);
 
     uint8_t positions[MAX_CHANNELS] = {0};
     uint8_t moving = 0;    // Bitmaske: Kanal bewegt sich gerade
     uint8_t uncertain = 0; // Bitmaske: Stellung nach Stromausfall während der Fahrt unsicher
+    uint8_t fromGuiMask = 0; // Bitmaske: laufende Bewegung wurde von der GUI ausgelöst
     char valueNames[MAX_CHANNELS][24];
     Cg2InfoDef valueDefs[MAX_CHANNELS];
 };

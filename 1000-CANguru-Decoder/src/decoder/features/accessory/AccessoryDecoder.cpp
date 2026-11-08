@@ -106,14 +106,19 @@ void AccessoryDecoder::onCanFrame(const uint8_t *frame)
             requestPosition(ch, pos);
 }
 
-void AccessoryDecoder::requestPosition(uint8_t ch, uint8_t pos)
+void AccessoryDecoder::requestPosition(uint8_t ch, uint8_t pos, bool fromGui)
 {
     if (ch >= channelCount())
         return;
+    if (fromGui)
+        fromGuiMask |= (1 << ch);
+    else
+        fromGuiMask &= ~(1 << ch); // ein Befehl aus WDP hat Vorrang
     // Steht schon richtig (und sicher bekannt): nichts bewegen, nur bestätigen (Z1)
     if (!driveBusy(ch) && positionKnown(ch) && positions[ch] == pos)
     {
-        reportToWdp(ch);
+        reportToWdp(ch, fromGui);
+        fromGuiMask &= ~(1 << ch);
         return;
     }
     setMoving(ch, true);
@@ -124,6 +129,8 @@ void AccessoryDecoder::positionReached(uint8_t ch, uint8_t pos, bool report)
 {
     if (ch >= channelCount())
         return;
+    bool fromGui = fromGuiMask & (1 << ch);
+    fromGuiMask &= ~(1 << ch);
     positions[ch] = pos;
     uncertain &= ~(1 << ch);
     if (store->getByte(positionKey(ch), 0xFF) != pos)
@@ -134,24 +141,36 @@ void AccessoryDecoder::positionReached(uint8_t ch, uint8_t pos, bool report)
     sendEvent(CG2_EV_POSITION, ev, sizeof(ev));
     // Rückmeldung an WDP erst jetzt, mit der erreichten Stellung (Z3)
     if (report)
-        reportToWdp(ch);
+        reportToWdp(ch, fromGui);
 }
 
-// Rückmeldung an WDP: Märklin-Frame ACC_R mit Adresse und Stellung
-void AccessoryDecoder::reportToWdp(uint8_t ch)
+// Rückmeldung an WDP: Märklin-Frame ACC_R mit Adresse und Stellung.
+// asCommand: Die Stellung wurde aus der GUI ausgelöst. Dann geht vorher ein Stellbefehl
+// SWITCH_ACC an WDP, wie ihn eine MS2 senden würde; nur so übernimmt WDP die Stellung in
+// sein Stellpult. Die Bridge gibt Frames von Decodern nur an WDP und GUI weiter, nicht
+// auf das Gleis - es entsteht also kein zweiter Stellbefehl.
+void AccessoryDecoder::reportToWdp(uint8_t ch, bool asCommand)
 {
     uint8_t address = channelAddress(ch);
     if (address == 0)
         return;
+    uint16_t canAddress = address + MM_ACC - 1;
     uint8_t opFrame[CAN_FRAME_SIZE] = {0};
-    opFrame[CANcmd] = SWITCH_ACC_R;
     opFrame[hash0] = hasharr[0];
     opFrame[hash1] = hasharr[1];
-    opFrame[Framelng] = 0x05;
-    uint16_t canAddress = address + MM_ACC - 1;
     opFrame[data2] = (uint8_t)(canAddress >> 8);
     opFrame[data3] = (uint8_t)canAddress;
     opFrame[data4] = positions[ch];
+    if (asCommand)
+    {
+        opFrame[CANcmd] = SWITCH_ACC;
+        opFrame[Framelng] = 0x06;
+        opFrame[data5] = 0x01; // Strom an
+        sendCanFrame(opFrame);
+        opFrame[data5] = 0;
+    }
+    opFrame[CANcmd] = SWITCH_ACC_R;
+    opFrame[Framelng] = 0x05;
     sendCanFrame(opFrame);
 }
 
