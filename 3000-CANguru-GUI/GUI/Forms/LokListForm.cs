@@ -8,8 +8,6 @@ using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
-using static CANguru.Controllers.DecoderStorage;
-using CANguru.Models;
 
 namespace CANguru.GUI.Forms
 {

@@ -1,4 +1,4 @@
-﻿using CANguru.GUI.Forms;
+using CANguru.GUI.Forms;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -43,58 +43,80 @@ namespace CANguru.Models
         public Dictionary<int, int> ChannelStates { get; set; } = new();
 
     }
+
+    // Erreichbarkeit eines Decoders laut Alive: unter 2 s, unter 5 s, länger
+    public enum DecoderStatus
+    {
+        Healthy,
+        Weak,
+        Lost
+    }
+
+    // Ein angemeldeter CANguru-Decoder. Schlüssel ist die MAC-Adresse (seit Phase 2 behält
+    // ein Decoder auch seine ID dauerhaft). AssignedId, Mac und Name kommen aus CANguruDevice.
     public class CANguruDecoder : CANguruDevice, IDecoderListViewItem
     {
-        // Von der Bridge vergebene ID (für WELCOME)
-        public byte AssignedId { get; set; }
-
-        // Eindeutige Identität: MAC-Adresse des ESPNOW-Geräts
-        public byte[] Mac { get; set; } = new byte[6];
-
-        // Typ des Decoders (Weiche, Signal, Strom, Rückmelder)
+        // Typ des Decoders (Weiche, Formsignal, Strom, Rückmelder, LED-Signal)
         public DecoderType Type { get; set; }
 
-        // Adressbereich, den der Decoder bedient
-        public int value0 { get; set; }
-        public int value1 { get; set; }
-        public int value2 { get; set; }
-        public int value3 { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public bool IsUpdating { get; set; } = false;
-        public int OtaProgress { get; set; } = 0;
-        public int OtaExpectedAck { get; set; } = -1;
-
-        // Firmware- oder Protokollversion (optional)
-        public int ProtocolVersion { get; set; } = 1;
-
-        // Firmware des Decoders (aus der Anmeldung) und Kennzeichen für alte Firmware
-        // (vor Protokoll Version 2): solche Decoder lassen sich nur per OTA aktualisieren
+        // Firmware aus der Anmeldung, z. B. "2.1"
         public string Firmware { get; set; } = string.Empty;
 
+        // Erreichbarkeit, berechnet aus LastSeen (Alive)
+        public DecoderStatus Status { get; set; } = DecoderStatus.Lost;
 
-        // READY-Status nach erfolgreichem Handshake
-        public DecoderStatus IsReady { get; set; } = DecoderStatus.Lost;
+        public string MacText => string.Join(":", Mac.Select(b => b.ToString("X2")));
 
-        public void SetMac(params byte[] mac)
+        // Bezeichnung des Typs für Listen und Fenstertitel
+        public virtual string TypeText => Type switch
         {
-            if (mac.Length != 6) throw new ArgumentException("MAC muss 6 Bytes haben");
-            for (int i = 0; i < 6; i++)
-                Mac[i] = mac[i];
+            DecoderType.Switch => "Weiche",
+            DecoderType.Signal => "Formsignal",
+            DecoderType.Power => "Stromdecoder",
+            DecoderType.Feedback => "Rückmelder",
+            DecoderType.LedSignal => "LED-Signal",
+            _ => $"Decoder 0x{(int)Type:X2}"
+        };
+
+        // eigener Name des Nutzers, sonst der Typ
+        public string DisplayName => string.IsNullOrWhiteSpace(Name) ? TypeText : Name;
+
+        // Angaben je Typ für die Spalte "Details" der Decoder-Liste
+        protected virtual string Details => "";
+
+        public (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
+        {
+            int hexadr = 0xd715 + AssignedId;
+            return (TypeText, MacText, AssignedId.ToString(), hexadr.ToString("X4"), Details);
         }
 
-        public string DecoderType { get; set; }
-        public uint UID { get; set; }
-        public virtual (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
-        {
-            string macStr = $"{Mac[0]:X2}:{Mac[1]:X2}:{Mac[2]:X2}:{Mac[3]:X2}:{Mac[4]:X2}:{Mac[5]:X2}";
-            return (DecoderType, macStr, AssignedId.ToString(), UID.ToString(), "");
-        }
-
+        // Einstellungen für die Listen vom Decoder lesen (blockierend, im Hintergrund aufrufen)
         public virtual void UpdateFromDecoder()
         {
-            // Basis: macht nichts
         }
     }
+
+    // Weiche und Formsignal (Zubehör-Decoder mit Stepper): Parameter 0 Adresse,
+    // 1 Verzögerung, 2 Laufweg
+    public class StepperDecoder : CANguruDecoder
+    {
+        public byte Address { get; set; }
+        public int Delay { get; set; }
+        public int StepsToEnd { get; set; }
+
+        public override void UpdateFromDecoder()
+        {
+            var adr = DecoderProtocol.ReadParam(AssignedId, 0);
+            if (adr == null)
+                return; // Decoder noch nicht bereit
+            Address = (byte)adr.Value;
+            Delay = DecoderProtocol.ReadParam(AssignedId, 1) ?? Delay;
+            StepsToEnd = DecoderProtocol.ReadParam(AssignedId, 2) ?? StepsToEnd;
+        }
+
+        protected override string Details => $"Adresse {Address}, Verzögerung {Delay}, Laufweg {StepsToEnd}";
+    }
+
     // LED-Signaldecoder (PCA9685, bis zu 8 Signale). Parameter je Signal k (0 ... 7):
     // 2k = Adresse, 2k + 1 = vorhanden
     public class LedSignalDecoder : CANguruDecoder
@@ -107,8 +129,8 @@ namespace CANguru.Models
         {
             for (int k = 0; k < Signals; k++)
             {
-                var adr = DecoderProtocol.ReadParam((byte)AssignedId, (byte)(2 * k));
-                var on = DecoderProtocol.ReadParam((byte)AssignedId, (byte)(2 * k + 1));
+                var adr = DecoderProtocol.ReadParam(AssignedId, (byte)(2 * k));
+                var on = DecoderProtocol.ReadParam(AssignedId, (byte)(2 * k + 1));
                 if (adr == null || on == null)
                     return; // Decoder noch nicht bereit
                 Addresses[k] = (byte)adr.Value;
@@ -116,114 +138,50 @@ namespace CANguru.Models
             }
         }
 
-        public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
+        protected override string Details
         {
-            var used = Enumerable.Range(0, Signals).Where(k => Present[k])
-                                 .Select(k => $"S{k + 1}:{Addresses[k]}").ToList();
-            string details = used.Count == 0 ? "keine Signale angeschlossen"
-                                             : $"{used.Count} Signale, Adressen " + string.Join(" ", used);
-            string macStr = $"{Mac[0]:X2}:{Mac[1]:X2}:{Mac[2]:X2}:{Mac[3]:X2}:{Mac[4]:X2}:{Mac[5]:X2}";
-            int hexadr = 0xd715 + AssignedId;
-            return ("LED-Signal", macStr, AssignedId.ToString(), hexadr.ToString("X4"), details);
+            get
+            {
+                var used = Enumerable.Range(0, Signals).Where(k => Present[k])
+                                     .Select(k => $"S{k + 1}:{Addresses[k]}").ToList();
+                return used.Count == 0 ? "keine Signale angeschlossen"
+                                       : $"{used.Count} Signale, Adressen " + string.Join(" ", used);
+            }
         }
     }
 
+    // Stromdecoder: Parameter 0 = Abschaltgrenze in mA
     public class PowerDecoder : CANguruDecoder
     {
         public ushort MaxCurrent { get; set; }
 
         public override void UpdateFromDecoder()
         {
-            // Parameter 0 = Abschaltgrenze in mA
-            MaxCurrent = DecoderProtocol.ReadParam((byte)AssignedId, 0) ?? MaxCurrent;
+            MaxCurrent = DecoderProtocol.ReadParam(AssignedId, 0) ?? MaxCurrent;
         }
 
-        public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
-        {
-            string details = $"Max: {MaxCurrent} mA";
-            string macStr = $"{Mac[0]:X2}:{Mac[1]:X2}:{Mac[2]:X2}:{Mac[3]:X2}:{Mac[4]:X2}:{Mac[5]:X2}";
-            int hexadr = 0xd715 + AssignedId;
-            return (Type.ToString(), macStr, AssignedId.ToString(), hexadr.ToString("X4"), details);
-        }
+        protected override string Details => $"Abschaltgrenze {MaxCurrent} mA";
     }
 
-    public class SwitchDecoder : CANguruDecoder
-    {
-        public byte Address { get; set; }
-        public int Delay { get; set; }
-        public int StepsToEnd { get; set; }
-        // Zubehör-Decoder mit Stepper (Phase 3): Parameter 0 Adresse, 1 Verzögerung, 2 Laufweg
-        public override void UpdateFromDecoder()
-        {
-            var adr = DecoderProtocol.ReadParam((byte)AssignedId, 0);
-            if (adr == null)
-                return; // Decoder noch nicht bereit
-            Address = (byte)adr.Value;
-            Delay = DecoderProtocol.ReadParam((byte)AssignedId, 1) ?? Delay;
-            StepsToEnd = DecoderProtocol.ReadParam((byte)AssignedId, 2) ?? StepsToEnd;
-        }
-
-        public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
-        {
-            string details = $"Addr:{Address} Verzögerung:{Delay} Schritte bis Ende:{StepsToEnd}";
-            string macStr = $"{Mac[0]:X2}:{Mac[1]:X2}:{Mac[2]:X2}:{Mac[3]:X2}:{Mac[4]:X2}:{Mac[5]:X2}";
-            int hexadr = 0xd715 + AssignedId;
-
-            return ("Switch", macStr, AssignedId.ToString(), hexadr.ToString("X4"), details);
-        }
-    }
-
-    public class SignalDecoder : CANguruDecoder
-    {
-        public byte Address { get; set; }
-        public int Delay { get; set; }
-        public int StepsToEnd { get; set; }
-        // Zubehör-Decoder mit Stepper (Phase 3): Parameter 0 Adresse, 1 Verzögerung, 2 Laufweg
-        public override void UpdateFromDecoder()
-        {
-            var adr = DecoderProtocol.ReadParam((byte)AssignedId, 0);
-            if (adr == null)
-                return; // Decoder noch nicht bereit
-            Address = (byte)adr.Value;
-            Delay = DecoderProtocol.ReadParam((byte)AssignedId, 1) ?? Delay;
-            StepsToEnd = DecoderProtocol.ReadParam((byte)AssignedId, 2) ?? StepsToEnd;
-        }
-        public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
-        {
-            string details = $"Addr:{Address} Verzögerung:{Delay} Schritte bis Ende:{StepsToEnd}";
-            string macStr = $"{Mac[0]:X2}:{Mac[1]:X2}:{Mac[2]:X2}:{Mac[3]:X2}:{Mac[4]:X2}:{Mac[5]:X2}";
-            int hexadr = 0xd715 + AssignedId;
-            return ("Signal", macStr, AssignedId.ToString(), hexadr.ToString("X4"), details);
-        }
-    }
-
+    // Rückmelder: Parameter 0 ... 15 = Meldeadresse der Kontakte 1 ... 16
     public class FeedbackDecoder : CANguruDecoder
     {
         public byte[] Channels = new byte[16];
-        // Rückmelder ab Firmware 2.0: Parameter 0 ... 15 = Meldeadresse der Kontakte 1 ... 16
+
         public override void UpdateFromDecoder()
         {
             for (byte i = 0; i < 16; i++)
             {
-                var v = DecoderProtocol.ReadParam((byte)AssignedId, i);
+                var v = DecoderProtocol.ReadParam(AssignedId, i);
                 if (v == null)
                     return; // Decoder noch nicht bereit
                 Channels[i] = (byte)v.Value;
             }
         }
 
-        public override (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
-        {
-            string macStr = $"{Mac[0]:X2}:{Mac[1]:X2}:{Mac[2]:X2}:{Mac[3]:X2}:{Mac[4]:X2}:{Mac[5]:X2}";
-            int hexadr = 0xd715 + AssignedId;
-
-            string line1 = "K1–K8:  " + string.Join(" ", Channels.Take(8).Select(v => v.ToString("D2")));
-            string line2 = "K9–K16: " + string.Join(" ", Channels.Skip(8).Take(8).Select(v => v.ToString("D2")));
-
-            string details = line1 + " | " + line2;
-
-            return ("Feedback", macStr, AssignedId.ToString(), hexadr.ToString("X4"), details);
-        }
+        protected override string Details =>
+            "K1–K8: " + string.Join(" ", Channels.Take(8).Select(v => v.ToString("D2"))) +
+            " | K9–K16: " + string.Join(" ", Channels.Skip(8).Take(8).Select(v => v.ToString("D2")));
     }
 
     public class LokFunktion

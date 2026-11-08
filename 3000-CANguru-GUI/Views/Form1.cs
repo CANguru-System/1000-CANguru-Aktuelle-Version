@@ -1,5 +1,4 @@
 ﻿using CANguru;
-using CANguru.Communication;
 using CANguru.Controllers;
 using CANguru.Controls;
 using CANguru.GUI.Forms;
@@ -22,7 +21,6 @@ using System.Threading.Channels;
 using System.Timers;
 using System.Windows.Forms;
 using System.Xml.Linq;
-using static CANguru.Controllers.DecoderStorage;
 using static System.Net.Mime.MediaTypeNames;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using Application = System.Windows.Forms.Application;
@@ -38,8 +36,7 @@ namespace CANguru.Views
         private CANguruLokRegistry lokRegistry = new();
         private MfxParser mfxParser;
         private LokStorage lokstorage;
-        private DecoderStorage decoderStorage;
-        private DecoderList decoderController;
+        private readonly DecoderRegistry decoders = new();
         private volatile ParameterForm? activeParameterForm; // offenes allgemeines Parameter-Fenster
         private DecoderListForm decoderListForm;
         private LokListForm lokListForm;
@@ -65,7 +62,6 @@ namespace CANguru.Views
         private DecoderStatus currentDecoderStatus = DecoderStatus.Lost;
         private bool guiClosing = false;
         private bool isFirmwareUploadActive = false;
-        private AliveManager aliveManager = new AliveManager();
 
         private int lastPower = -1;
         private int lastSwitch = -1;
@@ -167,22 +163,9 @@ namespace CANguru.Views
             InitOneShotTimer();
             CANFrames = new CANFrames();
             mfxParser = new MfxParser(lokRegistry, CANFrames);
-            decoderController = new DecoderList();
             lokListForm = new LokListForm();
             pictureBox1.Image = Icon.ExtractAssociatedIcon(Application.ExecutablePath).ToBitmap();
             GuiLogger.MessageLogged += OnGuiLog;
-            // AliveManager initialisieren
-            aliveManager = new AliveManager();
-
-            // Hier kommt die Registrierung hin:
-            aliveManager.AliveSummaryReceived += (power, sw, signal, feedback, ledSignal) =>
-            {
-                lastPower = UpdateAliveField(cntPower, lastPower, power);
-                lastSwitch = UpdateAliveField(cntSwitch, lastSwitch, sw);
-                lastSignal = UpdateAliveField(cntSignal, lastSignal, signal);
-                lastFeedback = UpdateAliveField(cntFeedback, lastFeedback, feedback);
-                lastLedSignal = UpdateAliveField(cntLedSignal, lastLedSignal, ledSignal);
-            };
             // Parser-Callbacks
             mfxParser.LogMessage += OnParserLog;
             mfxParser.incnextLocid += OnincnextLocid;
@@ -210,7 +193,6 @@ namespace CANguru.Views
             // Storage initialisieren
             lokstorage = new LokStorage("mfx_loks.json");
             ApplyNextMfxSIDToUI();
-            decoderStorage = new DecoderStorage();
 
             // Fenster / Aussehen
 
@@ -233,7 +215,7 @@ namespace CANguru.Views
             Instance = this;
 
             // ListView Decoder-Liste
-            decoderListForm = new DecoderListForm(decoderStorage);
+            decoderListForm = new DecoderListForm(decoders);
             // OTA-Firmaware
             otaUploader = new CANguru.OTA.OtaUploader(
                 log: text => Log(text),
@@ -599,7 +581,7 @@ namespace CANguru.Views
             if (!r.Ok)
                 return;
 
-            if (!decoderStorage.Decoders.TryGetValue(decoderId, out var dec))
+            if (!decoders.TryGetById(decoderId, out var dec))
                 return;
             dec.LastSeen = DateTime.Now; // den Status berechnet aliveTimer aus LastSeen
 
@@ -631,7 +613,11 @@ namespace CANguru.Views
                 else if (typ == ProtocolConstants.DEVTYPE_RM) feedback = zahl;
                 else if (typ == ProtocolConstants.DEVTYPE_LEDSIGNAL) ledSignal = zahl;
             }
-            aliveManager.ProcessAliveSummary(power, sw, signal, feedback, ledSignal);
+            lastPower = UpdateAliveField(cntPower, lastPower, power);
+            lastSwitch = UpdateAliveField(cntSwitch, lastSwitch, sw);
+            lastSignal = UpdateAliveField(cntSignal, lastSignal, signal);
+            lastFeedback = UpdateAliveField(cntFeedback, lastFeedback, feedback);
+            lastLedSignal = UpdateAliveField(cntLedSignal, lastLedSignal, ledSignal);
         }
 
         // Gleisspannung an/aus (Sitzung TRACK_POWER von der Bridge, abgeleitet aus STOPP/GO)
@@ -1046,7 +1032,7 @@ namespace CANguru.Views
 
         public void OnDecoderAlive(int decoderId)
         {
-            if (decoderStorage.Decoders.TryGetValue((uint)decoderId, out var decoder))
+            if (decoders.TryGetById((byte)decoderId, out var decoder))
             {
                 decoder.LastSeen = DateTime.Now;
             }
@@ -1055,11 +1041,11 @@ namespace CANguru.Views
         // Alive-Statusanzeige
         private void UpdateUI()
         {
-            var decoderSnapshot = decoderStorage.Decoders.Values.ToList();
+            var decoderSnapshot = decoders.All();
 
             foreach (var decoder in decoderSnapshot)
             {
-                switch (decoder.IsReady)
+                switch (decoder.Status)
                 {
                     case DecoderStatus.Healthy:
                         lblBRIDGEStatus.Text = "ONLINE";
@@ -1082,21 +1068,21 @@ namespace CANguru.Views
         // GUI sendet Alive an Bridge
         private void aliveTimer_Tick(object sender, EventArgs e)
         {
-            foreach (var decoder in decoderStorage.Decoders.Values)
+            foreach (var decoder in decoders.All())
             {
                 var delta = DateTime.Now - decoder.LastSeen;
 
                 if (delta.TotalSeconds < 2)
                 {
-                    decoder.IsReady = DecoderStatus.Healthy;
+                    decoder.Status = DecoderStatus.Healthy;
                 }
                 else if (delta.TotalSeconds < 5)
                 {
-                    decoder.IsReady = DecoderStatus.Weak;
+                    decoder.Status = DecoderStatus.Weak;
                 }
                 else
                 {
-                    decoder.IsReady = DecoderStatus.Lost;
+                    decoder.Status = DecoderStatus.Lost;
                 }
             }
             UpdateUI();
@@ -1261,8 +1247,8 @@ namespace CANguru.Views
             CANguruDecoder decoder = type switch
             {
                 DecoderType.Power => new PowerDecoder(),
-                DecoderType.Switch => new SwitchDecoder(),
-                DecoderType.Signal => new SignalDecoder(),
+                DecoderType.Switch => new StepperDecoder(),
+                DecoderType.Signal => new StepperDecoder(),
                 DecoderType.Feedback => new FeedbackDecoder(),
                 DecoderType.LedSignal => new LedSignalDecoder(),
                 _ => new CANguruDecoder()
@@ -1276,7 +1262,7 @@ namespace CANguru.Views
 
             Log($"Decoder angemeldet: ID={id}, Typ={type}, Firmware {decoder.Firmware}");
 
-            decoderStorage.AddOrUpdate(decoder);
+            decoders.AddOrUpdate(decoder);
             RefreshDecoderListBox();
 
             // Einstellungen holen (Liste, beim Stromdecoder die Abschaltgrenze für die Anzeige)
@@ -1351,7 +1337,7 @@ namespace CANguru.Views
                     "Decoder entfernen", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            decoderStorage.Remove(id);
+            decoders.Remove(id);
             RefreshDecoderListBox();
             Log($"Decoder {id} entfernt.");
         }
@@ -1367,8 +1353,7 @@ namespace CANguru.Views
 
             listBoxDecoder.Items.Clear();
             listBoxDecoder.Items.Add("HEADER");
-            listBoxDecoder.Items.Add("SEPARATOR");
-            foreach (var decoder in decoderStorage.Decoders.Values.OrderBy(l => l.Name))
+            foreach (var decoder in decoders.All())
                 listBoxDecoder.Items.Add(decoder);
         }
 
@@ -1396,18 +1381,6 @@ namespace CANguru.Views
                 return;
             }
 
-            // Separator-Zeile
-            if (item is string sep && sep == "SEPARATOR")
-            {
-                using var bg = new SolidBrush(Color.Gray);
-                e.Graphics.FillRectangle(bg, e.Bounds);
-
-                string line = "---------------------------------------------------";
-
-                using var textBrush = new SolidBrush(Color.White);
-                e.Graphics.DrawString(line, lb.Font, textBrush, e.Bounds.Left + 2, e.Bounds.Top + 1);
-                return;
-            }
 
             // Normale Decoder-Zeile
             if (item is CANguruDecoder decoder)
@@ -1438,7 +1411,7 @@ namespace CANguru.Views
                 else
                 {
                     // Normaler Zustand → DecoderStatus-Farbe
-                    switch (decoder.IsReady)
+                    switch (decoder.Status)
                     {
                         case DecoderStatus.Weak:
                             back = Color.LightYellow;
@@ -1510,7 +1483,6 @@ namespace CANguru.Views
             listBoxLoks.Items.Clear();
 
             listBoxLoks.Items.Add("HEADER");
-            listBoxLoks.Items.Add("SEPARATOR");
 
             foreach (var lok in lokstorage.Loks.Values.OrderBy(l => l.Name))
                 listBoxLoks.Items.Add(lok);
@@ -1540,18 +1512,6 @@ namespace CANguru.Views
                 return;
             }
 
-            // Separator-Zeile
-            if (item is string sep && sep == "SEPARATOR")
-            {
-                using var bg = new SolidBrush(Color.Gray);
-                e.Graphics.FillRectangle(bg, e.Bounds);
-
-                string line = "-------------------------------------------";
-
-                using var textBrush = new SolidBrush(Color.White);
-                e.Graphics.DrawString(line, lb.Font, textBrush, e.Bounds.Left + 2, e.Bounds.Top + 1);
-                return;
-            }
 
             // Normale Lok-Zeile
             if (item is CANguruLok lok)
@@ -1875,7 +1835,7 @@ namespace CANguru.Views
             Log("Decoder-Liste anzeigen...");
 
             // 1. Live-Werte holen
-            foreach (var dec in decoderStorage.Decoders.Values)
+            foreach (var dec in decoders.All())
             {
                 // 2. Decoder Zeit geben, sich zu initialisieren
                 await Task.Delay(150);

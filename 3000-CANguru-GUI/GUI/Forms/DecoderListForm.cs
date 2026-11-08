@@ -7,9 +7,9 @@ using System.Windows.Forms;
 
 public partial class DecoderListForm : Form
 {
-    private readonly DecoderStorage storage;
+    private readonly DecoderRegistry storage;
 
-    public DecoderListForm(DecoderStorage storage)
+    public DecoderListForm(DecoderRegistry storage)
     {
         InitializeComponent();
         this.storage = storage;
@@ -21,7 +21,7 @@ public partial class DecoderListForm : Form
     {
         lvDecoders.Items.Clear();
 
-        foreach (var dec in storage.Decoders.Values.OrderBy(d => d.Name))
+        foreach (var dec in storage.All())
         {
             var (type, mac, id, uid, details) = dec.ToListViewColumns();
 
