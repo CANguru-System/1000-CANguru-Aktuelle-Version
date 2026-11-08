@@ -1,5 +1,4 @@
-﻿using CANguru.Models;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -17,8 +16,6 @@ public sealed class UdpClientSingleton
     // Ziel aller Sendungen: zunächst Broadcast, nach dem Finden der Bridge deren Adresse
     private volatile IPEndPoint _remote;
 
-    private volatile DecoderStatus _DecoderStatus = DecoderStatus.Healthy;
-
     private UdpClientSingleton()
     {
         // Designer darf KEIN Netzwerk initialisieren
@@ -32,16 +29,6 @@ public sealed class UdpClientSingleton
             ProtocolConfig.BridgeIP,
             ProtocolConstants.BRIDGE_PORT
         );
-    }
-
-    public byte[] SendAndReceive(byte[] packet)
-    {
-        if (IsDesigner)
-            return Array.Empty<byte>();
-
-        _client.Send(packet, packet.Length, _remote);
-        var ep = new IPEndPoint(IPAddress.Any, 0);
-        return _client.Receive(ref ep);
     }
 
     public void SendBroadcast(byte[] packet)
@@ -60,17 +47,9 @@ public sealed class UdpClientSingleton
         _remote = new IPEndPoint(bridgeIp, ProtocolConstants.BRIDGE_PORT);
     }
 
-    public void SetDecoderStatus(DecoderStatus state)
-    {
-        _DecoderStatus = state;
-    }
-
     public void Send(byte[] packet)
     {
         if (IsDesigner)
-            return;
-
-        if (_DecoderStatus == DecoderStatus.Lost)
             return;
 
         _client.Send(packet, packet.Length, _remote);
