@@ -316,6 +316,10 @@ namespace CANguru.Views
             // Optional: OwnerDraw für Decoder aktivieren
             // listBoxDecoder.DrawItem += ListBoxDecoder_DrawItem;
 
+            // decoder list drawn double-buffered (less flicker when a status colour changes)
+            typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?.SetValue(listBoxDecoder, true);
+
             // counters per type and OTA choice are built from the registered decoders
             Controls.Add(countersPanel);
             radioSingle.Text = "Einzeldecoder";
@@ -832,25 +836,22 @@ namespace CANguru.Views
         // GUI sendet Alive an Bridge
         private void aliveTimer_Tick(object sender, EventArgs e)
         {
+            // status from the time of the last alive: under 2 s healthy, under 5 s weak
+            bool changed = false;
             foreach (var decoder in decoders.All())
             {
-                var delta = DateTime.Now - decoder.LastSeen;
-
-                if (delta.TotalSeconds < 2)
+                double age = (DateTime.Now - decoder.LastSeen).TotalSeconds;
+                var status = age < 2 ? DecoderStatus.Healthy : age < 5 ? DecoderStatus.Weak : DecoderStatus.Lost;
+                if (decoder.Status != status)
                 {
-                    decoder.Status = DecoderStatus.Healthy;
-                }
-                else if (delta.TotalSeconds < 5)
-                {
-                    decoder.Status = DecoderStatus.Weak;
-                }
-                else
-                {
-                    decoder.Status = DecoderStatus.Lost;
+                    decoder.Status = status;
+                    changed = true;
                 }
             }
             UpdateUI();
-            listBoxDecoder.Invalidate(); // status colours
+            // repaint the list only when a status colour changes (repainting on every tick flickers)
+            if (changed)
+                listBoxDecoder.Invalidate();
         }
 
 
