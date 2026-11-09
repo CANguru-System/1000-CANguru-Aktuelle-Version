@@ -53,11 +53,24 @@ namespace CANguru.GUI.Forms
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(470, 335);
+            ClientSize = new Size(470, 365);
             CancelButton = btnClose;
 
+            // ---- selected locomotive, on top ----
+            bool mfx = lok != null && !lok.IsManual;
+            string who = lok == null ? "Gewählte Lok: –"
+                       : mfx ? $"Gewählte Lok: {lok.Name} (mfx, Adresse {lok.MfxSID})"
+                       : $"Gewählte Lok: {lok.Name} ({lok.DecoderType}, Adresse {lok.MfxSID})";
+            Controls.Add(new Label
+            {
+                Text = who,
+                AutoSize = true,
+                Location = new Point(12, 12),
+                Font = new Font(Control.DefaultFont.FontFamily, 10f, FontStyle.Bold)
+            });
+
             // ---- CV lesen / schreiben ----
-            var cvBox = new GroupBox { Text = "CV lesen / schreiben (Lok auf dem Programmiergleis)", Location = new Point(10, 10), Size = new Size(450, 120) };
+            var cvBox = new GroupBox { Text = "CV lesen / schreiben (Lok auf dem Programmiergleis)", Location = new Point(10, 40), Size = new Size(450, 120) };
             cvBox.Controls.Add(new Label { Text = "CV-Adresse", AutoSize = true, Location = new Point(12, 28) });
             cvAddress.Location = new Point(100, 25);
             cvAddress.Items.AddRange(CommonCvs);
@@ -81,20 +94,17 @@ namespace CANguru.GUI.Forms
             cvBox.Height = 125;
 
             // ---- Lokname (nur mfx-Loks) ----
-            var nameBox = new GroupBox { Text = "Lokname (nur mfx-Loks)", Location = new Point(10, 145), Size = new Size(450, 115) };
-            bool mfx = lok != null && !lok.IsManual;
-            string who = lok == null ? "keine Lok gewählt (in der Lokliste auswählen)"
-                       : mfx ? $"gewählte Lok: {lok.Name} (mfx, Adresse {lok.MfxSID})"
-                       : $"gewählte Lok: {lok.Name} – keine mfx-Lok";
-            nameBox.Controls.Add(new Label { Text = who, AutoSize = true, Location = new Point(12, 25), ForeColor = mfx ? SystemColors.ControlText : Color.DimGray });
-            nameBox.Controls.Add(new Label { Text = "Lokname", AutoSize = true, Location = new Point(12, 58) });
-            lokName.Location = new Point(100, 55);
-            btnNameRead.Location = new Point(100, 82);
-            btnNameWrite.Location = new Point(186, 82);
+            var nameBox = new GroupBox { Text = "Lokname (nur mfx-Loks)", Location = new Point(10, 175), Size = new Size(450, 110) };
+            if (!mfx)
+                nameBox.Controls.Add(new Label { Text = "Die gewählte Lok ist keine mfx-Lok.", AutoSize = true, Location = new Point(12, 22), ForeColor = Color.DimGray });
+            nameBox.Controls.Add(new Label { Text = "Lokname", AutoSize = true, Location = new Point(12, 48) });
+            lokName.Location = new Point(100, 45);
+            btnNameRead.Location = new Point(100, 76);
+            btnNameWrite.Location = new Point(186, 76);
             nameBox.Controls.AddRange(new Control[] { lokName, btnNameRead, btnNameWrite });
             lokName.Enabled = btnNameRead.Enabled = btnNameWrite.Enabled = mfx;
 
-            btnClose.Location = new Point(380, 270);
+            btnClose.Location = new Point(380, 297);
 
             Controls.Add(cvBox);
             Controls.Add(nameBox);

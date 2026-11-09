@@ -1266,11 +1266,17 @@ namespace CANguru.Views
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            if (listBoxLoks.SelectedItem is not CANguruLok selectedLok)
+            {
+                MessageBox.Show(this, "Bitte zuerst in der Lokliste die Lok auswählen, die auf dem Programmiergleis steht.",
+                    "CV-Programmierung", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             cvProgrammer ??= new CvProgrammer(CANFrames.SysGO[2], CANFrames.SysGO[3],
                 sendFrame: frame => SendCANFrame2Bridge(frame),
                 trackOn: () => trackOn,
                 switchTrack: on => SendCANFrame2Bridge(on ? CANFrames.SysGO : CANFrames.SysSTOPP));
-            using var form = new CvProgrammingForm(cvProgrammer, listBoxLoks.SelectedItem as CANguruLok);
+            using var form = new CvProgrammingForm(cvProgrammer, selectedLok);
             form.ShowDialog(this);
         }
 
