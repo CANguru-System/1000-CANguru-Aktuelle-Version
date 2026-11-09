@@ -120,7 +120,10 @@ namespace CANguru.Controllers
                 existing.Vmin = lok.Vmin;
                 existing.Vmax = lok.Vmax;
                 existing.XProt = lok.XProt;
-                existing.Funktionen = lok.Funktionen;
+                // keep known functions when the update brings none (e.g. re-registration
+                // before the functions are read again)
+                if (lok.Funktionen != null && lok.Funktionen.Count > 0)
+                    existing.Funktionen = lok.Funktionen;
             }
             else
             {

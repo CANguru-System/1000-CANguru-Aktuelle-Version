@@ -1244,7 +1244,48 @@ namespace CANguru.Views
         {
             lokstorage.AddOrUpdate(lok);
             UpdateLokList();
+            // mfx: read the functions right after the name (the registration ends with
+            // FINISHCONFIG, give it a moment)
+            if (!lok.IsManual && !BridgeIPIsNotSet())
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(1500);
+                    UiInvoke(async () => await ReadLokFunctionsAsync(lok));
+                });
         }
+
+        // Reads the functions of an mfx locomotive (on the programming track) and stores them
+        // in the locomotive list; lokomotive.cs2 takes them from there. Returns a text for the user.
+        private async Task<string> ReadLokFunctionsAsync(CANguruLok lok)
+        {
+            var programmer = EnsureCvProgrammer();
+            if (programmer.Busy)
+                return "Es läuft bereits eine Programmierung.";
+            Log($"Lese die Funktionen von „{lok.Name}“ ...");
+            var (ok, functions, message) = await programmer.ReadMfxFunctionsAsync(lok.MfxSID);
+            if (!ok)
+            {
+                Log($"Funktionen von „{lok.Name}“ nicht gelesen: {message}");
+                return message;
+            }
+            if (functions.Count == 0)
+            {
+                Log($"„{lok.Name}“ beschreibt keine Funktionen; die Lokliste bleibt unverändert.");
+                return "Die Lok beschreibt keine Funktionen.";
+            }
+            lok.Funktionen = functions.Select(fn => new LokFunktion { Nr = fn.Nr, Typ = fn.Symbol }).ToList();
+            lokstorage.AddOrUpdate(lok);
+            UpdateLokList();
+            string list = string.Join(", ", functions);
+            Log($"Funktionen von „{lok.Name}“: {list}. Für WDP: „Lok-Liste anlegen“ drücken.");
+            return $"Funktionen: {list} – in die Lokliste übernommen.";
+        }
+
+        private CvProgrammer EnsureCvProgrammer() =>
+            cvProgrammer ??= new CvProgrammer(CANFrames.SysGO[2], CANFrames.SysGO[3],
+                sendFrame: frame => SendCANFrame2Bridge(frame),
+                trackOn: () => trackOn,
+                switchTrack: on => SendCANFrame2Bridge(on ? CANFrames.SysGO : CANFrames.SysSTOPP));
 
         // Lok löschen
         private void btnDelete_Click(object sender, EventArgs e)
@@ -1272,11 +1313,7 @@ namespace CANguru.Views
                     "CV-Programmierung", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            cvProgrammer ??= new CvProgrammer(CANFrames.SysGO[2], CANFrames.SysGO[3],
-                sendFrame: frame => SendCANFrame2Bridge(frame),
-                trackOn: () => trackOn,
-                switchTrack: on => SendCANFrame2Bridge(on ? CANFrames.SysGO : CANFrames.SysSTOPP));
-            using var form = new CvProgrammingForm(cvProgrammer, selectedLok);
+            using var form = new CvProgrammingForm(EnsureCvProgrammer(), selectedLok, ReadLokFunctionsAsync);
             form.ShowDialog(this);
         }
 

@@ -6,6 +6,14 @@ namespace CANguru.Controllers
     // Result of a CV operation
     public sealed record CvResult(bool Ok, int Value, string Message);
 
+    // A function of an mfx locomotive: number (F0, F1 ...), symbol (bit 0x80 = momentary,
+    // i.e. only active while the key is pressed) and the outputs it switches per direction
+    public sealed record MfxFunction(int Nr, int Symbol, int OutputsForward, int OutputsBackward)
+    {
+        public bool Momentary => (Symbol & 0x80) != 0;
+        public override string ToString() => $"F{Nr} (Symbol {Symbol & 0x7F}{(Momentary ? ", Taster" : "")})";
+    }
+
     // Reads and writes CVs of locomotive decoders through the track box (Märklin CAN
     // commands Read Config 0x0E / Write Config 0x10), as the CANguru-Server 3.02 did:
     //  - CVs: locomotive ID 0xC000 = the locomotive on the programming track (only there
@@ -119,6 +127,91 @@ namespace CANguru.Controllers
             }
             return (true, "OK");
         });
+
+        // ------------------------------------------------------------
+        // Functions of an mfx locomotive.
+        // The mfx configuration consists of blocks. A block starts with a header CV whose
+        // index 0 is 0x01: [01][block number][..][..][number of entries][CVs per entry];
+        // blocks follow each other, starting at the next multiple of 4 (so the search
+        // tries the following CVs). Block 4 holds the functions F0, F1 ..., 3 CVs each:
+        //   1st CV index 1 = symbol (bit 0x80 = momentary)
+        //   2nd / 3rd CV index 1 = outputs forward / backward (0 = function not used)
+        // Found by reading three locomotives (DB 640, BR 491, BR 260), November 2026.
+        // ------------------------------------------------------------
+
+        private const int FunctionBlock = 4, MaxFunctions = 32;
+
+        public Task<(bool Ok, List<MfxFunction> Functions, string Message)> ReadMfxFunctionsAsync(byte sid) => RunAsync(async () =>
+        {
+            var none = new List<MfxFunction>();
+            Expect(f => f[1] == ReadConfigR && f[7] == 0x40 && f[8] == sid);
+
+            // find the function block
+            int cv = 0, start = -1, count = 0, size = 0, skipped = 0;
+            for (int blocks = 0; blocks < 16 && cv < 1024; )
+            {
+                var h = await QueryMfxAsync(sid, cv, 0, 6);
+                if (h == null)
+                    return (false, none, cv == 0 ? "Keine Antwort der Lok (auf dem Programmiergleis?)." : $"Keine Antwort bei CV {cv}.");
+                if (h.GetValueOrDefault(0) != 0x01)
+                {
+                    // no header here: blocks start at the next multiple of 4
+                    if (++skipped > 8)
+                        return (false, none, "Funktionsblock nicht gefunden.");
+                    cv++;
+                    continue;
+                }
+                skipped = 0;
+                blocks++;
+                int block = h.GetValueOrDefault(1), n = h.GetValueOrDefault(4), s = h.GetValueOrDefault(5);
+                if (block == FunctionBlock)
+                {
+                    start = cv + 1;
+                    count = Math.Min(n, MaxFunctions);
+                    size = s;
+                    break;
+                }
+                cv += 1 + n * s;
+            }
+            if (start < 0 || size < 3)
+                return (false, none, "Funktionsblock nicht gefunden.");
+
+            // read symbol and outputs of each function
+            var result = new List<MfxFunction>();
+            for (int nr = 0; nr < count; nr++)
+            {
+                int baseCv = start + nr * size;
+                var sym = await QueryMfxAsync(sid, baseCv, 1, 1);
+                var fwd = await QueryMfxAsync(sid, baseCv + 1, 1, 1);
+                var bwd = await QueryMfxAsync(sid, baseCv + 2, 1, 1);
+                if (sym == null || fwd == null || bwd == null)
+                    return (false, result, $"Keine Antwort bei F{nr}.");
+                int outF = fwd.GetValueOrDefault(1), outB = bwd.GetValueOrDefault(1);
+                if ((outF | outB) != 0)
+                    result.Add(new MfxFunction(nr, sym.GetValueOrDefault(1), outF, outB));
+            }
+            return (true, result, "OK");
+        });
+
+        // Reads `count` values of one CV starting at startIndex; index -> value.
+        // null = no answer at all. Answers for other CVs (late ones) are skipped.
+        private async Task<Dictionary<int, int>?> QueryMfxAsync(byte sid, int cv, int startIndex, int count)
+        {
+            int ci = (startIndex << 10) | cv;
+            sendFrame(Frame(ReadConfig, 7, 0x00, 0x00, 0x40, sid, (byte)(ci >> 8), (byte)ci, (byte)count));
+            var values = new Dictionary<int, int>();
+            while (values.Count < count)
+            {
+                var a = await NextAsync(values.Count == 0 ? 2000 : 1000);
+                if (a == null)
+                    break;
+                int answer = (a[9] << 8) | a[10];
+                if ((answer & 0x3FF) != cv)
+                    continue;
+                values[answer >> 10] = a[4] == 7 ? a[11] : 0;
+            }
+            return values.Count == 0 ? null : values;
+        }
 
         // ------------------------------------------------------------
         // Exploration of the mfx configuration (for finding out which properties a

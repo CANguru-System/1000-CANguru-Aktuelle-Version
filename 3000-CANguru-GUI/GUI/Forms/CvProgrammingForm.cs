@@ -41,6 +41,8 @@ namespace CANguru.GUI.Forms
         private readonly TextBox lokName = new() { Width = 200, MaxLength = 16 };
         private readonly Button btnNameRead = new() { Text = "Lesen", Width = 80 };
         private readonly Button btnNameWrite = new() { Text = "Schreiben", Width = 80 };
+        private readonly Button btnFunctions = new() { Text = "Funktionen lesen", Width = 120 };
+        private readonly Func<CANguruLok, Task<string>>? readFunctions;
 
         // exploration of the mfx configuration (which properties does the decoder describe?)
         private const int ExploreStartIndex = 0, ExploreCount = 17; // index 0..16
@@ -52,10 +54,12 @@ namespace CANguru.GUI.Forms
 
         private readonly Label status = new() { Dock = DockStyle.Bottom, Height = 24, Padding = new Padding(10, 4, 10, 0) };
 
-        public CvProgrammingForm(CvProgrammer programmer, CANguruLok? lok)
+        // readFunctions: reads the functions of the locomotive into the locomotive list (Form1)
+        public CvProgrammingForm(CvProgrammer programmer, CANguruLok? lok, Func<CANguruLok, Task<string>>? readFunctions = null)
         {
             this.programmer = programmer;
             this.lok = lok;
+            this.readFunctions = readFunctions;
             Text = "CV-Programmierung";
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -102,15 +106,17 @@ namespace CANguru.GUI.Forms
             cvBox.Height = 125;
 
             // ---- Lokname (nur mfx-Loks) ----
-            var nameBox = new GroupBox { Text = "Lokname (nur mfx-Loks)", Location = new Point(10, 175), Size = new Size(450, 110) };
+            var nameBox = new GroupBox { Text = "Lokname und Funktionen (nur mfx-Loks)", Location = new Point(10, 175), Size = new Size(450, 110) };
             if (!mfx)
                 nameBox.Controls.Add(new Label { Text = "Die gewählte Lok ist keine mfx-Lok.", AutoSize = true, Location = new Point(12, 22), ForeColor = Color.DimGray });
             nameBox.Controls.Add(new Label { Text = "Lokname", AutoSize = true, Location = new Point(12, 48) });
             lokName.Location = new Point(100, 45);
             btnNameRead.Location = new Point(100, 76);
             btnNameWrite.Location = new Point(186, 76);
-            nameBox.Controls.AddRange(new Control[] { lokName, btnNameRead, btnNameWrite });
-            lokName.Enabled = btnNameRead.Enabled = btnNameWrite.Enabled = mfx;
+            btnFunctions.Location = new Point(320, 76);
+            nameBox.Controls.AddRange(new Control[] { lokName, btnNameRead, btnNameWrite, btnFunctions });
+            new ToolTip().SetToolTip(btnFunctions, "Liest die Funktionen (F0, F1 …) aus dem Decoder und übernimmt sie in die Lokliste und in lokomotive.cs2.");
+            lokName.Enabled = btnNameRead.Enabled = btnNameWrite.Enabled = btnFunctions.Enabled = mfx;
 
             // ---- mfx-Konfiguration erkunden ----
             var exploreBox = new GroupBox { Text = "mfx-Konfiguration erkunden (nur mfx-Loks)", Location = new Point(10, 295), Size = new Size(450, 85) };
@@ -141,7 +147,19 @@ namespace CANguru.GUI.Forms
             btnNameRead.Click += async (s, e) => await ReadName();
             btnNameWrite.Click += async (s, e) => await WriteName();
             btnExplore.Click += async (s, e) => await Explore();
+            btnFunctions.Click += async (s, e) => await ReadFunctions();
             btnExploreStop.Click += (s, e) => exploreCancel?.Cancel();
+        }
+
+        private async Task ReadFunctions()
+        {
+            if (readFunctions == null)
+                return;
+            await Run("Lese die Funktionen ...", async () =>
+            {
+                string text = await readFunctions(lok!);
+                ShowResult(text.StartsWith("Funktionen:"), text);
+            });
         }
 
         // Reads the mfx configuration CV by CV and writes it to a text file, which is opened
@@ -298,7 +316,7 @@ namespace CANguru.GUI.Forms
         {
             bool mfx = lok != null && !lok.IsManual;
             btnRead.Enabled = btnWrite.Enabled = cvAddress.Enabled = newValue.Enabled = btnClose.Enabled = !busy;
-            btnNameRead.Enabled = btnNameWrite.Enabled = lokName.Enabled = !busy && mfx;
+            btnNameRead.Enabled = btnNameWrite.Enabled = lokName.Enabled = btnFunctions.Enabled = !busy && mfx && (readFunctions != null);
             btnExplore.Enabled = exploreFrom.Enabled = exploreTo.Enabled = !busy && mfx;
             UseWaitCursor = busy;
         }
