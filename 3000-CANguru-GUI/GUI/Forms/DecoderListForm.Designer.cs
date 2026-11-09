@@ -5,7 +5,7 @@
     private ColumnHeader colType;
     private ColumnHeader colMac;
     private ColumnHeader colId;
-    private ColumnHeader colUID;
+    private ColumnHeader colName;
     private ColumnHeader colDetails;
 
     protected override void Dispose(bool disposing)
@@ -21,7 +21,7 @@
         colType = new ColumnHeader();
         colMac = new ColumnHeader();
         colId = new ColumnHeader();
-        colUID = new ColumnHeader();
+        colName = new ColumnHeader();
         colDetails = new ColumnHeader();
         btnSaveDecoderList = new Button();
         btnOK = new Button();
@@ -29,7 +29,7 @@
         // 
         // lvDecoders
         // 
-        lvDecoders.Columns.AddRange(new ColumnHeader[] { colType, colMac, colId, colUID, colDetails });
+        lvDecoders.Columns.AddRange(new ColumnHeader[] { colName, colType, colMac, colId, colDetails });
         lvDecoders.Font = new Font("Consolas", 10F);
         lvDecoders.FullRowSelect = true;
         lvDecoders.GridLines = true;
@@ -43,7 +43,7 @@
         // colType
         // 
         colType.Text = "Typ";
-        colType.Width = 80;
+        colType.Width = 110;
         // 
         // colMac
         // 
@@ -55,15 +55,15 @@
         colId.Text = "ID";
         colId.Width = 40;
         // 
-        // colUID
+        // colName
         // 
-        colUID.Text = "UID";
-        colUID.Width = 50;
+        colName.Text = "Name";
+        colName.Width = 150;
         // 
         // colDetails
         // 
         colDetails.Text = "Details";
-        colDetails.Width = 500;
+        colDetails.Width = 370;
         // 
         // btnSaveDecoderList
         // 

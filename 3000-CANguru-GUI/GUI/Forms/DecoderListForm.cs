@@ -23,12 +23,12 @@ public partial class DecoderListForm : Form
 
         foreach (var dec in storage.All())
         {
-            var (type, mac, id, uid, details) = dec.ToListViewColumns();
+            var (name, type, mac, id, details) = dec.ToListViewColumns();
 
-            var item = new ListViewItem(type);
+            var item = new ListViewItem(name);
+            item.SubItems.Add(type);
             item.SubItems.Add(mac);
             item.SubItems.Add(id);
-            item.SubItems.Add(uid);
             item.SubItems.Add(details);
 
             lvDecoders.Items.Add(item);
@@ -49,17 +49,17 @@ public partial class DecoderListForm : Form
                 cnt++;
                 line = $"Decoder #{cnt}:\r\n";
                 // Erste Spalte
-                line += "\tType: " + item.Text + "\r\n";
+                line += "\tName: " + item.Text + "\r\n";
 
                 // Alle SubItems anhängen
                 for (int i = 1; i < item.SubItems.Count; i++)
                 {
                     switch (i)
                     {
-                        case 1: line += "\tMAC-Adresse: " + item.SubItems[i].Text; break; // MAC
-                        case 2: line += "\tID: " + item.SubItems[i].Text; break; // ID
-                        case 3: line += "\tUID: " + item.SubItems[i].Text; break; // UID
-                        case 4: line += "\tDetails: " + item.SubItems[i].Text; break; // Details
+                        case 1: line += "\tTyp: " + item.SubItems[i].Text; break;
+                        case 2: line += "\tMAC-Adresse: " + item.SubItems[i].Text; break;
+                        case 3: line += "\tID: " + item.SubItems[i].Text; break;
+                        case 4: line += "\tDetails: " + item.SubItems[i].Text; break;
                     }
                     line += "\r\n";
                 }

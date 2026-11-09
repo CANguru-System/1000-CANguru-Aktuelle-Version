@@ -1,4 +1,4 @@
-using CANguru.GUI.Forms;
+﻿using CANguru.GUI.Forms;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,6 +17,31 @@ namespace CANguru.Models
         Power = ProtocolConstants.DEVTYPE_POWER,
         Feedback = ProtocolConstants.DEVTYPE_RM,
         LedSignal = ProtocolConstants.DEVTYPE_LEDSIGNAL
+    }
+
+    // Names of the decoder types for lists, counters and the OTA choice. A type the GUI
+    // does not know yet is shown with its number, so a new decoder type appears anyway.
+    public static class DecoderTypeNames
+    {
+        public static string Singular(int devType) => devType switch
+        {
+            ProtocolConstants.DEVTYPE_SWITCH => "Weiche",
+            ProtocolConstants.DEVTYPE_SIGNAL => "Formsignal",
+            ProtocolConstants.DEVTYPE_POWER => "Stromdecoder",
+            ProtocolConstants.DEVTYPE_RM => "Rückmelder",
+            ProtocolConstants.DEVTYPE_LEDSIGNAL => "LED-Signal",
+            _ => $"Decoder 0x{devType:X2}"
+        };
+
+        public static string Plural(int devType) => devType switch
+        {
+            ProtocolConstants.DEVTYPE_SWITCH => "Weichen",
+            ProtocolConstants.DEVTYPE_SIGNAL => "Formsignale",
+            ProtocolConstants.DEVTYPE_POWER => "Strom",
+            ProtocolConstants.DEVTYPE_RM => "Rückmelder",
+            ProtocolConstants.DEVTYPE_LEDSIGNAL => "LED-Signale",
+            _ => $"Typ 0x{devType:X2}"
+        };
     }
 
     public abstract class CANguruDevice
@@ -68,15 +93,7 @@ namespace CANguru.Models
         public string MacText => string.Join(":", Mac.Select(b => b.ToString("X2")));
 
         // Bezeichnung des Typs für Listen und Fenstertitel
-        public virtual string TypeText => Type switch
-        {
-            DecoderType.Switch => "Weiche",
-            DecoderType.Signal => "Formsignal",
-            DecoderType.Power => "Stromdecoder",
-            DecoderType.Feedback => "Rückmelder",
-            DecoderType.LedSignal => "LED-Signal",
-            _ => $"Decoder 0x{(int)Type:X2}"
-        };
+        public virtual string TypeText => DecoderTypeNames.Singular((int)Type);
 
         // eigener Name des Nutzers, sonst der Typ
         public string DisplayName => string.IsNullOrWhiteSpace(Name) ? TypeText : Name;
@@ -84,10 +101,21 @@ namespace CANguru.Models
         // Angaben je Typ für die Spalte "Details" der Decoder-Liste
         protected virtual string Details => "";
 
-        public (string Type, string Mac, string Id, string uid, string Details) ToListViewColumns()
+        // Zubehöradresse(n) für die Decoderliste im Hauptfenster, z. B. "12" oder "20–25"
+        public virtual string AddressText => "";
+
+        public (string Name, string Type, string Mac, string Id, string Details) ToListViewColumns() =>
+            (DisplayName, TypeText, MacText, AssignedId.ToString(), Details);
+
+        // Adressen kompakt: "20–25" bei lückenloser Folge, sonst "20, 22, 24"
+        protected static string Compact(IEnumerable<int> values)
         {
-            int hexadr = 0xd715 + AssignedId;
-            return (TypeText, MacText, AssignedId.ToString(), hexadr.ToString("X4"), Details);
+            var v = values.Where(x => x > 0).Distinct().OrderBy(x => x).ToList();
+            if (v.Count == 0)
+                return "";
+            if (v.Count > 2 && v[^1] - v[0] == v.Count - 1)
+                return $"{v[0]}–{v[^1]}";
+            return string.Join(", ", v);
         }
 
         // Einstellungen für die Listen vom Decoder lesen (blockierend, im Hintergrund aufrufen)
@@ -115,6 +143,8 @@ namespace CANguru.Models
         }
 
         protected override string Details => $"Adresse {Address}, Verzögerung {Delay}, Laufweg {StepsToEnd}";
+
+        public override string AddressText => Address > 0 ? Address.ToString() : "";
     }
 
     // LED-Signaldecoder (PCA9685, bis zu 8 Signale). Parameter je Signal k (0 ... 7):
@@ -148,6 +178,9 @@ namespace CANguru.Models
                                        : $"{used.Count} Signale, Adressen " + string.Join(" ", used);
             }
         }
+
+        public override string AddressText =>
+            Compact(Enumerable.Range(0, Signals).Where(k => Present[k]).Select(k => (int)Addresses[k]));
     }
 
     // Stromdecoder: Parameter 0 = Abschaltgrenze in mA
@@ -182,6 +215,8 @@ namespace CANguru.Models
         protected override string Details =>
             "K1–K8: " + string.Join(" ", Channels.Take(8).Select(v => v.ToString("D2"))) +
             " | K9–K16: " + string.Join(" ", Channels.Skip(8).Take(8).Select(v => v.ToString("D2")));
+
+        public override string AddressText => Compact(Channels.Select(c => (int)c));
     }
 
     public class LokFunktion

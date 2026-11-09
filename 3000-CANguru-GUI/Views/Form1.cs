@@ -55,11 +55,34 @@ namespace CANguru.Views
         // Alive-Überwachung
         private bool guiClosing = false;
 
-        private int lastPower = -1;
-        private int lastSwitch = -1;
-        private int lastSignal = -1;
-        private int lastFeedback = -1;
-        private int lastLedSignal = -1;
+        // Counters of ready decoders per type, built from the bridge summary: only types that
+        // exist appear (a new decoder type shows up without code changes)
+        private sealed class TypeCounter
+        {
+            public Label Label = null!;
+            public System.Windows.Forms.TextBox Box = null!;
+            public int Last = -1;
+        }
+        private readonly Dictionary<int, TypeCounter> counters = new();
+        private readonly FlowLayoutPanel countersPanel = new()
+        {
+            Location = new Point(499, 267),
+            Size = new Size(105, 232),
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            Margin = new Padding(0)
+        };
+
+        // OTA choice: single decoder plus one entry per decoder type that is registered
+        private readonly FlowLayoutPanel otaChoicePanel = new()
+        {
+            Location = new Point(6, 250),
+            Size = new Size(366, 50),
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0)
+        };
 
         // CANguru-Steuerzustand
         private enum enum_canguruStatus
@@ -293,11 +316,27 @@ namespace CANguru.Views
             // Optional: OwnerDraw für Decoder aktivieren
             // listBoxDecoder.DrawItem += ListBoxDecoder_DrawItem;
 
-            // Rechtsklick auf einen Decoder: allgemeine Parameter, entfernen
+            // counters per type and OTA choice are built from the registered decoders
+            Controls.Add(countersPanel);
+            radioSingle.Text = "Einzeldecoder";
+            radioSingle.Margin = new Padding(0, 2, 12, 2);
+            otaChoicePanel.Controls.Add(radioSingle);
+            tabPage1.Controls.Add(otaChoicePanel);
+
+            // Rechtsklick auf einen Decoder: Einstellungen, umbenennen, Firmware, entfernen;
+            // Doppelklick öffnet die Einstellungen
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Parameter …", null, DecoderParameter_Click);
+            menu.Items.Add("Einstellungen …", null, DecoderParameter_Click);
+            menu.Items.Add("Umbenennen …", null, DecoderUmbenennen_Click);
+            menu.Items.Add("Firmware aktualisieren …", null, DecoderFirmware_Click);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Decoder entfernen", null, DecoderEntfernen_Click);
+            listBoxDecoder.MouseDoubleClick += (s, e) =>
+            {
+                int i = listBoxDecoder.IndexFromPoint(e.Location);
+                if (i >= 0 && listBoxDecoder.Items[i] is CANguruDecoder d)
+                    OpenParameterForm(d);
+            };
             menu.Opening += (s, e) => e.Cancel = listBoxDecoder.SelectedItem is not CANguruDecoder;
             listBoxDecoder.ContextMenuStrip = menu;
             listBoxDecoder.MouseDown += (s, e) =>
@@ -381,22 +420,16 @@ namespace CANguru.Views
             session.OtaResult += otaService.OnResult;
         }
 
-        private int UpdateAliveField(System.Windows.Forms.TextBox box, int lastValue, int newValue)
+        // display order of the known types; unknown types follow by number
+        private static int TypeOrder(int devType) => devType switch
         {
-            if (InvokeRequired)
-            {
-                return (int)Invoke(new Func<int>(() => UpdateAliveField(box, lastValue, newValue)));
-            }
-
-            box.Text = newValue.ToString();
-
-            if (lastValue != -1 && newValue < lastValue)
-                box.BackColor = Color.Red;
-            else
-                box.BackColor = SystemColors.Window;
-
-            return newValue;
-        }
+            ProtocolConstants.DEVTYPE_POWER => 0,
+            ProtocolConstants.DEVTYPE_SWITCH => 1,
+            ProtocolConstants.DEVTYPE_SIGNAL => 2,
+            ProtocolConstants.DEVTYPE_RM => 3,
+            ProtocolConstants.DEVTYPE_LEDSIGNAL => 4,
+            _ => 100 + devType
+        };
 
         // Bridge answered DISCOVER (also when no decoder is running yet)
         private async void HandleBridgeFound(BridgeInfo bridge)
@@ -446,15 +479,73 @@ namespace CANguru.Views
             }
         }
 
-        // SUMMARY: ready decoders per type
+        // SUMMARY: ready decoders per type. A type appears once it has had a decoder in this
+        // session; a falling count turns red (as before), so a lost decoder stays visible.
         private void HandleAliveSummary(IReadOnlyDictionary<byte, int> counts)
         {
-            int Count(int type) => counts.TryGetValue((byte)type, out var n) ? n : 0;
-            lastPower = UpdateAliveField(cntPower, lastPower, Count(ProtocolConstants.DEVTYPE_POWER));
-            lastSwitch = UpdateAliveField(cntSwitch, lastSwitch, Count(ProtocolConstants.DEVTYPE_SWITCH));
-            lastSignal = UpdateAliveField(cntSignal, lastSignal, Count(ProtocolConstants.DEVTYPE_SIGNAL));
-            lastFeedback = UpdateAliveField(cntFeedback, lastFeedback, Count(ProtocolConstants.DEVTYPE_RM));
-            lastLedSignal = UpdateAliveField(cntLedSignal, lastLedSignal, Count(ProtocolConstants.DEVTYPE_LEDSIGNAL));
+            UiInvoke(() =>
+            {
+                bool added = false;
+                foreach (var (type, n) in counts)
+                {
+                    if (!counters.TryGetValue(type, out var c))
+                    {
+                        if (n == 0)
+                            continue;
+                        c = new TypeCounter
+                        {
+                            Label = new Label { Text = DecoderTypeNames.Plural(type) + ":", AutoSize = true, Margin = new Padding(0, 0, 0, 4) },
+                            Box = new System.Windows.Forms.TextBox { Size = new Size(100, 23), ReadOnly = true, Margin = new Padding(0, 0, 0, 4), BackColor = SystemColors.Window }
+                        };
+                        counters[type] = c;
+                        added = true;
+                    }
+                    c.Box.Text = n.ToString();
+                    c.Box.BackColor = c.Last != -1 && n < c.Last ? Color.Red : SystemColors.Window;
+                    c.Last = n;
+                }
+                if (!added)
+                    return;
+                countersPanel.SuspendLayout();
+                countersPanel.Controls.Clear();
+                foreach (var c in counters.OrderBy(kv => TypeOrder(kv.Key)).Select(kv => kv.Value))
+                {
+                    countersPanel.Controls.Add(c.Label);
+                    countersPanel.Controls.Add(c.Box);
+                }
+                countersPanel.ResumeLayout();
+            });
+        }
+
+        // OTA choice: "Einzeldecoder" plus one entry per registered decoder type
+        private void UpdateOtaChoice()
+        {
+            var types = decoders.All().Select(d => (int)d.Type).Distinct().OrderBy(TypeOrder).ToList();
+            var current = otaChoicePanel.Controls.OfType<RadioButton>().Where(r => r.Tag is int).Select(r => (int)r.Tag!).ToList();
+            if (types.SequenceEqual(current))
+                return;
+            int? selected = otaChoicePanel.Controls.OfType<RadioButton>().FirstOrDefault(r => r.Checked && r.Tag is int)?.Tag as int?;
+            otaChoicePanel.SuspendLayout();
+            foreach (var r in otaChoicePanel.Controls.OfType<RadioButton>().Where(r => r.Tag is int).ToList())
+            {
+                otaChoicePanel.Controls.Remove(r);
+                r.Dispose();
+            }
+            foreach (int t in types)
+            {
+                var r = new RadioButton
+                {
+                    Text = t == ProtocolConstants.DEVTYPE_POWER ? "Stromdecoder" : DecoderTypeNames.Plural(t),
+                    Tag = t,
+                    AutoSize = true,
+                    Margin = new Padding(0, 2, 12, 2),
+                    Checked = t == selected
+                };
+                otaChoicePanel.Controls.Add(r);
+            }
+            if (!otaChoicePanel.Controls.OfType<RadioButton>().Any(r => r.Checked))
+                radioSingle.Checked = true;
+            otaChoicePanel.ResumeLayout();
         }
 
         // Event of a decoder (position, calibration, overcurrent ...)
@@ -604,18 +695,13 @@ namespace CANguru.Views
             }
             else
             {
-                byte? type = null;
-                if (radioType1.Checked) type = ProtocolConstants.DEVTYPE_SWITCH;
-                else if (radioType2.Checked) type = ProtocolConstants.DEVTYPE_SIGNAL;
-                else if (radioType3.Checked) type = ProtocolConstants.DEVTYPE_POWER;
-                else if (radioType4.Checked) type = ProtocolConstants.DEVTYPE_RM;
-                else if (radioType5.Checked) type = ProtocolConstants.DEVTYPE_LEDSIGNAL;
-                if (type == null)
+                var choice = otaChoicePanel.Controls.OfType<RadioButton>().FirstOrDefault(r => r.Checked && r.Tag is int);
+                if (choice == null)
                 {
                     MessageBox.Show("Bitte einen OTA-Modus auswählen.");
                     return;
                 }
-                selector = type.Value;
+                selector = (byte)(int)choice.Tag!;
             }
 
             Log("Over The Air-Prozess gestartet.");
@@ -764,6 +850,7 @@ namespace CANguru.Views
                 }
             }
             UpdateUI();
+            listBoxDecoder.Invalidate(); // status colours
         }
 
 
@@ -876,7 +963,31 @@ namespace CANguru.Views
                 decoder.UpdateFromDecoder();
                 if (decoder is PowerDecoder p && p.MaxCurrent > 0)
                     PowerCtrl.Threshold_mA = p.MaxCurrent;
+                RefreshDecoderListBox(); // addresses in the list
             });
+        }
+
+        // Kontextmenü der Decoderliste: eigenen Namen vergeben (bleibt je MAC gespeichert)
+        private void DecoderUmbenennen_Click(object? sender, EventArgs e)
+        {
+            if (listBoxDecoder.SelectedItem is not CANguruDecoder decoder)
+                return;
+            string? name = RenameDialog.Ask(this, decoder.TypeText, decoder.Name);
+            if (name == null)
+                return;
+            decoders.SetName(decoder, name);
+            RefreshDecoderListBox();
+            Log(name.Length == 0 ? $"Decoder {decoder.AssignedId}: eigener Name entfernt."
+                                 : $"Decoder {decoder.AssignedId} heißt jetzt „{name}“.");
+        }
+
+        // Kontextmenü der Decoderliste: Firmware nur dieses Decoders aktualisieren
+        private void DecoderFirmware_Click(object? sender, EventArgs e)
+        {
+            if (listBoxDecoder.SelectedItem is not CANguruDecoder)
+                return;
+            radioSingle.Checked = true;
+            btnOtaUpdate_Click(btnOtaUpdate, EventArgs.Empty);
         }
 
         // Kontextmenü der Decoderliste: Decoder aus der Liste der Bridge entfernen
@@ -886,7 +997,7 @@ namespace CANguru.Views
             if (listBoxDecoder.SelectedItem is not CANguruDecoder decoder)
                 return;
             byte id = (byte)decoder.AssignedId;
-            if (MessageBox.Show(this, $"Decoder {id} ({decoder.Type}) aus der Liste der Bridge entfernen?",
+            if (MessageBox.Show(this, $"Decoder „{decoder.DisplayName}“ (ID {id}) aus der Liste der Bridge entfernen?",
                     "Decoder entfernen", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
@@ -913,11 +1024,24 @@ namespace CANguru.Views
                 return;
             }
 
+            // keep the selection (the list is rebuilt e.g. after reading the addresses)
+            var selected = (listBoxDecoder.SelectedItem as CANguruDecoder)?.MacText;
+            listBoxDecoder.BeginUpdate();
             listBoxDecoder.Items.Clear();
             listBoxDecoder.Items.Add("HEADER");
             foreach (var decoder in decoders.All())
-                listBoxDecoder.Items.Add(decoder);
+            {
+                int i = listBoxDecoder.Items.Add(decoder);
+                if (decoder.MacText == selected)
+                    listBoxDecoder.SelectedIndex = i;
+            }
+            listBoxDecoder.EndUpdate();
+            UpdateOtaChoice();
         }
+
+        // Spalte auf feste Breite: kürzen mit "…" oder auffüllen
+        private static string Column(string text, int width) =>
+            text.Length > width ? text[..(width - 1)] + "…" : text.PadRight(width);
 
         // OwnerDraw für Decoder-ListBox
         private void ListBoxDecoder_DrawItem(object sender, DrawItemEventArgs e)
@@ -936,7 +1060,7 @@ namespace CANguru.Views
                 using var bg = new SolidBrush(Color.LightGray);
                 e.Graphics.FillRectangle(bg, e.Bounds);
 
-                string header = "Name                      MAC                  UID";
+                string header = Column("Name", 17) + " " + Column("Typ", 12) + " " + Column("Adresse", 10) + " FW";
 
                 using var textBrush = new SolidBrush(Color.Black);
                 e.Graphics.DrawString(header, lb.Font, textBrush, e.Bounds.Left + 2, e.Bounds.Top + 1);
@@ -947,21 +1071,9 @@ namespace CANguru.Views
             // Normale Decoder-Zeile
             if (item is CANguruDecoder decoder)
             {
-                string macStr = $"{decoder.Mac[0]:X2}:{decoder.Mac[1]:X2}:{decoder.Mac[2]:X2}:{decoder.Mac[3]:X2}:{decoder.Mac[4]:X2}:{decoder.Mac[5]:X2}";
-                int hexadr = 0xd715 + decoder.AssignedId;
-                string adr = $"{hexadr:X4}".PadRight(8);
-
-                string name = decoder.Type switch
-                {
-                    DecoderType.Switch => "Weichendecoder",
-                    DecoderType.Signal => "Signaldecoder",
-                    DecoderType.Power => "Stromwaechter",
-                    DecoderType.Feedback => "Gleisbesetztmelder",
-                    DecoderType.LedSignal => "LED-Signaldecoder",
-                    _ => "Decoder"
-                };
-
-                string line = $"{name.PadRight(25)} {macStr.PadRight(20)} {adr}";
+                // Name (eigener Name oder Typ), Typ, Zubehöradresse(n), Firmware
+                string line = Column(decoder.DisplayName, 17) + " " + Column(decoder.TypeText, 12) + " " +
+                              Column(decoder.AddressText, 10) + " " + decoder.Firmware;
 
                 // 1. Hintergrundfarbe bestimmen
                 Color back;
