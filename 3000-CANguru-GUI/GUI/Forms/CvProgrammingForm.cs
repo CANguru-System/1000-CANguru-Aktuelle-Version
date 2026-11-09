@@ -13,7 +13,25 @@ namespace CANguru.GUI.Forms
         private readonly CvProgrammer programmer;
         private readonly CANguruLok? lok;
 
-        private readonly NumericUpDown cvAddress = new() { Minimum = 1, Maximum = 1024, Value = 1, Width = 80 };
+        // common CVs to choose from; any other CV number can be typed in
+        private static readonly string[] CommonCvs =
+        {
+            "1 – Adresse",
+            "2 – Anfahrspannung (Vmin)",
+            "3 – Beschleunigung",
+            "4 – Bremsverzögerung",
+            "5 – Höchstgeschwindigkeit (Vmax)",
+            "6 – Mittlere Geschwindigkeit",
+            "7 – Versionsnummer (nur lesen)",
+            "8 – Hersteller (8 schreiben = Werkseinstellung)",
+            "17 – Lange Adresse, oberer Teil",
+            "18 – Lange Adresse, unterer Teil",
+            "19 – Traktionsadresse",
+            "29 – Konfiguration",
+            "63 – Lautstärke (Märklin-Sounddecoder)"
+        };
+        private readonly ComboBox cvAddress = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 140, DropDownWidth = 290, MaxDropDownItems = 14 };
+        private readonly Button btnClose = new() { Text = "Schließen", Width = 80, DialogResult = DialogResult.Cancel };
         private readonly TextBox oldValue = new() { ReadOnly = true, Width = 60, TextAlign = HorizontalAlignment.Right };
         private readonly NumericUpDown newValue = new() { Minimum = 0, Maximum = 255, Width = 60 };
         private readonly Button btnRead = new() { Text = "Lesen", Width = 80 };
@@ -35,12 +53,15 @@ namespace CANguru.GUI.Forms
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(470, 300);
+            ClientSize = new Size(470, 335);
+            CancelButton = btnClose;
 
             // ---- CV lesen / schreiben ----
             var cvBox = new GroupBox { Text = "CV lesen / schreiben (Lok auf dem Programmiergleis)", Location = new Point(10, 10), Size = new Size(450, 120) };
             cvBox.Controls.Add(new Label { Text = "CV-Adresse", AutoSize = true, Location = new Point(12, 28) });
             cvAddress.Location = new Point(100, 25);
+            cvAddress.Items.AddRange(CommonCvs);
+            cvAddress.SelectedIndex = 0;
             cvBox.Controls.Add(cvAddress);
             cvBox.Controls.Add(new Label { Text = "Ergebnis", AutoSize = true, Location = new Point(250, 28) });
             result.Location = new Point(320, 28);
@@ -73,8 +94,11 @@ namespace CANguru.GUI.Forms
             nameBox.Controls.AddRange(new Control[] { lokName, btnNameRead, btnNameWrite });
             lokName.Enabled = btnNameRead.Enabled = btnNameWrite.Enabled = mfx;
 
+            btnClose.Location = new Point(380, 270);
+
             Controls.Add(cvBox);
             Controls.Add(nameBox);
+            Controls.Add(btnClose);
             Controls.Add(status);
 
             btnRead.Click += async (s, e) => await ReadCv();
@@ -83,9 +107,21 @@ namespace CANguru.GUI.Forms
             btnNameWrite.Click += async (s, e) => await WriteName();
         }
 
+        // CV number from the box: the number at the start ("3 – Beschleunigung" or "3"); 0 = invalid
+        private int SelectedCv()
+        {
+            var digits = new string(cvAddress.Text.Trim().TakeWhile(char.IsDigit).ToArray());
+            if (int.TryParse(digits, out int cv) && cv >= 1 && cv <= 1024)
+                return cv;
+            ShowResult(false, "Bitte eine CV-Nummer von 1 bis 1024 wählen oder eingeben.");
+            return 0;
+        }
+
         private async Task ReadCv()
         {
-            int cv = (int)cvAddress.Value;
+            int cv = SelectedCv();
+            if (cv == 0)
+                return;
             oldValue.Text = "";
             await Run($"Lese CV {cv} ...", async () =>
             {
@@ -101,7 +137,9 @@ namespace CANguru.GUI.Forms
 
         private async Task WriteCv()
         {
-            int cv = (int)cvAddress.Value;
+            int cv = SelectedCv();
+            if (cv == 0)
+                return;
             byte value = (byte)newValue.Value;
             await Run($"Schreibe CV {cv} = {value} ...", async () =>
             {
@@ -165,7 +203,7 @@ namespace CANguru.GUI.Forms
         private void SetBusy(bool busy)
         {
             bool mfx = lok != null && !lok.IsManual;
-            btnRead.Enabled = btnWrite.Enabled = cvAddress.Enabled = newValue.Enabled = !busy;
+            btnRead.Enabled = btnWrite.Enabled = cvAddress.Enabled = newValue.Enabled = btnClose.Enabled = !busy;
             btnNameRead.Enabled = btnNameWrite.Enabled = lokName.Enabled = !busy && mfx;
             UseWaitCursor = busy;
         }
