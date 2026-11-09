@@ -149,6 +149,15 @@ static void handleCan(const Cg2Header &h, const uint8_t *payload)
         sendToWDP(frame);
         sendFrame2allDecoders(frame, CAN_FRAME_SIZE);
     }
+    else if (frame[CANcmd] == Sys_CMD)
+    {
+        // STOPP/GO aus der GUI auch an WDP: WDP zeigt sein STOPP-Fenster nur beim Befehl
+        // selbst, nicht bei der Quittung der Gleisbox (die Bridge empfängt ihre eigenen
+        // Frames auf dem CAN-Bus nicht, WDP sah den Befehl also bisher nie).
+        // Gleisspannung an GUI und Decoder meldet processCANFrames2CAN().
+        // Der Hash im Frame stammt von der GUI (gleiche Kennung wie die Bridge).
+        sendToWDP(frame);
+    }
 }
 
 // ------------------------------------------------------------
