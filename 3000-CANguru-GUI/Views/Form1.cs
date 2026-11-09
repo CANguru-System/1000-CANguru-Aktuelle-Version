@@ -55,6 +55,10 @@ namespace CANguru.Views
         // Alive-Überwachung
         private bool guiClosing = false;
 
+        // Gleisspannung laut Bridge (TRACK_POWER) und CV-Programmierung der Lok-Decoder
+        private volatile bool trackOn = false;
+        private CvProgrammer? cvProgrammer;
+
         // Counters of ready decoders per type, built from the bridge summary: only types that
         // exist appear (a new decoder type shows up without code changes)
         private sealed class TypeCounter
@@ -325,6 +329,11 @@ namespace CANguru.Views
             typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 ?.SetValue(listBoxDecoder, true);
 
+            // CV programming of locomotive decoders (window, as in CANguru-Server 3.02)
+            var btnCv = new System.Windows.Forms.Button { Text = "CV-Programmierung …", Location = new Point(355, 171), Size = new Size(130, 23) };
+            btnCv.Click += (s, e) => OpenCvProgramming();
+            tabPage2.Controls.Add(btnCv);
+
             // counters per type and OTA choice are built from the registered decoders
             Controls.Add(countersPanel);
             radioSingle.Text = "Einzeldecoder";
@@ -568,6 +577,7 @@ namespace CANguru.Views
         // Gleisspannung an/aus (Sitzung TRACK_POWER von der Bridge, abgeleitet aus STOPP/GO)
         private void HandleTrackPower(bool on)
         {
+            trackOn = on;
             if (on)
             {
                 Log("GO – Gleisspannung liegt an.");
@@ -879,7 +889,12 @@ namespace CANguru.Views
             foreach (var frame in canMonitor.TakeSorted())
             {
                 DisplayCanFrame(frame);
-                mfxParser.ProcessCanFrame(frame);
+                cvProgrammer?.OnCanFrame(frame);
+                // during CV programming the config answers belong to the programmer, not to
+                // the mfx registration (reading CV 3 would look like an mfx name character)
+                bool configAnswer = frame[1] == CANFrames.ReadConfig_CMD_R || frame[1] == CANFrames.WriteConfig_CMD_R;
+                if (!(configAnswer && cvProgrammer is { Busy: true }))
+                    mfxParser.ProcessCanFrame(frame);
             }
         }
 
@@ -1239,6 +1254,24 @@ namespace CANguru.Views
                 lokstorage.Remove(lok.UID);
                 UpdateLokList();
             }
+        }
+
+        // CV programming: CVs of the locomotive on the programming track, name of the
+        // selected mfx locomotive. Needs the connection to the bridge (track box).
+        private void OpenCvProgramming()
+        {
+            if (BridgeIPIsNotSet())
+            {
+                MessageBox.Show(this, "Bitte zuerst mit der Bridge verbinden.", "CV-Programmierung",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            cvProgrammer ??= new CvProgrammer(CANFrames.SysGO[2], CANFrames.SysGO[3],
+                sendFrame: frame => SendCANFrame2Bridge(frame),
+                trackOn: () => trackOn,
+                switchTrack: on => SendCANFrame2Bridge(on ? CANFrames.SysGO : CANFrames.SysSTOPP));
+            using var form = new CvProgrammingForm(cvProgrammer, listBoxLoks.SelectedItem as CANguruLok);
+            form.ShowDialog(this);
         }
 
         // CS2-Lokliste exportieren und zur Bridge übertragen
