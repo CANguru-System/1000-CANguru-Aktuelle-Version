@@ -11,8 +11,11 @@
 
 // Bmp-Logo of an CANguru
 #include <stdint.h>
+#include <Arduino.h>
+#include "protocol_constants_core.h"
 
-const String CgVersionnmbr = "5.00";
+// Version on the display: the central bridge version (0300-Constants/constants_manager.py, FW_BRIDGE_*)
+const String CgVersionnmbr = String(FW_BRIDGE_MAJOR) + "." + String(FW_BRIDGE_MINOR);
 const String CgVersion = "CANguru " + CgVersionnmbr;
 
 #endif // CANGURU_H

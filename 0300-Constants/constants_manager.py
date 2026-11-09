@@ -37,9 +37,9 @@ dict(name="FW_FEEDBACK_MINOR", value="2", arch="core"),
 # Bridge: 5.1 Befehle vom CAN-Bus an die Decoder   5.2 STOPP/GO aus der GUI an WDP
 #   5.3 Stellbefehle von Decodern auf den CAN-Bus
 #   6.0 OTA-WLAN mit WPA2-Passwort (Decoder mit älterer Firmware finden das WLAN nicht mehr)
-#   6.1 STOPP nach Überstrom auch an WDP
+#   6.1 STOPP nach Überstrom auch an WDP   6.2 Display zeigt die zentrale Version (vorher fest 5.00)
 dict(name="FW_BRIDGE_MAJOR",   value="6", arch="core"),
-dict(name="FW_BRIDGE_MINOR",   value="1", arch="core"),
+dict(name="FW_BRIDGE_MINOR",   value="2", arch="core"),
 
 
 # ============================================================

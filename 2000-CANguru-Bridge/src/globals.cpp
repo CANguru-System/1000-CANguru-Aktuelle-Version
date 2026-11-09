@@ -35,7 +35,6 @@ bool GleisboxFound;
 
 std::vector<DecoderInfo> decoders;
 
-// 5.0: Protokoll Version 2 zu GUI und Decodern
 uint8_t FW_MAJOR = FW_BRIDGE_MAJOR; // Version: 0300-Constants/constants_manager.py (FW_*)
 uint8_t FW_MINOR = FW_BRIDGE_MINOR;
 
