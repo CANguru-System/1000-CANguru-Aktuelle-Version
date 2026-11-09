@@ -42,6 +42,14 @@ namespace CANguru.GUI.Forms
         private readonly Button btnNameRead = new() { Text = "Lesen", Width = 80 };
         private readonly Button btnNameWrite = new() { Text = "Schreiben", Width = 80 };
 
+        // exploration of the mfx configuration (which properties does the decoder describe?)
+        private const int ExploreStartIndex = 0, ExploreCount = 17; // index 0..16
+        private readonly NumericUpDown exploreFrom = new() { Minimum = 0, Maximum = 1023, Value = 0, Width = 60 };
+        private readonly NumericUpDown exploreTo = new() { Minimum = 0, Maximum = 1023, Value = 63, Width = 60 };
+        private readonly Button btnExplore = new() { Text = "Auslesen", Width = 80 };
+        private readonly Button btnExploreStop = new() { Text = "Abbrechen", Width = 80, Enabled = false };
+        private CancellationTokenSource? exploreCancel;
+
         private readonly Label status = new() { Dock = DockStyle.Bottom, Height = 24, Padding = new Padding(10, 4, 10, 0) };
 
         public CvProgrammingForm(CvProgrammer programmer, CANguruLok? lok)
@@ -53,7 +61,7 @@ namespace CANguru.GUI.Forms
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(470, 365);
+            ClientSize = new Size(470, 450);
             CancelButton = btnClose;
 
             // ---- selected locomotive, on top ----
@@ -104,7 +112,24 @@ namespace CANguru.GUI.Forms
             nameBox.Controls.AddRange(new Control[] { lokName, btnNameRead, btnNameWrite });
             lokName.Enabled = btnNameRead.Enabled = btnNameWrite.Enabled = mfx;
 
-            btnClose.Location = new Point(380, 297);
+            // ---- mfx-Konfiguration erkunden ----
+            var exploreBox = new GroupBox { Text = "mfx-Konfiguration erkunden (nur mfx-Loks)", Location = new Point(10, 295), Size = new Size(450, 85) };
+            exploreBox.Controls.Add(new Label { Text = "CV von", AutoSize = true, Location = new Point(12, 28) });
+            exploreFrom.Location = new Point(70, 25);
+            exploreBox.Controls.Add(new Label { Text = "bis", AutoSize = true, Location = new Point(140, 28) });
+            exploreTo.Location = new Point(170, 25);
+            btnExplore.Location = new Point(260, 23);
+            btnExploreStop.Location = new Point(350, 23);
+            exploreBox.Controls.AddRange(new Control[] { exploreFrom, exploreTo, btnExplore, btnExploreStop });
+            exploreBox.Controls.Add(new Label
+            {
+                Text = "Liest alles, was die Lok beschreibt, in eine Textdatei (dauert 1–2 Minuten).",
+                AutoSize = true, Location = new Point(12, 58), ForeColor = Color.DimGray
+            });
+            exploreFrom.Enabled = exploreTo.Enabled = btnExplore.Enabled = mfx;
+            Controls.Add(exploreBox);
+
+            btnClose.Location = new Point(380, 388);
 
             Controls.Add(cvBox);
             Controls.Add(nameBox);
@@ -115,6 +140,65 @@ namespace CANguru.GUI.Forms
             btnWrite.Click += async (s, e) => await WriteCv();
             btnNameRead.Click += async (s, e) => await ReadName();
             btnNameWrite.Click += async (s, e) => await WriteName();
+            btnExplore.Click += async (s, e) => await Explore();
+            btnExploreStop.Click += (s, e) => exploreCancel?.Cancel();
+        }
+
+        // Reads the mfx configuration CV by CV and writes it to a text file, which is opened
+        private async Task Explore()
+        {
+            int from = (int)exploreFrom.Value, to = (int)exploreTo.Value;
+            if (to < from)
+            {
+                ShowResult(false, "„bis“ muss größer oder gleich „von“ sein.");
+                return;
+            }
+            exploreCancel = new CancellationTokenSource();
+            btnExploreStop.Enabled = true;
+            await Run("Lese die mfx-Konfiguration ...", async () =>
+            {
+                var map = await programmer.ExploreMfxAsync(lok!.MfxSID, from, to, ExploreStartIndex, ExploreCount,
+                    text => BeginInvoke(() => status.Text = text), exploreCancel.Token);
+                string file = WriteExploreFile(map, from, to, exploreCancel.IsCancellationRequested);
+                ShowResult(map.Count > 0, map.Count > 0 ? $"{map.Count} CVs mit Inhalt – gespeichert in {Path.GetFileName(file)}"
+                                                        : "Die Lok hat auf keine Anfrage geantwortet (auf dem Programmiergleis?).");
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe", $"\"{file}\"") { UseShellExecute = true });
+                }
+                catch
+                {
+                    // the file is there anyway
+                }
+            });
+            btnExploreStop.Enabled = false;
+            exploreCancel = null;
+        }
+
+        private string WriteExploreFile(SortedDictionary<int, SortedDictionary<int, int>> map, int from, int to, bool cancelled)
+        {
+            string dir = Path.Combine(AppContext.BaseDirectory, "mfx-Konfiguration");
+            Directory.CreateDirectory(dir);
+            string safe = string.Concat(lok!.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
+            string file = Path.Combine(dir, $"{(safe.Length > 0 ? safe : "Lok")} {DateTime.Now:yyyy-MM-dd HHmm}.txt");
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"mfx-Konfiguration – Lok „{lok.Name}“ (mfx-Adresse {lok.MfxSID}, UID {lok.UID:X8})");
+            sb.AppendLine($"Gelesen am {DateTime.Now:dd.MM.yyyy HH:mm}, CV {from}–{to}, je Index {ExploreStartIndex}–{ExploreStartIndex + ExploreCount - 1}" +
+                          (cancelled ? " (abgebrochen)" : ""));
+            sb.AppendLine("Je CV: Index:Wert (hexadezimal), \"??\" = Antwort ohne Wert; danach als Text.");
+            sb.AppendLine();
+            foreach (var (cv, values) in map)
+            {
+                var hex = string.Join(" ", values.Select(kv => $"{kv.Key}:{(kv.Value < 0 ? "??" : kv.Value.ToString("X2"))}"));
+                var text = new string(values.Values.Select(v => v >= 0x20 && v < 0x7F ? (char)v : '.').ToArray());
+                sb.AppendLine($"CV {cv,4}: {hex}");
+                sb.AppendLine($"         Text: {text}");
+            }
+            if (map.Count == 0)
+                sb.AppendLine("Keine Antworten.");
+            File.WriteAllText(file, sb.ToString(), new System.Text.UTF8Encoding(true));
+            return file;
         }
 
         // CV number from the box: the number at the start ("3 – Beschleunigung" or "3"); 0 = invalid
@@ -215,6 +299,7 @@ namespace CANguru.GUI.Forms
             bool mfx = lok != null && !lok.IsManual;
             btnRead.Enabled = btnWrite.Enabled = cvAddress.Enabled = newValue.Enabled = btnClose.Enabled = !busy;
             btnNameRead.Enabled = btnNameWrite.Enabled = lokName.Enabled = !busy && mfx;
+            btnExplore.Enabled = exploreFrom.Enabled = exploreTo.Enabled = !busy && mfx;
             UseWaitCursor = busy;
         }
 

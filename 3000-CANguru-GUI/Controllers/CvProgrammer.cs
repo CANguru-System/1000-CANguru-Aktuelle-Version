@@ -121,6 +121,40 @@ namespace CANguru.Controllers
         });
 
         // ------------------------------------------------------------
+        // Exploration of the mfx configuration (for finding out which properties a
+        // decoder describes). Reads CV cvFrom..cvTo, each from startIndex with `count`
+        // values. Result: CV -> index -> value (-1 = the decoder answered without a value).
+        // Addressing as for the name: D4..D5 = index << 10 | CV, one answer per value.
+        // ------------------------------------------------------------
+
+        public Task<SortedDictionary<int, SortedDictionary<int, int>>> ExploreMfxAsync(
+            byte sid, int cvFrom, int cvTo, int startIndex, int count, Action<string> progress, CancellationToken cancel) =>
+            RunAsync(async () =>
+            {
+                var map = new SortedDictionary<int, SortedDictionary<int, int>>();
+                Expect(f => f[1] == ReadConfigR && f[7] == 0x40 && f[8] == sid);
+                for (int cv = cvFrom; cv <= cvTo && !cancel.IsCancellationRequested; cv++)
+                {
+                    progress($"Lese CV {cv} (bis {cvTo}) ...");
+                    int ci = (startIndex << 10) | cv;
+                    sendFrame(Frame(ReadConfig, 7, 0x00, 0x00, 0x40, sid, (byte)(ci >> 8), (byte)ci, (byte)count));
+                    for (int got = 0; got < count; got++)
+                    {
+                        // first answer may take longer; a CV without content does not answer
+                        var a = await NextAsync(got == 0 ? 2000 : 1000);
+                        if (a == null)
+                            break;
+                        int index = ((a[9] << 8) | a[10]) >> 10;
+                        int answerCv = ((a[9] << 8) | a[10]) & 0x3FF;
+                        if (!map.TryGetValue(answerCv, out var values))
+                            map[answerCv] = values = new SortedDictionary<int, int>();
+                        values[index] = a[4] == 7 ? a[11] : -1;
+                    }
+                }
+                return map;
+            });
+
+        // ------------------------------------------------------------
         // Helpers
         // ------------------------------------------------------------
 
