@@ -146,9 +146,9 @@ void AccessoryDecoder::positionReached(uint8_t ch, uint8_t pos, bool report)
 
 // Rückmeldung an WDP: Märklin-Frame ACC_R mit Adresse und Stellung.
 // asCommand: Die Stellung wurde aus der GUI ausgelöst. Dann geht vorher ein Stellbefehl
-// SWITCH_ACC an WDP, wie ihn eine MS2 senden würde; nur so übernimmt WDP die Stellung in
-// sein Stellpult. Die Bridge gibt Frames von Decodern nur an WDP und GUI weiter, nicht
-// auf das Gleis - es entsteht also kein zweiter Stellbefehl.
+// SWITCH_ACC hinaus, genau so, wie WDP ihn sendet (8 Byte mit Schaltzeit). Die Bridge
+// gibt ihn an WDP und auf den CAN-Bus (Gleisbox, MS2), damit alle Stellpulte die
+// Stellung übernehmen.
 void AccessoryDecoder::reportToWdp(uint8_t ch, bool asCommand)
 {
     uint8_t address = channelAddress(ch);
@@ -164,10 +164,14 @@ void AccessoryDecoder::reportToWdp(uint8_t ch, bool asCommand)
     if (asCommand)
     {
         opFrame[CANcmd] = SWITCH_ACC;
-        opFrame[Framelng] = 0x06;
+        opFrame[Framelng] = 0x08;
         opFrame[data5] = 0x01; // Strom an
+        opFrame[data6] = 0x00; // Schaltzeit 0x0064 = 100 x 10 ms, wie WDP
+        opFrame[data7] = 0x64;
         sendCanFrame(opFrame);
         opFrame[data5] = 0;
+        opFrame[data6] = 0;
+        opFrame[data7] = 0;
     }
     opFrame[CANcmd] = SWITCH_ACC_R;
     opFrame[Framelng] = 0x05;

@@ -404,6 +404,12 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
         {
             sendToWDP(payload);
             enqueueCanToFifo(payload, 'D');
+            // Stellbefehl eines Decoders (Stellung aus der GUI ausgelöst) auch auf den
+            // CAN-Bus: Gleisbox und MS2 sehen ihn wie einen Befehl von WDP. Quittungen
+            // (SWITCH_ACC_R) bleiben bei WDP und GUI. Keine Schleife: die Bridge empfängt
+            // ihre eigenen Frames auf dem CAN-Bus nicht.
+            if (payload[CANcmd] == SWITCH_ACC)
+                enqueueCANFrame2CAN(payload, hashDisabled);
         }
         return;
 

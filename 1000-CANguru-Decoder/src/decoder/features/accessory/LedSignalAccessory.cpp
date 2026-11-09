@@ -83,7 +83,7 @@ void LedSignalAccessory::setup()
 {
     DEVTYPE = DEVTYPE_LEDSIGNAL;
     VERS_HIGH = 1;
-    VERS_LOW = 4; // 1.4: Umschalten aus der GUI erreicht auch das Stellpult von WDP
+    VERS_LOW = 5; // 1.5: Umschalten aus der GUI als Stellbefehl wie WDP (8 Byte), erreicht WDP und MS2
     AccessoryDecoder::setup();
 }
 

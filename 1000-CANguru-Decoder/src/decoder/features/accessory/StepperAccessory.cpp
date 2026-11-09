@@ -74,7 +74,7 @@ void StepperAccessory::setup()
     DEVTYPE = DEVTYPE_SIGNAL;
 #endif
     VERS_HIGH = 2; // Zubehör-Decoder (Phase 3)
-    VERS_LOW = 2;  // 2.2: Testfahrt und Kalibrierung aus der GUI erreichen auch das Stellpult von WDP
+    VERS_LOW = 3;  // 2.3: Testfahrt und Kalibrierung aus der GUI als Stellbefehl wie WDP, erreichen WDP und MS2
     AccessoryDecoder::setup();
 }
 
