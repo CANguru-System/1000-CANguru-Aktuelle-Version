@@ -427,6 +427,15 @@ static void handleV2(const uint8_t *mac, const uint8_t *buf, size_t len)
             // den Halt mitbekommen. Beim Senden meldet processCANFrames2CAN() den STOPP an
             // GUI und Decoder. Das Ereignis selbst geht unten unverändert an die GUI.
             enqueueCANFrame2CAN(SysSTOPP, hashEnabled);
+            // WDP sieht den Befehl auf dem CAN-Bus nicht (die Bridge empfängt ihre eigenen
+            // Frames dort nicht) und öffnet sein STOPP-Fenster nicht bei der Quittung der
+            // Gleisbox: den STOPP deshalb auch direkt an WDP, mit der Kennung der Bridge
+            extern uint8_t hasharr[2];
+            uint8_t stopp[CAN_FRAME_SIZE];
+            memcpy(stopp, SysSTOPP, CAN_FRAME_SIZE);
+            stopp[hash0] = hasharr[0];
+            stopp[hash1] = hasharr[1];
+            sendToWDP(stopp);
         }
         break;
     }

@@ -11,7 +11,7 @@ public static class ProtocolConstants
     public const int FW_FEEDBACK_MAJOR = 2;
     public const int FW_FEEDBACK_MINOR = 2;
     public const int FW_BRIDGE_MAJOR = 6;
-    public const int FW_BRIDGE_MINOR = 0;
+    public const int FW_BRIDGE_MINOR = 1;
     public const int step_delay_min = 100;
     public const int step_delay_std = 300;
     public const int step_delay_max = 1000;
