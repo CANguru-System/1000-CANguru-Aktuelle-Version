@@ -82,8 +82,8 @@ LedSignalAccessory::LedSignalAccessory() : AccessoryDecoder(&prefsLedSignal) {}
 void LedSignalAccessory::setup()
 {
     DEVTYPE = DEVTYPE_LEDSIGNAL;
-    VERS_HIGH = 1;
-    VERS_LOW = 5; // 1.5: Umschalten aus der GUI als Stellbefehl wie WDP (8 Byte), erreicht WDP und MS2
+    VERS_HIGH = FW_LEDSIGNAL_MAJOR; // Version: 0300-Constants/constants_manager.py (FW_*)
+    VERS_LOW = FW_LEDSIGNAL_MINOR;
     AccessoryDecoder::setup();
 }
 

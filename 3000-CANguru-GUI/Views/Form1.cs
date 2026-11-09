@@ -171,6 +171,11 @@ namespace CANguru.Views
         public Form1()
         {
             InitializeComponent();
+            // GUI version from the project file (<Version>) in the title bar
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            string versionText = version == null ? "" : $"{version.Major}.{version.Minor}";
+            lblTitle.Text = $"CANguru Version {versionText}";
+            Text = $"CANguru-Server {versionText}";
             InitUploader();
             InitOneShotTimer();
             CANFrames = new CANFrames();
@@ -918,7 +923,8 @@ namespace CANguru.Views
             decoder.Firmware = $"{fwMajor}.{fwMinor}";
             decoder.LastSeen = DateTime.Now;
 
-            Log($"Decoder angemeldet: ID={id}, Typ={type}, Firmware {decoder.Firmware}");
+            Log($"Decoder angemeldet: ID={id}, Typ={type}, Firmware {decoder.Firmware}" +
+                (decoder.FirmwareOutdated ? $" – neuere Firmware {decoder.LatestFirmwareText} verfügbar (OTA)" : ""));
 
             decoders.AddOrUpdate(decoder);
             RefreshDecoderListBox();
@@ -1074,7 +1080,8 @@ namespace CANguru.Views
             {
                 // Name (eigener Name oder Typ), Typ, Zubehöradresse(n), Firmware
                 string line = Column(decoder.DisplayName, 17) + " " + Column(decoder.TypeText, 12) + " " +
-                              Column(decoder.AddressText, 10) + " " + decoder.Firmware;
+                              Column(decoder.AddressText, 10) + " " + decoder.Firmware +
+                              (decoder.FirmwareOutdated ? " ↑" : ""); // newer firmware available
 
                 // 1. Hintergrundfarbe bestimmen
                 Color back;

@@ -98,6 +98,33 @@ namespace CANguru.Models
         // eigener Name des Nutzers, sonst der Typ
         public string DisplayName => string.IsNullOrWhiteSpace(Name) ? TypeText : Name;
 
+        // Newest firmware of this type known to this GUI build (central table in
+        // 0300-Constants/constants_manager.py); null = unknown type
+        public (int Major, int Minor)? LatestFirmware => Type switch
+        {
+            DecoderType.Switch or DecoderType.Signal => (ProtocolConstants.FW_STEPPER_MAJOR, ProtocolConstants.FW_STEPPER_MINOR),
+            DecoderType.LedSignal => (ProtocolConstants.FW_LEDSIGNAL_MAJOR, ProtocolConstants.FW_LEDSIGNAL_MINOR),
+            DecoderType.Power => (ProtocolConstants.FW_POWER_MAJOR, ProtocolConstants.FW_POWER_MINOR),
+            DecoderType.Feedback => (ProtocolConstants.FW_FEEDBACK_MAJOR, ProtocolConstants.FW_FEEDBACK_MINOR),
+            _ => null
+        };
+
+        public string LatestFirmwareText => LatestFirmware is { } v ? $"{v.Major}.{v.Minor}" : "";
+
+        // true = the decoder runs older firmware than this build offers (update by OTA)
+        public bool FirmwareOutdated
+        {
+            get
+            {
+                if (LatestFirmware is not { } latest)
+                    return false;
+                var parts = Firmware.Split('.');
+                if (parts.Length != 2 || !int.TryParse(parts[0], out int major) || !int.TryParse(parts[1], out int minor))
+                    return false;
+                return major < latest.Major || (major == latest.Major && minor < latest.Minor);
+            }
+        }
+
         // Angaben je Typ für die Spalte "Details" der Decoder-Liste
         protected virtual string Details => "";
 

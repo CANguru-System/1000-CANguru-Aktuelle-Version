@@ -73,8 +73,8 @@ void StepperAccessory::setup()
 #else
     DEVTYPE = DEVTYPE_SIGNAL;
 #endif
-    VERS_HIGH = 2; // Zubehör-Decoder (Phase 3)
-    VERS_LOW = 3;  // 2.3: Testfahrt und Kalibrierung aus der GUI als Stellbefehl wie WDP, erreichen WDP und MS2
+    VERS_HIGH = FW_STEPPER_MAJOR; // Version: 0300-Constants/constants_manager.py (FW_*)
+    VERS_LOW = FW_STEPPER_MINOR;
     AccessoryDecoder::setup();
 }
 

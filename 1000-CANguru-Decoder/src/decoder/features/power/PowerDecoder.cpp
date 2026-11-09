@@ -136,8 +136,8 @@ void PowerDecoder::setup()
     beforeRestartCallback = PowerDecoderBeforeRestart;
     afterstartCallback = PowerDecoderAfterStart;
     DEVTYPE = DEVTYPE_POWER;
-    VERS_HIGH = 2; // 2.1: Shunt-Widerstand als Parameter
-    VERS_LOW = 1;
+    VERS_HIGH = FW_POWER_MAJOR; // Version: 0300-Constants/constants_manager.py (FW_*)
+    VERS_LOW = FW_POWER_MINOR;
     pinMode(shutdownPin, OUTPUT);
 
     initPowerDecoder();

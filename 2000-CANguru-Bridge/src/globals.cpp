@@ -36,8 +36,8 @@ bool GleisboxFound;
 std::vector<DecoderInfo> decoders;
 
 // 5.0: Protokoll Version 2 zu GUI und Decodern
-uint8_t FW_MAJOR = 5;
-uint8_t FW_MINOR = 3; // 5.1: Befehle vom CAN-Bus (z. B. MS2) an die Decoder; 5.2: STOPP/GO aus der GUI auch an WDP; 5.3: Stellbefehle von Decodern auch auf den CAN-Bus
+uint8_t FW_MAJOR = FW_BRIDGE_MAJOR; // Version: 0300-Constants/constants_manager.py (FW_*)
+uint8_t FW_MINOR = FW_BRIDGE_MINOR;
 
 // GUI-Kommunikation
 bool GUIipIsNotSet()

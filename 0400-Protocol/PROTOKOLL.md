@@ -209,6 +209,8 @@ Ein CAN-Frame ist immer das 13-Byte-Märklin-Format (ID 4 Byte, DLC, 8 Datenbyte
 | `RESULT` 0x05 | B → G | `[id][ergebnis][fehlergrund]`, Ergebnis: 0 ok, 1 fehlgeschlagen, 2 keine Rückmeldung; Fehlergrund wie bei `REJOIN`. Bei den Gründen 1, 2 und 4 versucht die Bridge es nach 3 s ein zweites Mal, bevor sie `RESULT` sendet. Nach dem letzten Decoder sendet sie `PROGRESS` mit Gesamt 100 %. |
 | `DECODER_START` 0x06 | B → D (Unicast) | – . Der Decoder verbindet sich mit dem WLAN der Bridge und lädt die Firmware per HTTP. |
 
+Das WLAN der Bridge (SSID „BridgeOTA“, Kanal `BRIDGE_AP_CHANNEL`) ist ab Bridge 6.0 mit **WPA2** geschützt (Decoder: Weiche/Formsignal 2.4, LED-Signal 1.6, Strom 2.2, Rückmelder 2.2). SSID und Passwort stehen in der lokalen Datei `0300-Constants/ota_wlan.local.txt`, die nicht im Repository liegt; `alles-bauen.ps1` legt sie beim ersten Lauf mit einem Zufallspasswort an und erzeugt daraus `ota_wlan.h` für Decoder und Bridge. **Reihenfolge beim Umstieg oder nach einer Passwortänderung:** erst alle Decoder per OTA aktualisieren, dann die Bridge per USB. Decoder mit älterer Firmware finden das WLAN danach nicht mehr und müssen per USB aktualisiert werden.
+
 Die Feature-Nummern 0x0A–0x0C waren Übergangs-Features der Phase 2. Sie sind mit Phase 3 entfallen, ihre Konstanten
 sind entfernt, und die Nummern bleiben frei, damit ältere Nachrichten nicht falsch gedeutet werden. Die folgenden
 Abschnitte halten fest, was sie ersetzt.

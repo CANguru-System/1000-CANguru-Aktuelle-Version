@@ -221,8 +221,8 @@ void FeedbackDecoder::setup()
     beforeRestartCallback = FeedbackDecoderBeforeRestart;
     afterstartCallback = FeedbackDecoderAfterStart;
     DEVTYPE = DEVTYPE_RM;
-    VERS_HIGH = 2; // 2.0: Meldeadressen als Parameter, Speicher im Namensraum "feedback" (Phase 3)
-    VERS_LOW = 1;  // 2.1: belegte Kontakte als Bitmaske mit Namen (Protokoll 2.1)
+    VERS_HIGH = FW_FEEDBACK_MAJOR; // Version: 0300-Constants/constants_manager.py (FW_*)
+    VERS_LOW = FW_FEEDBACK_MINOR;
     wdpAlive = false;
     memset(msecs, 0, sizeof(msecs));
     memset(inputValue, 0, sizeof(inputValue));

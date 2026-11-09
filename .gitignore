@@ -16,3 +16,7 @@ __pycache__/
 
 # Output of the build script
 _build/
+
+# OTA WLAN password (local only, see alles-bauen.ps1)
+0300-Constants/ota_wlan.local.txt
+**/generated_constants/ota_wlan.h
