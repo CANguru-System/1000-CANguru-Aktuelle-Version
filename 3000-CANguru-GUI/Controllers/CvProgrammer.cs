@@ -11,7 +11,8 @@ namespace CANguru.Controllers
     public sealed record MfxFunction(int Nr, int Symbol, int OutputsForward, int OutputsBackward)
     {
         public bool Momentary => (Symbol & 0x80) != 0;
-        public override string ToString() => $"F{Nr} (Symbol {Symbol & 0x7F}{(Momentary ? ", Taster" : "")})";
+        public override string ToString() =>
+            $"F{Nr} ({CANguru.Models.MfxSymbols.Name(Symbol) ?? $"Symbol {Symbol & 0x7F}"}{(Momentary ? ", Taster" : "")})";
     }
 
     // Reads and writes CVs of locomotive decoders through the track box (Märklin CAN
