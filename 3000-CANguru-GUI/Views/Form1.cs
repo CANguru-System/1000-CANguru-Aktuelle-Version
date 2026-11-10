@@ -1327,11 +1327,34 @@ namespace CANguru.Views
             };
 
             string tempFile = "lokomotive.cs2";
-            exporter.Export(tempFile, lokstorage.Loks.Values);
+            var loks = lokstorage.Loks.Values.ToList();
+
+            // TEMPORARY symbol test (with Shift): two dummy locomotives with the CS2 function
+            // symbols 1-32 and 33-64 on F0-F31, to find out how WDP numbers its symbols.
+            // Not stored in the locomotive list. Remove once the symbol table is complete.
+            bool symbolTest = (ModifierKeys & Keys.Shift) == Keys.Shift;
+            if (symbolTest)
+            {
+                for (int part = 0; part < 2; part++)
+                {
+                    var test = new CANguruLok
+                    {
+                        Name = part == 0 ? "Symboltest 1-32" : "Symboltest 33-64",
+                        MfxSID = (byte)(0xF0 + part),
+                        IsManual = false,
+                        MfxUID = new byte[] { 0xFF, 0xFF, 0xFF, (byte)(0xA0 + part) },
+                        UID = 0xFFFFFFA0u + (uint)part,
+                        Funktionen = Enumerable.Range(0, 32).Select(nr => new LokFunktion { Nr = nr, Typ = part * 32 + nr + 1 }).ToList()
+                    };
+                    loks.Add(test);
+                }
+            }
+            exporter.Export(tempFile, loks);
 
             await exporter.UploadLokFileToBridge(ProtocolConfig.ipString, tempFile);
 
-            Log("Lokliste exportiert und zur Bridge übertragen.");
+            Log(symbolTest ? "Lokliste mit Symboltest-Loks (F0–F31 = Symbol 1–32 bzw. 33–64) exportiert und zur Bridge übertragen."
+                           : "Lokliste exportiert und zur Bridge übertragen.");
         }
 
         // Manuelle Lok hinzufügen
