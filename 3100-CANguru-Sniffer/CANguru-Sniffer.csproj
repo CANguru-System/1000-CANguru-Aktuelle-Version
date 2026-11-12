@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Sniffer version, shown in the title bar -->
+    <Version>1.0.0</Version>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>CANguru.Sniffer</RootNamespace>
+    <AssemblyName>CANguru-Sniffer</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>..\3000-CANguru-GUI\Assets\CANguru.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Protocol constants and the protocol library come from their single source;
+       they are linked, not copied -->
+  <ItemGroup>
+    <Compile Include="..\0300-Constants\ProtocolConstants.cs" Link="Shared\ProtocolConstants.cs" />
+    <Compile Include="..\0400-Protocol\cs\CanguruProtocol.cs" Link="Shared\CanguruProtocol.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+namespace CANguru.Sniffer
+{
+    internal static class Program
+    {
+        [STAThread]
+        private static void Main()
+        {
+            ApplicationConfiguration.Initialize();
+            Application.Run(new SnifferForm());
+        }
+    }
+}
