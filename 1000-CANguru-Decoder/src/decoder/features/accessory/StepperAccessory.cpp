@@ -109,7 +109,7 @@ uint8_t StepperAccessory::actionCount() const { return A_COUNT; }
 const Cg2InfoDef *StepperAccessory::actionDef(uint8_t n) const { return n < A_COUNT ? &stepperActions[n] : nullptr; }
 
 // ------------------------------------------------------------
-// Hardware: MX1508, Vollschritt, Pins wie bisher
+// Hardware: DRV8833, Vollschritt, Pins wie bisher
 // ------------------------------------------------------------
 
 void StepperAccessory::setPins()

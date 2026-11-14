@@ -4,7 +4,7 @@
 
 #include "AccessoryDecoder.h"
 
-// Zubehör-Decoder mit Stepper-Antrieb: Weiche und Formsignal (ESP32-C3, MX1508, ein Kanal).
+// Zubehör-Decoder mit Stepper-Antrieb: Weiche und Formsignal (ESP32-C3, DRV8833, ein Kanal).
 // Beide Varianten entstehen aus diesem Quelltext; sie unterscheiden sich nur im
 // Decodertyp, im Speicher-Namensraum und im Gerätenamen.
 //
