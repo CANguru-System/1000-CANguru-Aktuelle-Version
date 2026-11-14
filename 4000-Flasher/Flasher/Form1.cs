@@ -10,7 +10,8 @@ namespace FirmwareFlasher
     // Two kinds of files are accepted:
     //  - complete image (*-komplett.bin from alles-bauen.ps1): bootloader, partition
     //    table, OTA selection and application in one file, written at 0x0. Always works,
-    //    also on an erased chip.
+    //    also on an erased chip. The NVS partition (settings) is left out, so a decoder
+    //    keeps its settings.
     //  - application only (firmware.bin / decoder-xxx.bin): written at 0x10000. Afterwards
     //    the OTA selection (otadata) is erased, otherwise a board that last ran from the
     //    second app slot after an OTA update would keep starting the old firmware.
@@ -410,6 +411,33 @@ namespace FirmwareFlasher
 
             if (image.Complete)
             {
+                // The complete image also covers the NVS partition (gap filled with 0xFF by
+                // merge_bin), which holds the settings of the decoder (address, calibration,
+                // WLAN data of the lighting ...). Write the image around it, so the settings stay.
+                var nvs = FirmwareImage.FindNvs(data);
+                if (nvs != null && nvs.Value.end < data.Length)
+                {
+                    string part1 = Path.Combine(Path.GetTempPath(), $"canguru-flash-{Guid.NewGuid():N}-a.bin");
+                    string part2 = Path.Combine(Path.GetTempPath(), $"canguru-flash-{Guid.NewGuid():N}-b.bin");
+                    try
+                    {
+                        await File.WriteAllBytesAsync(part1, data[..nvs.Value.offset]);
+                        await File.WriteAllBytesAsync(part2, data[nvs.Value.end..]);
+                        Log($"Schreibe komplettes Image an 0x0; die Einstellungen (0x{nvs.Value.offset:X}–0x{nvs.Value.end - 1:X}) bleiben erhalten ...");
+                        int exitParts = await RunEsptoolAsync(
+                            $"--chip {chip} --port {port} --baud {Baud} write_flash -z 0x0 \"{part1}\" 0x{nvs.Value.end:X} \"{part2}\"");
+                        if (exitParts != 0)
+                            return false;
+                    }
+                    finally
+                    {
+                        try { File.Delete(part1); } catch (IOException) { }
+                        try { File.Delete(part2); } catch (IOException) { }
+                    }
+                    erasedPorts.Remove(port);
+                    return true;
+                }
+
                 Log("Schreibe komplettes Image an 0x0 ...");
                 int exit = await RunEsptoolAsync($"--chip {chip} --port {port} --baud {Baud} write_flash -z 0x0 \"{file}\"");
                 if (exit != 0)
@@ -636,6 +664,27 @@ namespace FirmwareFlasher
                 return null;
             }
             return new FirmwareImage { Complete = false, Chip = ChipName(b, 0) };
+        }
+
+        // NVS partition (type data 0x01, subtype nvs 0x02) from the partition table of a
+        // complete image at 0x8000; null if there is none or it is not sector aligned
+        public static (int offset, int end)? FindNvs(byte[] b)
+        {
+            for (int i = 0x8000; i + 32 <= Math.Min(b.Length, 0x8C00); i += 32)
+            {
+                if (b[i] != 0xAA || b[i + 1] != 0x50)
+                    break;
+                if (b[i + 2] == 0x01 && b[i + 3] == 0x02)
+                {
+                    int offset = (int)BitConverter.ToUInt32(b, i + 4);
+                    int size = (int)BitConverter.ToUInt32(b, i + 8);
+                    // esptool writes in 4-KB sectors; the NVS must start behind the partition table
+                    if (offset <= 0x8000 || offset % 0x1000 != 0 || size % 0x1000 != 0 || size == 0)
+                        return null;
+                    return (offset, offset + size);
+                }
+            }
+            return null;
         }
 
         // Chip-ID im erweiterten Image-Kopf (Byte 12/13)
