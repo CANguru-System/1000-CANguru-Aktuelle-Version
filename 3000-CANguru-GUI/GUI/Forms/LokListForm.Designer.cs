@@ -1,4 +1,4 @@
-﻿namespace CANguru.GUI.Forms
+namespace CANguru.GUI.Forms
 {
     partial class LokListForm
     {
@@ -33,7 +33,7 @@
             // 
             // listViewLoks
             // 
-            listViewLoks.Columns.AddRange(new ColumnHeader[] { colCount, colName, colAddress, colUid, colType });
+            listViewLoks.Columns.AddRange(new ColumnHeader[] { colCount, colName, colAddress, colType, colUid });
             listViewLoks.FullRowSelect = true;
             listViewLoks.GridLines = true;
             listViewLoks.Location = new Point(14, 14);
@@ -71,7 +71,7 @@
             // 
             // btnSaveLokList
             // 
-            btnSaveLokList.Location = new Point(727, 497);
+            btnSaveLokList.Location = new Point(424, 497);
             btnSaveLokList.Name = "btnSaveLokList";
             btnSaveLokList.Size = new Size(75, 23);
             btnSaveLokList.TabIndex = 1;
@@ -81,7 +81,7 @@
             // 
             // btnOk
             // 
-            btnOk.Location = new Point(825, 497);
+            btnOk.Location = new Point(505, 497);
             btnOk.Name = "btnOk";
             btnOk.Size = new Size(75, 23);
             btnOk.TabIndex = 2;

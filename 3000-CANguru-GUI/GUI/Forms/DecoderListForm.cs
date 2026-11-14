@@ -1,4 +1,4 @@
-﻿using CANguru.Controllers;
+using CANguru.Controllers;
 using CANguru.GUI.Forms;
 using CANguru.Models;
 using System;
@@ -13,6 +13,15 @@ public partial class DecoderListForm : Form
     {
         InitializeComponent();
         this.storage = storage;
+        // created once and shown again and again: closing only hides the window
+        FormClosing += (s, e) =>
+        {
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                Hide();
+            }
+        };
 
         LoadDecoderList();
     }

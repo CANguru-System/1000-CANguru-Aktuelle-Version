@@ -1,4 +1,4 @@
-﻿using CANguru;
+using CANguru;
 using CANguru.Controllers;
 using CANguru.Controls;
 using CANguru.GUI.Forms;
@@ -1314,7 +1314,13 @@ namespace CANguru.Views
                     "CV-Programmierung", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            using var form = new CvProgrammingForm(EnsureCvProgrammer(), selectedLok, ReadLokFunctionsAsync);
+            using var form = new CvProgrammingForm(EnsureCvProgrammer(), selectedLok, ReadLokFunctionsAsync,
+                nameChanged: lok =>
+                {
+                    lokstorage.AddOrUpdate(lok);
+                    UpdateLokList();
+                    Log($"Lokname geändert: „{lok.Name}“. Für WDP: „Lok-Liste anlegen“ drücken.");
+                });
             form.ShowDialog(this);
         }
 

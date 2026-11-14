@@ -1,4 +1,4 @@
-﻿using CANguru.Controllers;
+using CANguru.Controllers;
 using CANguru.Models;
 using System.Drawing;
 using System.Windows.Forms;
@@ -43,6 +43,14 @@ namespace CANguru.GUI.Forms
         private readonly Button btnNameWrite = new() { Text = "Schreiben", Width = 80 };
         private readonly Button btnFunctions = new() { Text = "Funktionen lesen", Width = 120 };
         private readonly Func<CANguruLok, Task<string>>? readFunctions;
+        // a new name written into the decoder is also taken into the locomotive list (Form1)
+        private readonly Action<CANguruLok>? nameChanged;
+        private readonly Label selectedLok = new()
+        {
+            AutoSize = true,
+            Location = new Point(12, 12),
+            Font = new Font(Control.DefaultFont.FontFamily, 10f, FontStyle.Bold)
+        };
 
         // exploration of the mfx configuration (which properties does the decoder describe?)
         private const int ExploreStartIndex = 0, ExploreCount = 17; // index 0..16
@@ -55,11 +63,13 @@ namespace CANguru.GUI.Forms
         private readonly Label status = new() { Dock = DockStyle.Bottom, Height = 24, Padding = new Padding(10, 4, 10, 0) };
 
         // readFunctions: reads the functions of the locomotive into the locomotive list (Form1)
-        public CvProgrammingForm(CvProgrammer programmer, CANguruLok? lok, Func<CANguruLok, Task<string>>? readFunctions = null)
+        public CvProgrammingForm(CvProgrammer programmer, CANguruLok? lok, Func<CANguruLok, Task<string>>? readFunctions = null,
+                                 Action<CANguruLok>? nameChanged = null)
         {
             this.programmer = programmer;
             this.lok = lok;
             this.readFunctions = readFunctions;
+            this.nameChanged = nameChanged;
             Text = "CV-Programmierung";
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -70,16 +80,8 @@ namespace CANguru.GUI.Forms
 
             // ---- selected locomotive, on top ----
             bool mfx = lok != null && !lok.IsManual;
-            string who = lok == null ? "Gewählte Lok: –"
-                       : mfx ? $"Gewählte Lok: {lok.Name} (mfx, Adresse {lok.MfxSID})"
-                       : $"Gewählte Lok: {lok.Name} ({lok.DecoderType}, Adresse {lok.MfxSID})";
-            Controls.Add(new Label
-            {
-                Text = who,
-                AutoSize = true,
-                Location = new Point(12, 12),
-                Font = new Font(Control.DefaultFont.FontFamily, 10f, FontStyle.Bold)
-            });
+            ShowSelectedLok();
+            Controls.Add(selectedLok);
 
             // ---- CV lesen / schreiben ----
             var cvBox = new GroupBox { Text = "CV lesen / schreiben (Lok auf dem Programmiergleis)", Location = new Point(10, 40), Size = new Size(450, 120) };
@@ -281,8 +283,22 @@ namespace CANguru.GUI.Forms
             await Run($"Schreibe den Loknamen „{name}“ ...", async () =>
             {
                 var (ok, message) = await programmer.WriteMfxNameAsync(lok!.MfxSID, name);
-                ShowResult(ok, ok ? $"Lokname „{name}“ geschrieben" : message);
+                if (ok)
+                {
+                    // same name in the decoder and in the list, otherwise the two drift apart
+                    lok.Name = name;
+                    nameChanged?.Invoke(lok);
+                    ShowSelectedLok();
+                }
+                ShowResult(ok, ok ? $"Lokname „{name}“ geschrieben und in die Lokliste übernommen" : message);
             });
+        }
+
+        private void ShowSelectedLok()
+        {
+            selectedLok.Text = lok == null ? "Gewählte Lok: –"
+                             : !lok.IsManual ? $"Gewählte Lok: {lok.Name} (mfx, Adresse {lok.MfxSID})"
+                             : $"Gewählte Lok: {lok.Name} ({lok.DecoderType}, Adresse {lok.MfxSID})";
         }
 
         // one operation at a time; buttons locked meanwhile

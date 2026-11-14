@@ -1,4 +1,4 @@
-﻿using CANguru.Controllers;
+using CANguru.Controllers;
 using CANguru.Models;
 using Microsoft.VisualBasic.Logging;
 using System;
@@ -16,6 +16,17 @@ namespace CANguru.GUI.Forms
         public LokListForm()
         {
             InitializeComponent();
+            CancelButton = btnOk;
+            // The window is created once and shown again and again: closing only hides it
+            // (a closed window would be disposed and could not be shown a second time)
+            FormClosing += (s, e) =>
+            {
+                if (e.CloseReason == CloseReason.UserClosing)
+                {
+                    e.Cancel = true;
+                    Hide();
+                }
+            };
         }
 
         public void RefreshLokList(IEnumerable<CANguruLok> loks)
@@ -63,8 +74,8 @@ namespace CANguru.GUI.Forms
                         {
                             case 1: line += "Name: " + item.SubItems[i].Text; break; // Name
                             case 2: line += "Adresse: " + item.SubItems[i].Text; break; // Adresse
-                            case 3: line += "UID: " + item.SubItems[i].Text; break; // UID
-                            case 4: line += "Typ: " + item.SubItems[i].Text; break; // Typ
+                            case 3: line += "Typ: " + item.SubItems[i].Text; break; // Typ
+                            case 4: line += "UID: " + item.SubItems[i].Text; break; // UID
                         }
                         line += "\r\n";
                     }
@@ -82,8 +93,7 @@ namespace CANguru.GUI.Forms
 
         private void btnOk_Click(object sender, EventArgs e)
         {
-            this.DialogResult = DialogResult.OK;
-            this.Close();
+            Hide();
         }
     }
 }
