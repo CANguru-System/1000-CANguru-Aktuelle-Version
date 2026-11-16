@@ -22,18 +22,21 @@ dict(name="INVALID_ASSIGNED_ID", value="0x00", arch="core"),
 #   2.0 Zubehör-Decoder (Phase 3)   2.1 Stellung als Klartext (Protokoll 2.1)
 #   2.2/2.3 Umschalten aus der GUI erreicht WDP und MS2
 #   2.4 OTA-WLAN mit WPA2-Passwort
+#   2.5 Statusdaten Konfiguration für WDP 2025 (0 Konfigurationskanäle, Index > 0 korrekt beantwortet)
 dict(name="FW_STEPPER_MAJOR",  value="2", arch="core"),
-dict(name="FW_STEPPER_MINOR",  value="4", arch="core"),
+dict(name="FW_STEPPER_MINOR",  value="5", arch="core"),
 # LED-Signal: 1.2 Überblendzeit bis 3000 ms   1.3 Klartext, Gruppen   1.4/1.5 GUI -> WDP/MS2
-#   1.6 OTA-WLAN mit WPA2-Passwort
+#   1.6 OTA-WLAN mit WPA2-Passwort   1.7 Statusdaten Konfiguration für WDP 2025 (0 Konfigurationskanäle, Index > 0 korrekt beantwortet)
 dict(name="FW_LEDSIGNAL_MAJOR", value="1", arch="core"),
-dict(name="FW_LEDSIGNAL_MINOR", value="6", arch="core"),
+dict(name="FW_LEDSIGNAL_MINOR", value="7", arch="core"),
 # Stromdecoder: 2.1 Shunt-Widerstand als Parameter   2.2 OTA-WLAN mit WPA2-Passwort
+#   2.3 Statusdaten Konfiguration für WDP 2025 (0 Konfigurationskanäle, Index > 0 korrekt beantwortet)
 dict(name="FW_POWER_MAJOR",    value="2", arch="core"),
-dict(name="FW_POWER_MINOR",    value="2", arch="core"),
+dict(name="FW_POWER_MINOR",    value="3", arch="core"),
 # Rückmelder: 2.0 Meldeadressen als Parameter   2.1 Belegt als Bitmaske   2.2 OTA-WLAN mit WPA2-Passwort
+#   2.3 Statusdaten Konfiguration für WDP 2025 (0 Konfigurationskanäle, Index > 0 korrekt beantwortet)
 dict(name="FW_FEEDBACK_MAJOR", value="2", arch="core"),
-dict(name="FW_FEEDBACK_MINOR", value="2", arch="core"),
+dict(name="FW_FEEDBACK_MINOR", value="3", arch="core"),
 # Bridge: 5.1 Befehle vom CAN-Bus an die Decoder   5.2 STOPP/GO aus der GUI an WDP
 #   5.3 Stellbefehle von Decodern auf den CAN-Bus
 #   6.0 OTA-WLAN mit WPA2-Passwort (Decoder mit älterer Firmware finden das WLAN nicht mehr)

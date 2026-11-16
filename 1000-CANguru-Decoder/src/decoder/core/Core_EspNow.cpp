@@ -105,8 +105,29 @@ static void copyStringToFrame(uint8_t *frame, int start, const String &txt)
     memcpy(&frame[start], txt.c_str(), txt.length());
 }
 
-void sendConfig()
+// Answer to "Statusdaten Konfiguration" (CONFIG_Status 0x3A) for the given index.
+// Index 0 is the device description; the decoders have no Märklin measuring or
+// configuration channels (their settings run over the CANguru protocol), so every other
+// index is answered with the closing frame only: [uid 4][index][0 packets].
+// Win-Digipet 2025 asks for every announced channel; before, index 0 announced one
+// configuration channel and every index was answered with the description of index 0,
+// so WDP waited in vain for index 1 and reported "antwortet nicht (mehr)".
+void sendConfig(uint8_t index)
 {
+    if (index != 0)
+    {
+        uint8_t endFrame[] = {0x00, 0x3B, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        endFrame[hash0] = hasharr[0];
+        endFrame[hash1] = hasharr[1];
+        endFrame[data0] = uid_device[0];
+        endFrame[data1] = uid_device[1];
+        endFrame[data2] = uid_device[2];
+        endFrame[data3] = uid_device[3];
+        endFrame[data4] = index;
+        endFrame[data5] = 0; // no data packets for this index
+        coreEspNowSendCAN2Bridge(endFrame);
+        return;
+    }
     /*
       Format Gerätebeschreibung:
       Typ     Bedeutung
@@ -130,9 +151,10 @@ void sendConfig()
             opFrame[hash0] = 0x03;
             opFrame[hash1] = line + 1;
             opFrame[Framelng] = 0x08;
-            // Unter Index 0 sind die Gerätebeschreibung abrufbar. Primär ist dies die Anzahl der zur Verfügung
-            // gestellten Messkanäle. Weiterhin enthalten sind Angaben zur Identifikation des Gerätes.
-            opFrame[data1] = 0x01;
+            // Index 0: device description. data0 = number of measuring values, data1 = number of
+            // configuration channels - both 0 (see above); data4..7 = serial number (decoder ID)
+            opFrame[data0] = 0x00;
+            opFrame[data1] = 0x00;
             opFrame[data7] = aliveGetDecoderID();
             break;
         case 1:

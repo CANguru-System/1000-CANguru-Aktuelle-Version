@@ -6,25 +6,25 @@ constants:
     value: '2'
     architecture: core
   FW_STEPPER_MINOR:
-    value: '4'
+    value: '5'
     architecture: core
   FW_LEDSIGNAL_MAJOR:
     value: '1'
     architecture: core
   FW_LEDSIGNAL_MINOR:
-    value: '6'
+    value: '7'
     architecture: core
   FW_POWER_MAJOR:
     value: '2'
     architecture: core
   FW_POWER_MINOR:
-    value: '2'
+    value: '3'
     architecture: core
   FW_FEEDBACK_MAJOR:
     value: '2'
     architecture: core
   FW_FEEDBACK_MINOR:
-    value: '2'
+    value: '3'
     architecture: core
   FW_BRIDGE_MAJOR:
     value: '6'

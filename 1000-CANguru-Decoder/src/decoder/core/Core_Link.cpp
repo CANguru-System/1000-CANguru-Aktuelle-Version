@@ -193,7 +193,7 @@ static void handleCanFrame(const Cg2Header &h, const uint8_t *payload)
         sendPING();
         return;
     case CONFIG_Status:
-        sendConfig();
+        sendConfig(payload[data4]); // requested index (frame: [uid 4][index])
         return;
     }
     gDecoder->onCanFrame(payload);

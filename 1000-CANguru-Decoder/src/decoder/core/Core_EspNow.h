@@ -33,7 +33,7 @@ void coreEspNowSendCAN2Bridge(const uint8_t *data);
 // Märklin-Antworten des Kerns
 void generateHash();
 void sendPING();
-void sendConfig();
+void sendConfig(uint8_t index);
 
 typedef struct {
     const char* (*getLine0)();   // liefert z. B. "CANguru-"
