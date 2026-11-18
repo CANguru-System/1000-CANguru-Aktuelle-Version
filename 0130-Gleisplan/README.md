@@ -5,6 +5,7 @@ Sample layout used in the book "Das neue CANguru-System" (part VI, "Praxis").
 | File | Content |
 |---|---|
 | `CANguru.tra` | Track plan for Wintrack: 180 × 120 cm, Märklin C track, 7 blocks, 21 feedback contacts, 6 turnouts, 7 signals |
+| `CANguru.dxf` | DXF export of the plan with roadbeds and height marks, input for the DXF Segmenter (`6000-DxfSegmenter`) |
 
 Open the file with Wintrack. The plan shows the contacts of every block in colour:
 grey = section contact, orange = braking contact, green = start/stop contact.
