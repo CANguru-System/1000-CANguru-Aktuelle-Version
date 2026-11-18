@@ -26,4 +26,7 @@ CANguruPreferences prefsFeedBack("feedback");
 #if DECODER_TYPE == DEVTYPE_LEDSIGNAL
 CANguruPreferences prefsLedSignal("ledsignal");
 #endif
+#if DECODER_TYPE == DEVTYPE_LIGHT
+CANguruPreferences prefsLight("light");
+#endif
 

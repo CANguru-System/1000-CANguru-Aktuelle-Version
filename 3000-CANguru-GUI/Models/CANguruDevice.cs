@@ -16,7 +16,8 @@ namespace CANguru.Models
         Switch = ProtocolConstants.DEVTYPE_SWITCH,
         Power = ProtocolConstants.DEVTYPE_POWER,
         Feedback = ProtocolConstants.DEVTYPE_RM,
-        LedSignal = ProtocolConstants.DEVTYPE_LEDSIGNAL
+        LedSignal = ProtocolConstants.DEVTYPE_LEDSIGNAL,
+        Light = ProtocolConstants.DEVTYPE_LIGHT
     }
 
     // Names of the decoder types for lists, counters and the OTA choice. A type the GUI
@@ -30,6 +31,7 @@ namespace CANguru.Models
             ProtocolConstants.DEVTYPE_POWER => "Stromdecoder",
             ProtocolConstants.DEVTYPE_RM => "Rückmelder",
             ProtocolConstants.DEVTYPE_LEDSIGNAL => "LED-Signal",
+            ProtocolConstants.DEVTYPE_LIGHT => "Gebäudebeleuchtung",
             _ => $"Decoder 0x{devType:X2}"
         };
 
@@ -40,6 +42,7 @@ namespace CANguru.Models
             ProtocolConstants.DEVTYPE_POWER => "Strom",
             ProtocolConstants.DEVTYPE_RM => "Rückmelder",
             ProtocolConstants.DEVTYPE_LEDSIGNAL => "LED-Signale",
+            ProtocolConstants.DEVTYPE_LIGHT => "Licht",
             _ => $"Typ 0x{devType:X2}"
         };
     }
@@ -106,6 +109,7 @@ namespace CANguru.Models
             DecoderType.LedSignal => (ProtocolConstants.FW_LEDSIGNAL_MAJOR, ProtocolConstants.FW_LEDSIGNAL_MINOR),
             DecoderType.Power => (ProtocolConstants.FW_POWER_MAJOR, ProtocolConstants.FW_POWER_MINOR),
             DecoderType.Feedback => (ProtocolConstants.FW_FEEDBACK_MAJOR, ProtocolConstants.FW_FEEDBACK_MINOR),
+            DecoderType.Light => (ProtocolConstants.FW_LIGHT_MAJOR, ProtocolConstants.FW_LIGHT_MINOR),
             _ => null
         };
 
@@ -208,6 +212,26 @@ namespace CANguru.Models
 
         public override string AddressText =>
             Compact(Enumerable.Range(0, Signals).Where(k => Present[k]).Select(k => (int)Addresses[k]));
+    }
+
+    // Gebäudebeleuchtung: Parameter 0 = Adresse (grün = Licht an), 1 = Anzahl LEDs
+    public class LightDecoder : CANguruDecoder
+    {
+        public byte Address { get; set; }
+        public int Leds { get; set; }
+
+        public override void UpdateFromDecoder()
+        {
+            var adr = DecoderProtocol.ReadParam(AssignedId, 0);
+            if (adr == null)
+                return; // Decoder noch nicht bereit
+            Address = (byte)adr.Value;
+            Leds = DecoderProtocol.ReadParam(AssignedId, 1) ?? Leds;
+        }
+
+        protected override string Details => $"Adresse {Address}, {Leds} LEDs";
+
+        public override string AddressText => Address > 0 ? Address.ToString() : "";
     }
 
     // Stromdecoder: Parameter 0 = Abschaltgrenze in mA

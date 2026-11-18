@@ -20,5 +20,8 @@ extern CANguruPreferences prefsFeedBack;
 #if DECODER_TYPE == DEVTYPE_LEDSIGNAL
 extern CANguruPreferences prefsLedSignal;
 #endif
+#if DECODER_TYPE == DEVTYPE_LIGHT
+extern CANguruPreferences prefsLight;
+#endif
 // Laden, Begrenzen und Speichern der Einstellungen übernimmt der Parameter-Speicher
 // des Kerns (DecoderBase::paramsLoad, Cg2ParamDef mit NVS-Schlüssel).

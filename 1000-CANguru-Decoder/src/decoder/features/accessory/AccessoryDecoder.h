@@ -1,6 +1,6 @@
 #pragma once
 #include "protocol_constants_core.h"
-#if DECODER_TYPE == DEVTYPE_SWITCH || DECODER_TYPE == DEVTYPE_SIGNAL || DECODER_TYPE == DEVTYPE_LEDSIGNAL
+#if DECODER_TYPE == DEVTYPE_SWITCH || DECODER_TYPE == DEVTYPE_SIGNAL || DECODER_TYPE == DEVTYPE_LEDSIGNAL || DECODER_TYPE == DEVTYPE_LIGHT
 
 #include <Arduino.h>
 #include "../../core/DecoderBase.h"

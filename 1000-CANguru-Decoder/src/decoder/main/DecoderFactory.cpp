@@ -10,6 +10,8 @@
 #include "../features/power/PowerDecoder.h"
 #elif DECODER_TYPE == DEVTYPE_RM
 #include "../features/feedback/FeedbackDecoder.h"
+#elif DECODER_TYPE == DEVTYPE_LIGHT
+#include "../features/light/LightAccessory.h"
 #endif
 
 DecoderBase* createDecoder() {
@@ -23,6 +25,9 @@ DecoderBase* createDecoder() {
     return new PowerDecoder();
 #elif DECODER_TYPE == DEVTYPE_RM
     return new FeedbackDecoder();
+#elif DECODER_TYPE == DEVTYPE_LIGHT
+    // Gebäudebeleuchtung: WS2812-Streifen, ein- und ausschaltbar wie ein Zubehörteil
+    return new LightAccessory();
 #else
     return nullptr;
 #endif

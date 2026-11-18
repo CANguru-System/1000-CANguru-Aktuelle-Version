@@ -446,6 +446,7 @@ namespace CANguru.Views
             ProtocolConstants.DEVTYPE_SIGNAL => 2,
             ProtocolConstants.DEVTYPE_RM => 3,
             ProtocolConstants.DEVTYPE_LEDSIGNAL => 4,
+            ProtocolConstants.DEVTYPE_LIGHT => 5,
             _ => 100 + devType
         };
 
@@ -677,7 +678,9 @@ namespace CANguru.Views
                     OpenParameterForm(decoder);
                     return;
                 default:
-                    MessageBox.Show("Diesen Decoder gibt es nicht.");
+                    // every other type (e.g. the house lighting or a new decoder type): the
+                    // parameter window is built from the decoder's self-description
+                    OpenParameterForm(decoder);
                     return;
             }
         }
@@ -929,6 +932,7 @@ namespace CANguru.Views
                 DecoderType.Signal => new StepperDecoder(),
                 DecoderType.Feedback => new FeedbackDecoder(),
                 DecoderType.LedSignal => new LedSignalDecoder(),
+                DecoderType.Light => new LightDecoder(),
                 _ => new CANguruDecoder()
             };
 

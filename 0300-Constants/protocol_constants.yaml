@@ -14,6 +14,12 @@ constants:
   FW_LEDSIGNAL_MINOR:
     value: '7'
     architecture: core
+  FW_LIGHT_MAJOR:
+    value: '1'
+    architecture: core
+  FW_LIGHT_MINOR:
+    value: '0'
+    architecture: core
   FW_POWER_MAJOR:
     value: '2'
     architecture: core
