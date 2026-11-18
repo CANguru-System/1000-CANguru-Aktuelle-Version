@@ -23,7 +23,9 @@ say (track box, Mobile Station, ...). For studying the MS2 this is exactly what 
 ## Use
 
 1. Close the CANguru-GUI and Win-Digipet. The sniffer receives on the same UDP port as
-   the GUI (5001); the GUI would also react to the mfx registration itself.
+   the GUI (5001); the GUI would also react to the mfx registration itself. Win-Digipet
+   does not cope without the GUI: closing the GUI switches the track power off, and
+   Win-Digipet cannot switch it on again.
 2. Switch on track box, Mobile Station and bridge.
 3. Start `CANguru-Sniffer.exe` and click **Verbinden**.
 4. Do what you want to observe, e.g. put a locomotive on the programming track. Use
