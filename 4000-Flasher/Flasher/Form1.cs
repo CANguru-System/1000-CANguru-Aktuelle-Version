@@ -29,17 +29,9 @@ namespace FirmwareFlasher
         private bool busy;
         private int progressLineStart = -1; // start of the last progress line in the log
 
-        // House lighting: WLAN data for the browser page, sent over USB after flashing
-        private readonly TextBox txtSsid = new() { Width = 150 };
-        private readonly TextBox txtPassword = new() { Width = 130, UseSystemPasswordChar = true };
-        private readonly Button btnSendWlan = new() { Text = "WLAN senden", Width = 106, Height = 25 };
-        private static readonly string SettingsFile = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CANguru", "flasher-wlan.txt");
-
         public Form1()
         {
             InitializeComponent();
-            BuildLightingPanel();
 
             // Port list: on opening the list, on the button and automatically when a
             // USB device is plugged in or removed (WM_DEVICECHANGE, slightly delayed)
@@ -147,14 +139,6 @@ namespace FirmwareFlasher
             {
                 bool ok = await FlashAsync(port, file);
                 Log(ok ? "==> Flashen erfolgreich. Der Decoder startet neu." : "==> Flashen FEHLGESCHLAGEN.");
-                // House lighting: afterwards it needs WLAN data and its number
-                if (ok && IsLightingFile(file))
-                {
-                    if (txtSsid.Text.Trim().Length == 0)
-                        Log("Gebäudebeleuchtung: Bitte WLAN-Name und Passwort eintragen und »WLAN senden« klicken.");
-                    else
-                        await SendLightingSetupAsync(port);
-                }
             }
             catch (Exception ex)
             {
@@ -225,161 +209,7 @@ namespace FirmwareFlasher
             btnRefreshPorts.Enabled = !value;
             cmbPorts.Enabled = !value;
             txtFirmware.Enabled = !value;
-            txtSsid.Enabled = !value;
-            txtPassword.Enabled = !value;
-            btnSendWlan.Enabled = !value;
             UseWaitCursor = value;
-        }
-
-        // ------------------------------------------------------------
-        // House lighting: WLAN data and number over USB
-        // ------------------------------------------------------------
-
-        // Panel between the buttons and the log
-        private void BuildLightingPanel()
-        {
-            const int height = 60;
-            var group = new GroupBox
-            {
-                Text = "Gebäudebeleuchtung: WLAN für die Einstellseite im Browser",
-                Location = new Point(12, 84),
-                Size = new Size(568, height - 4),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-            };
-            var lblSsid = new Label { Text = "WLAN-Name", AutoSize = true, Location = new Point(10, 25) };
-            txtSsid.Location = new Point(90, 22);
-            var lblPw = new Label { Text = "Passwort", AutoSize = true, Location = new Point(250, 25) };
-            txtPassword.Location = new Point(310, 22);
-            btnSendWlan.Location = new Point(452, 20);
-            btnSendWlan.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnSendWlan.Click += async (s, e) =>
-            {
-                if (cmbPorts.SelectedItem is not string port)
-                {
-                    Log("Bitte einen Anschluss auswählen.");
-                    return;
-                }
-                if (txtSsid.Text.Trim().Length == 0)
-                {
-                    Log("Bitte den WLAN-Namen eintragen.");
-                    return;
-                }
-                SetBusy(true);
-                try
-                {
-                    await SendLightingSetupAsync(port);
-                }
-                finally
-                {
-                    SetBusy(false);
-                }
-            };
-            group.Controls.AddRange(new Control[] { lblSsid, txtSsid, lblPw, txtPassword, btnSendWlan });
-            Controls.Add(group);
-
-            txtLog.Top += height;
-            ClientSize = new Size(ClientSize.Width, ClientSize.Height + height);
-
-            // only the WLAN name is remembered, not the password
-            try
-            {
-                if (File.Exists(SettingsFile))
-                    txtSsid.Text = File.ReadAllText(SettingsFile).Trim();
-            }
-            catch (IOException)
-            {
-            }
-        }
-
-        private static bool IsLightingFile(string file) =>
-            Path.GetFileName(file).StartsWith("licht", StringComparison.OrdinalIgnoreCase);
-
-        // Sends "CANGURU-SETUP<TAB>number<TAB>ssid<TAB>password" until the lighting answers.
-        // The number is that of the COM port (COM14 -> LICHT14), as with the former installer.
-        // After flashing the board restarts and its USB port briefly disappears, so the port
-        // is opened again and again for up to 30 seconds.
-        private async Task<bool> SendLightingSetupAsync(string port)
-        {
-            string ssid = txtSsid.Text.Trim();
-            string password = txtPassword.Text;
-            string number = new string(port.Where(char.IsDigit).ToArray());
-            if (number.Length == 0)
-                number = "1";
-            if (ssid.Contains('\t') || password.Contains('\t'))
-            {
-                Log("WLAN-Name und Passwort dürfen keinen Tabulator enthalten.");
-                return false;
-            }
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile)!);
-                File.WriteAllText(SettingsFile, ssid);
-            }
-            catch (IOException)
-            {
-            }
-
-            string line = $"CANGURU-SETUP\t{number}\t{ssid}\t{password}\n";
-            Log($"Übertrage WLAN-Daten an die Gebäudebeleuchtung (Name LICHT{number}) ...");
-            var until = DateTime.Now.AddSeconds(30);
-            while (DateTime.Now < until)
-            {
-                string? answer = await Task.Run(() => TrySendSetup(port, line));
-                if (answer != null && answer.StartsWith("CANGURU-SETUP OK"))
-                {
-                    string name = answer.Substring("CANGURU-SETUP OK".Length).Trim();
-                    Log($"==> Gebäudebeleuchtung eingerichtet: {name}. Sie verbindet sich jetzt mit »{ssid}«.");
-                    Log($"    Einstellseite im Browser: http://{name.ToLowerInvariant()}.local");
-                    return true;
-                }
-                if (answer != null && answer.StartsWith("CANGURU-SETUP ERROR"))
-                {
-                    Log("==> Die Gebäudebeleuchtung hat die Daten abgelehnt: " + answer);
-                    return false;
-                }
-                await Task.Delay(500);
-            }
-            Log("==> Keine Antwort. Läuft auf dem Gerät die Firmware der Gebäudebeleuchtung? " +
-                "USB-Kabel prüfen und »WLAN senden« erneut klicken.");
-            return false;
-        }
-
-        // One attempt: open the port, send the line, wait up to 2 s for the answer.
-        // null = port not available or no answer yet.
-        private static string? TrySendSetup(string port, string line)
-        {
-            try
-            {
-                // DTR/RTS off: with the USB port of the ESP32-C3 they would trigger a reset
-                using var sp = new SerialPort(port, 115200)
-                {
-                    DtrEnable = false,
-                    RtsEnable = false,
-                    ReadTimeout = 200,
-                    WriteTimeout = 1000,
-                    NewLine = "\n"
-                };
-                sp.Open();
-                sp.Write(line);
-                var until = DateTime.Now.AddSeconds(2);
-                while (DateTime.Now < until)
-                {
-                    try
-                    {
-                        string received = sp.ReadLine().Trim();
-                        if (received.StartsWith("CANGURU-SETUP"))
-                            return received;
-                    }
-                    catch (TimeoutException)
-                    {
-                    }
-                }
-                return null;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-            {
-                return null; // port gone (board restarting) or busy
-            }
         }
 
         // ------------------------------------------------------------

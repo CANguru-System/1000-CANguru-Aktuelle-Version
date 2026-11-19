@@ -15,20 +15,18 @@
     In addition, a complete image per target (e.g. decoder-switch-komplett.bin) with
     bootloader, partition table and OTA reset is written for flashing over USB at 0x0.
 
-    The house lighting (1500-Gebäudebeleuchtung) gets one complete image, licht-komplett.bin,
-    that also contains the file system with the browser page.
+    The house lighting is a decoder type like the others (environment light).
 
 .PARAMETER Nur
-    Optional: build only one part - Decoder, Bridge, Licht or GUI - or run only the protocol Test.
+    Optional: build only one part - Decoder, Bridge or GUI - or run only the protocol Test.
 
 .EXAMPLE
     .\alles-bauen.ps1
     .\alles-bauen.ps1 -Nur Decoder
-    .\alles-bauen.ps1 -Nur Licht
     .\alles-bauen.ps1 -Nur Test
 #>
 param(
-    [ValidateSet('Decoder', 'Bridge', 'Licht', 'GUI', 'Test')]
+    [ValidateSet('Decoder', 'Bridge', 'GUI', 'Test')]
     [string]$Nur
 )
 
@@ -41,7 +39,7 @@ $decoderUmgebungen = @('switch', 'signal', 'ledsignal', 'power', 'feedback', 'li
 $ergebnisse = [System.Collections.Generic.List[object]]::new()
 
 function Pruefe-Werkzeuge {
-    if ($Nur -in @($null, '', 'Decoder', 'Bridge', 'Licht') -and -not (Test-Path $python)) {
+    if ($Nur -in @($null, '', 'Decoder', 'Bridge') -and -not (Test-Path $python)) {
         throw "PlatformIO nicht gefunden ($python). Bitte VS Code mit der PlatformIO-Erweiterung einmal starten."
     }
     if ($Nur -in @($null, '', 'GUI', 'Test') -and -not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
@@ -50,7 +48,7 @@ function Pruefe-Werkzeuge {
 }
 
 # Chip of each PlatformIO environment (for esptool merge_bin)
-$chipJeUmgebung = @{ switch = 'esp32c3'; signal = 'esp32c3'; power = 'esp32c3'; ledsignal = 'esp32'; feedback = 'esp32'; light = 'esp32c3'; 'esp32-evb' = 'esp32'; esp32c3_supermini = 'esp32c3' }
+$chipJeUmgebung = @{ switch = 'esp32c3'; signal = 'esp32c3'; power = 'esp32c3'; ledsignal = 'esp32'; feedback = 'esp32'; light = 'esp32c3'; 'esp32-evb' = 'esp32' }
 
 # Writes _build\<zielname>-komplett.bin: bootloader, partition table, boot_app0 and
 # application merged into one image that is flashed at address 0x0. It works on an
@@ -75,7 +73,7 @@ function Erzeuge-Komplettimage([string]$projekt, [string]$umgebung, [string]$zie
         $teile += @($img.offset, $img.path)
     }
     $teile += @($meta.extra.application_offset, (Join-Path $wurzel "$projekt\.pio\build\$umgebung\firmware.bin"))
-    $teile += $zusatz   # e.g. the file system image of the house lighting
+    $teile += $zusatz   # further images (offset, file), e.g. a file system
 
     $esptool = Join-Path $env:USERPROFILE '.platformio\packages\tool-esptoolpy\esptool.py'
     $ziel = Join-Path $ausgabe "$zielname-komplett.bin"
@@ -109,58 +107,6 @@ function Baue-Firmware([string]$projekt, [string]$umgebung, [string]$zielname) {
     }
     $ergebnisse.Add([pscustomobject]@{
         Teil   = $zielname
-        Status = if ($ok) { 'OK' } else { 'FEHLER' }
-        Dauer  = '{0:mm\:ss}' -f ((Get-Date) - $start)
-    })
-}
-
-# Offset of the file system partition (subtype spiffs 0x82, also used for LittleFS),
-# read from the partition table PlatformIO built
-function Lies-Dateisystem-Offset([string]$partitionsBin) {
-    $b = [IO.File]::ReadAllBytes($partitionsBin)
-    for ($i = 0; $i + 32 -le $b.Length; $i += 32) {
-        if ($b[$i] -ne 0xAA -or $b[$i + 1] -ne 0x50) { break }
-        if ($b[$i + 2] -eq 1 -and $b[$i + 3] -eq 0x82) {
-            return '0x{0:X}' -f [BitConverter]::ToUInt32($b, $i + 4)
-        }
-    }
-    return $null
-}
-
-# House lighting: program and file system (browser page from data\) in one complete image
-# _build\licht-komplett.bin. WLAN data and name are transferred by the flasher afterwards.
-function Baue-Licht {
-    $projekt = '1500-Gebäudebeleuchtung\Licht'
-    $umgebung = 'esp32c3_supermini'
-    Write-Host "`n=== licht ($projekt, Umgebung $umgebung) ===" -ForegroundColor Cyan
-    $start = Get-Date
-    Push-Location (Join-Path $wurzel $projekt)
-    $ErrorActionPreference = 'Continue'
-    try {
-        & $python -m platformio run -e $umgebung
-        $ok = ($LASTEXITCODE -eq 0)
-        if ($ok) {
-            & $python -m platformio run -t buildfs -e $umgebung
-            $ok = ($LASTEXITCODE -eq 0)
-        }
-    }
-    finally {
-        Pop-Location
-    }
-    if ($ok) {
-        $build = Join-Path $wurzel "$projekt\.pio\build\$umgebung"
-        Copy-Item (Join-Path $build 'firmware.bin') (Join-Path $ausgabe 'licht.bin') -Force
-        $fsOffset = Lies-Dateisystem-Offset (Join-Path $build 'partitions.bin')
-        if (-not $fsOffset) {
-            Write-Host 'Dateisystem-Partition nicht gefunden.' -ForegroundColor Red
-            $ok = $false
-        }
-        else {
-            $ok = Erzeuge-Komplettimage $projekt $umgebung 'licht' @($fsOffset, (Join-Path $build 'littlefs.bin'))
-        }
-    }
-    $ergebnisse.Add([pscustomobject]@{
-        Teil   = 'licht'
         Status = if ($ok) { 'OK' } else { 'FEHLER' }
         Dauer  = '{0:mm\:ss}' -f ((Get-Date) - $start)
     })
@@ -309,9 +255,6 @@ if (-not $Nur -or $Nur -eq 'Decoder') {
 }
 if (-not $Nur -or $Nur -eq 'Bridge') {
     Baue-Firmware '2000-CANguru-Bridge' 'esp32-evb' 'bridge'
-}
-if (-not $Nur -or $Nur -eq 'Licht') {
-    Baue-Licht
 }
 if (-not $Nur -or $Nur -eq 'GUI') {
     Baue-GUI
