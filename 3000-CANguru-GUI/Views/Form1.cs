@@ -189,10 +189,12 @@ namespace CANguru.Views
             GuiLogger.MessageLogged += OnGuiLog;
             // Parser-Callbacks
             mfxParser.LogMessage += OnParserLog;
-            mfxParser.incnextLocid += OnincnextLocid;
             mfxParser.LokCompleted += OnLokCompleted;
+            mfxParser.LokReturned += (uid, sid) => Log($"mfx-Lok mit Adresse {sid} ist wieder da.");
+            mfxParser.CounterChanged += OnCounterChanged;
             mfxParser.SendFrameRequested += OnSendFrameRequested;
             mfxParser.FindKnownSid = FindKnownMfxSid;
+            mfxParser.NextFreeSid = () => (byte)Math.Clamp(lokstorage?.GetNextMfxSID() ?? 1, 1, 255);
 
             generateHash();
 
@@ -208,6 +210,15 @@ namespace CANguru.Views
             UpDnnextLokAddress.Maximum = 255;
             CANFrames.nextLokAddress = Properties.Settings.Default.nextLokAddress;
             UpDnnextLokAddress.Value = CANFrames.nextLokAddress;
+
+            // mfx registration runs by itself (MfxParser): registration counter and next address
+            // are kept internally and no longer shown
+            UpDnnewSubscriptionCounter.Visible = false;
+            UpDnnextLokAddress.Visible = false;
+            label1.Visible = false;
+            label2.Visible = false;
+            btnCANguruLoks.Text = "mfx-Lok suchen";
+            btnDelete.Text = "Lok entfernen";
 
             STOPP_Timer.Enabled = false;
 
@@ -1254,7 +1265,12 @@ namespace CANguru.Views
                 _ = Task.Run(async () =>
                 {
                     await Task.Delay(1500);
-                    UiInvoke(async () => await ReadLokFunctionsAsync(lok));
+                    UiInvoke(async () =>
+                    {
+                        await ReadLokFunctionsAsync(lok);
+                        // Win-Digipet gets the new locomotive without pressing a button
+                        await ExportLokListAsync();
+                    });
                 });
         }
 
@@ -1292,14 +1308,25 @@ namespace CANguru.Views
                 trackOn: () => trackOn,
                 switchTrack: on => SendCANFrame2Bridge(on ? CANFrames.SysGO : CANFrames.SysSTOPP));
 
-        // Lok löschen
-        private void btnDelete_Click(object sender, EventArgs e)
+        // Lok entfernen. An mfx locomotive is also logged off at the track box like the MS2 does:
+        // end its cycle, release the address, increase the registration counter.
+        private async void btnDelete_Click(object sender, EventArgs e)
         {
-            if (listBoxLoks.SelectedItem is CANguruLok lok)
+            if (listBoxLoks.SelectedItem is not CANguruLok lok)
+                return;
+            if (!lok.IsManual)
             {
-                lokstorage.Remove(lok.UID);
-                UpdateLokList();
+                if (MessageBox.Show(this,
+                        $"mfx-Lok „{lok.Name}“ entfernen?\r\n\r\n" +
+                        "Nehmen Sie die Lok vorher vom Gleis – sonst meldet sie sich sofort wieder an.",
+                        "Lok entfernen", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
+                    return;
+                if (!BridgeIPIsNotSet())
+                    mfxParser.RemoveLok(lok);
             }
+            lokstorage.Remove(lok.UID);
+            UpdateLokList();
+            await ExportLokListAsync();
         }
 
         // CV programming: CVs of the locomotive on the programming track, name of the
@@ -1329,8 +1356,12 @@ namespace CANguru.Views
         }
 
         // CS2-Lokliste exportieren und zur Bridge übertragen
-        private async void btnLokListe_Click(object sender, EventArgs e)
+        private async void btnLokListe_Click(object sender, EventArgs e) => await ExportLokListAsync();
+
+        private async Task ExportLokListAsync()
         {
+            if (BridgeIPIsNotSet())
+                return;
             var exporter = new Cs2LokFileExporter
             {
                 SessionId = CANFrames.newSubscriptionCounter,
@@ -1462,7 +1493,7 @@ namespace CANguru.Views
                 // 2 Sekunden warten
                 System.Threading.Thread.Sleep(2000);
 
-                Properties.Settings.Default.newSubscriptionCounter = (byte)UpDnnewSubscriptionCounter.Value;
+                Properties.Settings.Default.newSubscriptionCounter = CANFrames.newSubscriptionCounter;
                 Properties.Settings.Default.nextLokAddress = (byte)UpDnnextLokAddress.Value;
                 Properties.Settings.Default.Save();
                 // Sitzungsende: Bridge hält die Gleisbox an, setzt die Decoder zurück und startet neu
@@ -1515,12 +1546,22 @@ namespace CANguru.Views
             }
         }
 
-        // CANguru-Loks anstoßen (MFX-Scan)
+        // "mfx-Lok suchen": the track box searches the track for mfx locomotives not yet registered
         private void btnCANguruLoks_Click_1(object sender, EventArgs e)
         {
+            if (BridgeIPIsNotSet())
+                return;
             listBoxMFX.Clear();
-            STOPP_Timer.Enabled = true;
-            mfxParser.handleCANguruLoks(CANFrames.newSubscriptionCounter);
+            mfxParser.StartSearch();
+        }
+
+        // the registration counter changed (an mfx locomotive was removed): save it at once
+        private void OnCounterChanged(byte counter)
+        {
+            Properties.Settings.Default.newSubscriptionCounter = counter;
+            Properties.Settings.Default.Save();
+            UiInvoke(() => UpDnnewSubscriptionCounter.Value =
+                Math.Clamp(counter, UpDnnewSubscriptionCounter.Minimum, UpDnnewSubscriptionCounter.Maximum));
         }
 
         // STOPP-Timer: System GO nach kurzer Zeit

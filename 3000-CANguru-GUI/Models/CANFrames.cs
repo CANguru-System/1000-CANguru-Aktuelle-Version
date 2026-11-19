@@ -35,7 +35,9 @@ namespace CANguru
         public const byte NeuAnMelder_CMD = 0x09;  //System - Go
         public const byte LokDiscovery_CMD = 0x02;
         public const byte LokDiscovery_CMD_R = 0x03;
-        public const byte Lok_Zyklus_Stopp_CMD = 0x04;
+        public const byte Lok_Zyklus_Stopp_CMD = 0x04;   // system sub-command "end locomotive cycle"
+        public const byte MFXBind_CMD = 0x04;            // byte 1 of an mfx Bind (command 0x02)
+        public const byte MFXBind_CMD_R = 0x05;
         public const byte MFXVerify_CMD = 0x06;
         public const byte MFXVerify_CMD_R = 0x07;
         public const byte Lok_Speed_CMD = 0x08;
