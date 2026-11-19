@@ -32,7 +32,8 @@ dict(name="FW_LEDSIGNAL_MINOR", value="7", arch="core"),
 # Gebäudebeleuchtung (WS2812-Streifen, ESP32-C3): 1.0 als CANguru-Decoder, Bedienung über die GUI
 #   (vorher eigenständig mit WLAN und Browserseite, 1500-Gebäudebeleuchtung)
 dict(name="FW_LIGHT_MAJOR",    value="1", arch="core"),
-dict(name="FW_LIGHT_MINOR",    value="0", arch="core"),
+#   1.1 Takt bis 100 s in Schritten von 0,5 s
+dict(name="FW_LIGHT_MINOR",    value="1", arch="core"),
 # Stromdecoder: 2.1 Shunt-Widerstand als Parameter   2.2 OTA-WLAN mit WPA2-Passwort
 #   2.3 Statusdaten Konfiguration für WDP 2025 (0 Konfigurationskanäle, Index > 0 korrekt beantwortet)
 dict(name="FW_POWER_MAJOR",    value="2", arch="core"),

@@ -18,7 +18,7 @@ constants:
     value: '1'
     architecture: core
   FW_LIGHT_MINOR:
-    value: '0'
+    value: '1'
     architecture: core
   FW_POWER_MAJOR:
     value: '2'

@@ -50,7 +50,9 @@ static const Cg2ParamDef lightParams[P_COUNT] = {
     {CG2_TYPE_U8, 0, 255, 32, 1, "", "Raumlicht: Rot", nullptr, 0, "red", 0},
     {CG2_TYPE_U8, 0, 255, 32, 1, "", "Raumlicht: Grün", nullptr, 0, "green", 0},
     {CG2_TYPE_U8, 0, 255, 32, 1, "", "Raumlicht: Blau", nullptr, 0, "blue", 0},
-    {CG2_TYPE_U16, 50, 5000, 500, 50, "ms", "Hausbeleuchtung: Takt", nullptr, 0, "tick", 0},
+    // Takt in halben Sekunden (0,5 ... 100 s): ein 16-Bit-Wert in ms reichte nur bis 65 s.
+    // Eigener Schlüssel, damit ein alter Wert in ms nicht als halbe Sekunden gelesen wird.
+    {CG2_TYPE_U8, 1, 200, 1, 1, "× ½ s", "Hausbeleuchtung: Takt", nullptr, 0, "tickHalf", 0},
     {CG2_TYPE_U8, 1, 255, 12, 1, "Takte", "Hausbeleuchtung: Leuchtdauer bis", nullptr, 0, "maxOn", 0},
     {CG2_TYPE_U8, 1, 255, 24, 1, "Takte", "Hausbeleuchtung: Dunkelzeit bis", nullptr, 0, "maxOff", 0},
     {CG2_TYPE_U8, 5, 200, 32, 1, "ms", "Effekte: Bildzeit", nullptr, 0, "fxSpeed", 0},
@@ -166,7 +168,7 @@ void LightAccessory::onParamChanged(uint8_t n, uint16_t value)
         blue = (uint8_t)value;
         break;
     case P_TICK:
-        tickMs = value;
+        tickMs = (uint32_t)value * 500;
         return; // gilt ab dem nächsten Takt
     case P_MAX_ON:
         maxOnTicks = (uint8_t)value;

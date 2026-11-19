@@ -83,7 +83,7 @@ private:
     Mode mode = HOUSE;
     uint8_t red = 32, green = 32, blue = 32;
     uint8_t brightness = 100; // %
-    uint16_t tickMs = 500;    // Takt der Hausbeleuchtung
+    uint32_t tickMs = 500;    // Takt der Hausbeleuchtung in ms (Parameter in halben Sekunden)
     uint8_t maxOnTicks = 12;
     uint8_t maxOffTicks = 24;
     uint8_t effectSpeed = 32; // ms je Bild
