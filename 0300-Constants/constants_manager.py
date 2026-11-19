@@ -47,7 +47,8 @@ dict(name="FW_FEEDBACK_MINOR", value="3", arch="core"),
 #   6.1 STOPP nach Überstrom auch an WDP   6.2 Display zeigt die zentrale Version (vorher fest 5.00)
 #   6.3 Display: Zählerliste auf eigener Fläche ohne Textreste, zusätzlich die IP-Adresse
 dict(name="FW_BRIDGE_MAJOR",   value="6", arch="core"),
-dict(name="FW_BRIDGE_MINOR",   value="3", arch="core"),
+#   6.4 Display zählt auch die Gebäudebeleuchtung (Licht-Decoder)
+dict(name="FW_BRIDGE_MINOR",   value="4", arch="core"),
 
 
 # ============================================================

@@ -2412,11 +2412,11 @@ void clearDisplay()
 // They stand on a black panel on the left; the kangaroo column on the right stays.
 // Each line is cleared over the whole panel width, so a longer old text (e.g.
 // "Gleisbox: not found" before "OK") can not leave a remainder.
-void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal)
+void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal, int light)
 {
   const int16_t top = 90;     // below the title lines
-  const int16_t lineH = 20;   // text size 2
-  const int16_t lines = 7;
+  const int16_t lineH = 18;   // text size 2 (16 pixels high); 8 lines fit above the bottom edge
+  const int16_t lines = 8;
   const int16_t panelW = 240; // 20 characters of 12 pixels; the column from 241 keeps its kangaroos
   // On the first call redraw the background (removes the start messages) and the panel;
   // afterwards only overwrite the lines - backgroundDisplayLCD28() waits 1 s
@@ -2442,8 +2442,9 @@ void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal)
   line(2, "Signal:   ", String(signal));
   line(3, "Feedback: ", String(feedback));
   line(4, "LED-Sig.: ", String(ledsignal));
-  line(5, "Gleisbox: ", GB_found ? String("OK") : String("not found"));
-  line(6, "IP: ", ETH.localIP().toString());
+  line(5, "Light:    ", String(light));
+  line(6, "Gleisbox: ", GB_found ? String("OK") : String("not found"));
+  line(7, "IP: ", ETH.localIP().toString());
   // later messages start below the panel and do not overwrite it
   display9341.setCursor(x_pos, top + lines * lineH);
 }

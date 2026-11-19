@@ -36,7 +36,7 @@ constants:
     value: '6'
     architecture: core
   FW_BRIDGE_MINOR:
-    value: '3'
+    value: '4'
     architecture: core
   step_delay_min:
     value: '100'

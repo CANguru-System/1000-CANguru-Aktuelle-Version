@@ -49,7 +49,7 @@ void sendAliveSummary()
     uint8_t types[16];
     uint8_t counts[16];
     uint8_t n = 0;
-    int power = 0, sw = 0, signal = 0, feedback = 0, ledsignal = 0;
+    int power = 0, sw = 0, signal = 0, feedback = 0, ledsignal = 0, light = 0;
 
     for (const DecoderInfo &d : decoders)
     {
@@ -76,23 +76,25 @@ void sendAliveSummary()
         case DEVTYPE_SIGNAL: signal++;   break;
         case DEVTYPE_RM:     feedback++; break;
         case DEVTYPE_LEDSIGNAL: ledsignal++; break;
+        case DEVTYPE_LIGHT:  light++;    break;
         }
     }
 
     // Display: bei jeder Änderung einer Anzahl (oder der Gleisbox) neu beschriften.
     // Bisher nur bei steigender Gesamtzahl - ein ausgefallener Decoder blieb stehen.
-    static int lastPower = -1, lastSw = -1, lastSignal = -1, lastFeedback = -1, lastLed = -1;
+    static int lastPower = -1, lastSw = -1, lastSignal = -1, lastFeedback = -1, lastLed = -1, lastLight = -1;
     static bool lastGb = false;
     if (power != lastPower || sw != lastSw || signal != lastSignal || feedback != lastFeedback ||
-        ledsignal != lastLed || GB_found != lastGb)
+        ledsignal != lastLed || light != lastLight || GB_found != lastGb)
     {
         lastPower = power;
         lastSw = sw;
         lastSignal = signal;
         lastFeedback = feedback;
         lastLed = ledsignal;
+        lastLight = light;
         lastGb = GB_found;
-        drawAliveCounts(power, sw, signal, feedback, ledsignal);
+        drawAliveCounts(power, sw, signal, feedback, ledsignal, light);
     }
 
     uint8_t p[1 + 2 * sizeof(types)];
