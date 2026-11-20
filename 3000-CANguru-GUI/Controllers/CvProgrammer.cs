@@ -8,11 +8,14 @@ namespace CANguru.Controllers
 
     // A function of an mfx locomotive: number (F0, F1 ...), symbol (bit 0x80 = momentary,
     // i.e. only active while the key is pressed) and the outputs it switches per direction
-    public sealed record MfxFunction(int Nr, int Symbol, int OutputsForward, int OutputsBackward)
+    // Symbol: kind of function (bit 0x80 = momentary). Detail: exact symbol of mfx+ decoders
+    // (one CV per function, index 2), 0 for the older layout.
+    public sealed record MfxFunction(int Nr, int Symbol, int OutputsForward, int OutputsBackward, int Detail = 0)
     {
         public bool Momentary => (Symbol & 0x80) != 0;
         public override string ToString() =>
-            $"F{Nr} ({CANguru.Models.MfxSymbols.Name(Symbol) ?? $"Symbol {Symbol & 0x7F}"}{(Momentary ? ", Taster" : "")})";
+            $"F{Nr} ({CANguru.Models.MfxSymbols.Name(Symbol) ?? $"Symbol {Symbol & 0x7F}"}" +
+            $"{(Detail != 0 ? $"/{Detail}" : "")}{(Momentary ? ", Taster" : "")})";
     }
 
     // Reads and writes CVs of locomotive decoders through the track box (Märklin CAN
@@ -138,6 +141,12 @@ namespace CANguru.Controllers
         //   1st CV index 1 = symbol (bit 0x80 = momentary)
         //   2nd / 3rd CV index 1 = outputs forward / backward (0 = function not used)
         // Found by reading three locomotives (DB 640, BR 491, BR 260), November 2026.
+        //
+        // Newer mfx+ decoders (V 200, sniffer recording of an MS2, 19.11.2026) use ONE CV per
+        // function (the MS2 reads CV 65 ... 96 one after the other):
+        //   index 1 = kind of function (bit 0x80 = momentary), 0 = function not used
+        //   index 2 = the exact symbol the MS2 shows
+        // Both layouts are told apart by the number of CVs per entry in the block header.
         // ------------------------------------------------------------
 
         private const int FunctionBlock = 4, MaxFunctions = 32;
@@ -174,11 +183,29 @@ namespace CANguru.Controllers
                 }
                 cv += 1 + n * s;
             }
-            if (start < 0 || size < 3)
+            if (start < 0)
                 return (false, none, "Funktionsblock nicht gefunden.");
 
-            // read symbol and outputs of each function
             var result = new List<MfxFunction>();
+            if (size < 3)
+            {
+                // mfx+: one CV per function, index 1 = kind (0 = unused), index 2 = symbol
+                int stride = Math.Max(size, 1);
+                if (count == 0)
+                    count = MaxFunctions;
+                for (int nr = 0; nr < count; nr++)
+                {
+                    var v = await QueryMfxAsync(sid, start + nr * stride, 1, 2);
+                    if (v == null)
+                        return (false, result, $"Keine Antwort bei F{nr}.");
+                    int kind = v.GetValueOrDefault(1), symbol = v.GetValueOrDefault(2);
+                    if (kind != 0)
+                        result.Add(new MfxFunction(nr, kind, 0, 0, symbol));
+                }
+                return (true, result, "OK");
+            }
+
+            // read symbol and outputs of each function
             for (int nr = 0; nr < count; nr++)
             {
                 int baseCv = start + nr * size;
