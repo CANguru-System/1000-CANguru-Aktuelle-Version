@@ -156,6 +156,15 @@ namespace CANguru.Controllers
         public Task<(bool Ok, List<MfxFunction> Functions, string Message)> ReadMfxFunctionsAsync(byte sid) => RunAsync(async () =>
         {
             var none = new List<MfxFunction>();
+
+            // As the MS2 does at every registration: write CV 0 = 2 (control 0x09) first; the
+            // track box confirms with 0xC0. Without it the V 200 052 shows only F0 ... F15
+            // (classic mfx), with it also F16 and up (MS2 recordings, 19.11.2026). The MS2
+            // sends it to older decoders (BR 260, BR 491) too; it does not stay in the decoder.
+            Expect(f => f[1] == WriteConfigR && f[7] == 0x40 && f[8] == sid);
+            sendFrame(Frame(WriteConfig, 8, 0x00, 0x00, 0x40, sid, 0x00, 0x00, 0x02, 0x09));
+            await NextAsync(2000);   // no answer: read anyway, in the classic layout
+
             Expect(f => f[1] == ReadConfigR && f[7] == 0x40 && f[8] == sid);
 
             // find the function block
