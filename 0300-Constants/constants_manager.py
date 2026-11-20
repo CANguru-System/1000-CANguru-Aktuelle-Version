@@ -49,7 +49,8 @@ dict(name="FW_FEEDBACK_MINOR", value="3", arch="core"),
 #   6.3 Display: Zählerliste auf eigener Fläche ohne Textreste, zusätzlich die IP-Adresse
 dict(name="FW_BRIDGE_MAJOR",   value="6", arch="core"),
 #   6.4 Display zählt auch die Gebäudebeleuchtung (Licht-Decoder)
-dict(name="FW_BRIDGE_MINOR",   value="4", arch="core"),
+#   6.5 lokomotive.cs2 ohne Zwischenspeicher an WDP (neue Funktionen ohne WDP-Neustart)
+dict(name="FW_BRIDGE_MINOR",   value="5", arch="core"),
 
 
 # ============================================================

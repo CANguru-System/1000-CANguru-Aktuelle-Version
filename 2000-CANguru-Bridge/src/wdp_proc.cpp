@@ -126,19 +126,21 @@ void readWDP()
 // CS2-Download-Routen
 // ----------------------------------------------------
 
+// The file changes while WDP is running (GUI uploads it after an mfx registration).
+// Without these headers Windows may serve WDP a cached copy until WDP is restarted.
+static void sendCs2NoCache(AsyncWebServerRequest *request)
+{
+  AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/lokomotive.cs2", "text/plain");
+  response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  response->addHeader("Pragma", "no-cache");
+  response->addHeader("Expires", "0");
+  request->send(response);
+}
+
 void setupDownloadRoutesCS2()
 {
-  otaServer.on("/betatest/cs2/lokomotive.cs2", HTTP_GET,
-               [](AsyncWebServerRequest *request)
-               {
-                 request->send(LittleFS, "/lokomotive.cs2", "text/plain");
-               });
-
-  otaServer.on("/config/lokomotive.cs2", HTTP_GET,
-               [](AsyncWebServerRequest *request)
-               {
-                 request->send(LittleFS, "/lokomotive.cs2", "text/plain");
-               });
+  otaServer.on("/betatest/cs2/lokomotive.cs2", HTTP_GET, sendCs2NoCache);
+  otaServer.on("/config/lokomotive.cs2", HTTP_GET, sendCs2NoCache);
 }
 // ----------------------------------------------------
 // Upload-Route (GUI -> Bridge)
