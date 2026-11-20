@@ -142,8 +142,10 @@ namespace CANguru.Controllers
         //   2nd / 3rd CV index 1 = outputs forward / backward (0 = function not used)
         // Found by reading three locomotives (DB 640, BR 491, BR 260), November 2026.
         //
-        // Newer mfx+ decoders (V 200, sniffer recording of an MS2, 19.11.2026) use ONE CV per
-        // function (the MS2 reads CV 65 ... 96 one after the other):
+        // The V 200 052 (mfx+) also answers in this layout (20 entries, 3 CVs each) when read
+        // by the GUI (20.11.2026). The MS2, however, first writes CV 0 = 2 (control 0x09) and
+        // then reads ONE CV per function (CV 65 ... 96); purpose of that write unknown, the
+        // GUI does not copy it. Layout with one CV per function:
         //   index 1 = kind of function (bit 0x80 = momentary), 0 = function not used
         //   index 2 = the exact symbol the MS2 shows
         // Both layouts are told apart by the number of CVs per entry in the block header.
@@ -206,18 +208,22 @@ namespace CANguru.Controllers
                 return (true, result, "OK");
             }
 
-            // read symbol and outputs of each function
+            // read the symbol of each function; symbol 0 = function not used. This is what the
+            // MS2 does (BR 491: it reads only every third CV). Sound functions have no outputs,
+            // so the outputs must not decide (V 200 052: only 3 of 18 functions had outputs).
+            // mfx+ decoders also give the exact symbol as index 2; older ones do not answer it.
+            int indices = 2;
             for (int nr = 0; nr < count; nr++)
             {
                 int baseCv = start + nr * size;
-                var sym = await QueryMfxAsync(sid, baseCv, 1, 1);
-                var fwd = await QueryMfxAsync(sid, baseCv + 1, 1, 1);
-                var bwd = await QueryMfxAsync(sid, baseCv + 2, 1, 1);
-                if (sym == null || fwd == null || bwd == null)
+                var sym = await QueryMfxAsync(sid, baseCv, 1, indices);
+                if (sym == null)
                     return (false, result, $"Keine Antwort bei F{nr}.");
-                int outF = fwd.GetValueOrDefault(1), outB = bwd.GetValueOrDefault(1);
-                if ((outF | outB) != 0)
-                    result.Add(new MfxFunction(nr, sym.GetValueOrDefault(1), outF, outB));
+                if (nr == 0 && !sym.ContainsKey(2))
+                    indices = 1;
+                int symbol = sym.GetValueOrDefault(1);
+                if (symbol != 0)
+                    result.Add(new MfxFunction(nr, symbol, 0, 0, sym.GetValueOrDefault(2)));
             }
             return (true, result, "OK");
         });
