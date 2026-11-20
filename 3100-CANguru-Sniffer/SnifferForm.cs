@@ -10,9 +10,9 @@ namespace CANguru.Sniffer
     //
     // The sniffer registers with the bridge exactly like the GUI does (SESSION DISCOVER),
     // so the bridge forwards every frame it receives from the CAN bus (CG2_F_CAN /
-    // CG2_CAN_TO_GUI). It never sends anything else: no frame onto the bus, no SESSION
-    // START (decoders stay quiet) and no SESSION END (the bridge does not restart when
-    // the sniffer is closed). It is a pure listener.
+    // CG2_CAN_TO_GUI). It puts no frame onto the bus and sends no SESSION START (decoders
+    // stay quiet). Only when it is closed it sends SESSION END like the GUI: the bridge
+    // stops the track box, resets the decoders and restarts.
     //
     // Note: the bridge does not receive the frames it puts on the bus itself, so commands
     // from Win-Digipet or the GUI do not appear here - only what other devices say
@@ -168,6 +168,31 @@ namespace CANguru.Sniffer
             catch (SocketException)
             {
                 // network not ready yet - next attempt in a second
+            }
+        }
+
+        // SESSION END when the sniffer is closed, as the GUI does: the bridge stops the
+        // track box, resets the decoders and restarts, so the next program starts clean.
+        private void SendSessionEnd()
+        {
+            if (bridgeIp == null || sender == null)
+                return;
+            var h = new Cg2Header
+            {
+                Feature = (byte)ProtocolConstants.CG2_F_SESSION,
+                Command = (byte)ProtocolConstants.CG2_SESSION_END,
+                Flags = 0,
+                Seq = 0,
+                Decoder = (byte)ProtocolConstants.CG2_ID_BRIDGE
+            };
+            byte[] packet = Cg2.Encode(h, Array.Empty<byte>());
+            try
+            {
+                sender.Send(packet, packet.Length, new IPEndPoint(bridgeIp, ProtocolConstants.BRIDGE_PORT));
+            }
+            catch (SocketException)
+            {
+                // closing anyway
             }
         }
 
@@ -441,8 +466,8 @@ namespace CANguru.Sniffer
                 e.Cancel = true;
                 return;
             }
-            // deliberately no SESSION END: the bridge keeps running
             closing = true;
+            SendSessionEnd();
             drainTimer.Stop();
             discoverTimer?.Dispose();
             receiver?.Dispose();

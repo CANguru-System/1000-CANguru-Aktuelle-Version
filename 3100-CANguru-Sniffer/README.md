@@ -8,11 +8,13 @@ text file. It was written to study the mfx registration of a Mobile Station 2.
 
 The sniffer registers with the bridge the same way the CANguru-GUI does (protocol v2,
 `SESSION DISCOVER`). From then on the bridge forwards every frame it receives from the
-CAN bus. The sniffer is a pure listener:
+CAN bus. While recording, the sniffer is a pure listener:
 
 - it puts nothing on the CAN bus,
-- it sends no `SESSION START`, so the CANguru decoders are not started,
-- it sends no `SESSION END`, so the bridge does not restart when the sniffer is closed.
+- it sends no `SESSION START`, so the CANguru decoders are not started.
+
+When it is closed, it sends `SESSION END` like the GUI: the bridge stops the track box,
+resets the decoders and restarts, so the next program finds a clean state.
 
 No bridge firmware change is needed.
 
