@@ -96,6 +96,42 @@ namespace CANguru.Controllers
         });
 
         // ------------------------------------------------------------
+        // Address of a Motorola locomotive (decoders that cannot be read). As the MS2 does
+        // (sniffer recordings 20.11.2026, BR 24):
+        //  - detect: discovery with protocol 0x21 to the track box; after about 6 s it answers
+        //    with DLC 5: 00 00 | address hi lo | 0x21 (e.g. 00 00 00 18 21 = address 24)
+        //  - write: Write Config to locomotive ID 0x0050 (Motorola address 80, the programming
+        //    address of these decoders), CV 1 = new address, control 00; the track box confirms
+        //    with control 0xC0 after about 5 s
+        // ------------------------------------------------------------
+
+        private const byte Discovery = 0x02, DiscoveryR = 0x03, MmDiscoveryProtocol = 0x21;
+        private const int MmDetectTimeoutMs = 20000;
+
+        public Task<CvResult> DetectMmAddressAsync() => RunAsync(async () =>
+        {
+            Expect(f => f[1] == DiscoveryR && f[4] == 5 && f[9] == MmDiscoveryProtocol);
+            sendFrame(Frame(Discovery, 1, MmDiscoveryProtocol));
+            var answer = await NextAsync(MmDetectTimeoutMs);
+            if (answer == null)
+                return new CvResult(false, 0, "Keine Adresse gefunden (Lok allein auf dem Programmiergleis?).");
+            int address = (answer[7] << 8) | answer[8];
+            return new CvResult(true, address, "OK");
+        });
+
+        public Task<CvResult> WriteMmAddressAsync(byte address) => RunAsync(async () =>
+        {
+            Expect(f => f[1] == WriteConfigR && f[7] == 0x00 && f[8] == 0x50 && f[10] == 0x01);
+            sendFrame(Frame(WriteConfig, 8, 0x00, 0x00, 0x00, 0x50, 0x00, 0x01, address, 0x00));
+            var answer = await NextAsync(CvTimeoutMs);
+            if (answer == null)
+                return new CvResult(false, 0, "Keine Antwort der Gleisbox.");
+            return answer[12] == 0xC0
+                ? new CvResult(true, answer[11], "OK")
+                : new CvResult(false, 0, "Fehler: Adresse nicht geschrieben (Lok auf dem Programmiergleis?).");
+        });
+
+        // ------------------------------------------------------------
         // Name of an mfx locomotive (mfx block CV 3, index 1..16, one character each)
         // ------------------------------------------------------------
 

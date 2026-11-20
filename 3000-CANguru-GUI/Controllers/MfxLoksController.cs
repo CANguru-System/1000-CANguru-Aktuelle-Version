@@ -117,8 +117,10 @@ namespace CANguru.Controllers
                     break;
 
                 case CANFrames.LokDiscovery_CMD_R:
-                    // the track box found a locomotive: last answer without quality byte
-                    if (data[0x04] == 0x05)
+                    // the track box found a locomotive: last answer without quality byte.
+                    // Byte 4 = range (mfx: up to 32); 0x21 = answer to a Motorola address
+                    // search (address instead of UID) - not an mfx locomotive.
+                    if (data[0x04] == 0x05 && data[0x09] <= 0x20)
                         OnLokFound(UidOf(data));
                     break;
 

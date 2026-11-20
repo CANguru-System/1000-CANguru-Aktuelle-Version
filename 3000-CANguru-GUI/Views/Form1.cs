@@ -1351,6 +1351,14 @@ namespace CANguru.Views
                     lokstorage.AddOrUpdate(lok);
                     UpdateLokList();
                     Log($"Lokname geändert: „{lok.Name}“. Für WDP: „Lok-Liste anlegen“ drücken.");
+                },
+                addressChanged: (lok, oldUid) =>
+                {
+                    // the artificial UID of a Motorola locomotive contains the address
+                    lokstorage.Remove(oldUid);
+                    lokstorage.AddOrUpdate(lok);
+                    UpdateLokList();
+                    Log($"Adresse von „{lok.Name}“ auf {lok.MfxSID} geändert. Für WDP: „Lok-Liste anlegen“ drücken.");
                 });
             form.ShowDialog(this);
         }
@@ -1382,7 +1390,7 @@ namespace CANguru.Views
         // Manuelle Lok hinzufügen
         private void btnAddManualLok_Click(object sender, EventArgs e)
         {
-            using var dlg = new ManualLokDialog();
+            using var dlg = new ManualLokDialog(() => EnsureCvProgrammer().DetectMmAddressAsync());
 
             if (dlg.ShowDialog() == DialogResult.OK)
             {

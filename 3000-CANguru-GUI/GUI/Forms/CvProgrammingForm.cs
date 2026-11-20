@@ -45,6 +45,7 @@ namespace CANguru.GUI.Forms
         private readonly Func<CANguruLok, Task<string>>? readFunctions;
         // a new name written into the decoder is also taken into the locomotive list (Form1)
         private readonly Action<CANguruLok>? nameChanged;
+        private readonly Action<CANguruLok, uint>? addressChanged;   // locomotive, old UID
         private readonly Label selectedLok = new()
         {
             AutoSize = true,
@@ -64,12 +65,13 @@ namespace CANguru.GUI.Forms
 
         // readFunctions: reads the functions of the locomotive into the locomotive list (Form1)
         public CvProgrammingForm(CvProgrammer programmer, CANguruLok? lok, Func<CANguruLok, Task<string>>? readFunctions = null,
-                                 Action<CANguruLok>? nameChanged = null)
+                                 Action<CANguruLok>? nameChanged = null, Action<CANguruLok, uint>? addressChanged = null)
         {
             this.programmer = programmer;
             this.lok = lok;
             this.readFunctions = readFunctions;
             this.nameChanged = nameChanged;
+            this.addressChanged = addressChanged;
             Text = "CV-Programmierung";
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -255,6 +257,31 @@ namespace CANguru.GUI.Forms
             if (cv == 0)
                 return;
             byte value = (byte)newValue.Value;
+            if (cv == 1 && lok != null && lok.IsManual)
+            {
+                // Motorola locomotive: new address as the MS2 writes it (programming address 80)
+                if (value < 1 || value > 255)
+                {
+                    ShowResult(false, "Bitte eine Adresse von 1 bis 255 eingeben.");
+                    return;
+                }
+                await Run($"Schreibe Adresse {value} ...", async () =>
+                {
+                    var r = await programmer.WriteMmAddressAsync(value);
+                    if (r.Ok)
+                    {
+                        uint oldUid = lok.UID;
+                        lok.MfxSID = value;
+                        lok.MfxUID = new[] { value };
+                        lok.UID = CANguru.Views.ManualLokDialog.MakeManualUid(value, lok.DecoderType);
+                        addressChanged?.Invoke(lok, oldUid);
+                        oldValue.Text = value.ToString();
+                        ShowSelectedLok();
+                    }
+                    ShowResult(r.Ok, r.Ok ? $"Adresse auf {value} gesetzt, Lokliste angepasst" : r.Message);
+                });
+                return;
+            }
             await Run($"Schreibe CV {cv} = {value} ...", async () =>
             {
                 var r = await programmer.WriteCvAsync(cv, value);
