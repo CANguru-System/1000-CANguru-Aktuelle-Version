@@ -31,14 +31,14 @@
         };
 
         // mfx+ decoders give a second, finer symbol (detail) for kind 7 = sound.
-        // V 200 052: 25 Signalhorn/Rangierpfiff, 28 Lüfter, 29 Luftpresser, 7 other sounds
-        // (Bremsenquietschen aus, Schaffnerpfiff, Druckluft ablassen, Sanden, ...).
+        // V 200 052: 0x25 Signalhorn/Rangierpfiff, 0x28 Lüfter, 0x29 Luftpresser, 0x07 other
+        // sounds (Bremsenquietschen aus, Schaffnerpfiff, Druckluft ablassen, Sanden, ...).
         private static readonly Dictionary<int, (string Name, int? Cs2)> SoundDetail = new()
         {
-            [7] = ("Geräusch", 5),
-            [25] = ("Horn", 10),
-            [28] = ("Lüfter", 29),
-            [29] = ("Luftpresser", 5),
+            [0x07] = ("Geräusch", 5),
+            [0x25] = ("Horn", 10),
+            [0x28] = ("Lüfter", 29),
+            [0x29] = ("Luftpresser", 5),
         };
 
         private static (string Name, int? Cs2)? Lookup(int mfxSymbol, int detail)
