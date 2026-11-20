@@ -165,8 +165,9 @@ namespace CANguru.Controllers
                     return (false, none, cv == 0 ? "Keine Antwort der Lok (auf dem Programmiergleis?)." : $"Keine Antwort bei CV {cv}.");
                 if (h.GetValueOrDefault(0) != 0x01)
                 {
-                    // no header here: blocks start at the next multiple of 4
-                    if (++skipped > 8)
+                    // no header here: try the next CV. Gaps can be long: the V 200 has
+                    // block 3 at CV 20 (4 entries) and block 4 only at CV 64.
+                    if (++skipped > 128)
                         return (false, none, "Funktionsblock nicht gefunden.");
                     cv++;
                     continue;
