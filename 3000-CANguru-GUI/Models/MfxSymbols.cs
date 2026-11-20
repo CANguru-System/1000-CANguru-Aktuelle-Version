@@ -17,22 +17,43 @@
     // the lower bits).
     public static class MfxSymbols
     {
-        // mfx symbol (without bit 0x80) -> (meaning, CS2 type)
-        private static readonly Dictionary<int, (string Name, int Cs2)> Table = new()
+        // mfx symbol / mfx+ kind (without bit 0x80) -> (meaning, CS2 type; null = no matching type)
+        // 0x0A and 0x0B: mfx+ V 200 052, compared with the Märklin function list of the model
+        private static readonly Dictionary<int, (string Name, int? Cs2)> Table = new()
         {
             [3] = ("Licht", 1),
             [4] = ("Innenbeleuchtung", 2),
             [7] = ("Horn", 10),
             [8] = ("Motorgeräusch", 23),
             [9] = ("Ansage", 25),
+            [0x0A] = ("Rangiergang", 8),
+            [0x0B] = ("Direktsteuerung", null),
         };
 
+        // mfx+ decoders give a second, finer symbol (detail) for kind 7 = sound.
+        // V 200 052: 25 Signalhorn/Rangierpfiff, 28 Lüfter, 29 Luftpresser, 7 other sounds
+        // (Bremsenquietschen aus, Schaffnerpfiff, Druckluft ablassen, Sanden, ...).
+        private static readonly Dictionary<int, (string Name, int? Cs2)> SoundDetail = new()
+        {
+            [7] = ("Geräusch", 5),
+            [25] = ("Horn", 10),
+            [28] = ("Lüfter", 29),
+            [29] = ("Luftpresser", 5),
+        };
+
+        private static (string Name, int? Cs2)? Lookup(int mfxSymbol, int detail)
+        {
+            int kind = mfxSymbol & 0x7F;
+            if (kind == 7 && detail != 0)
+                return SoundDetail.TryGetValue(detail, out var d) ? d : ("Geräusch", 5);
+            return Table.TryGetValue(kind, out var e) ? e : null;
+        }
+
         // CS2 type for lokomotive.cs2; null = unknown symbol (WDP then shows its default)
-        public static int? ToCs2(int mfxSymbol) =>
-            Table.TryGetValue(mfxSymbol & 0x7F, out var e) ? e.Cs2 | (mfxSymbol & 0x80) : null;
+        public static int? ToCs2(int mfxSymbol, int detail = 0) =>
+            Lookup(mfxSymbol, detail)?.Cs2 is int cs2 ? cs2 | (mfxSymbol & 0x80) : null;
 
         // meaning for messages; null = unknown
-        public static string? Name(int mfxSymbol) =>
-            Table.TryGetValue(mfxSymbol & 0x7F, out var e) ? e.Name : null;
+        public static string? Name(int mfxSymbol, int detail = 0) => Lookup(mfxSymbol, detail)?.Name;
     }
 }

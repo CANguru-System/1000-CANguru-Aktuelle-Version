@@ -1294,7 +1294,7 @@ namespace CANguru.Views
                 return "Die Lok beschreibt keine Funktionen.";
             }
             // decoder symbol -> CS2 function type (different numbering); unknown -> no type
-            lok.Funktionen = functions.Select(fn => new LokFunktion { Nr = fn.Nr, Typ = MfxSymbols.ToCs2(fn.Symbol) }).ToList();
+            lok.Funktionen = functions.Select(fn => new LokFunktion { Nr = fn.Nr, Typ = MfxSymbols.ToCs2(fn.Symbol, fn.Detail) }).ToList();
             lokstorage.AddOrUpdate(lok);
             UpdateLokList();
             string list = string.Join(", ", functions);

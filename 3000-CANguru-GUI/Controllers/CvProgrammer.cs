@@ -14,7 +14,7 @@ namespace CANguru.Controllers
     {
         public bool Momentary => (Symbol & 0x80) != 0;
         public override string ToString() =>
-            $"F{Nr} ({CANguru.Models.MfxSymbols.Name(Symbol) ?? $"Symbol {Symbol & 0x7F}"}" +
+            $"F{Nr} ({CANguru.Models.MfxSymbols.Name(Symbol, Detail) ?? $"Symbol {Symbol & 0x7F}"}" +
             $"{(Detail != 0 ? $"/{Detail}" : "")}{(Momentary ? ", Taster" : "")})";
     }
 
