@@ -16,7 +16,7 @@
 #define FW_FEEDBACK_MAJOR 2
 #define FW_FEEDBACK_MINOR 3
 #define FW_BRIDGE_MAJOR 6
-#define FW_BRIDGE_MINOR 5
+#define FW_BRIDGE_MINOR 6
 #define step_delay_min 100
 #define step_delay_std 300
 #define step_delay_max 1000

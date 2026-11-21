@@ -2414,7 +2414,7 @@ void clearDisplay()
 // "Gleisbox: not found" before "OK") can not leave a remainder.
 void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal, int light)
 {
-  const int16_t top = 90;     // below the title lines
+  const int16_t top = 72;     // below the title lines (two lines of 16 px from y = 1, then one free line)
   const int16_t lineH = 18;   // text size 2 (16 pixels high); 8 lines fit above the bottom edge
   const int16_t lines = 8;
   const int16_t panelW = 240; // 20 characters of 12 pixels; the column from 241 keeps its kangaroos
