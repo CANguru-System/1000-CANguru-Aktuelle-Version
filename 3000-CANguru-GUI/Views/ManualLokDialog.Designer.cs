@@ -74,7 +74,7 @@
             this.Controls.Add(this.buttonCancel);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.StartPosition = FormStartPosition.CenterParent;
-            this.Text = "Manuelle Lok hinzufügen";
+            this.Text = "Digital-Lok erfassen";
 
             ((System.ComponentModel.ISupportInitialize)(this.numericSID)).EndInit();
             this.ResumeLayout(false);

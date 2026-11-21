@@ -68,6 +68,9 @@ namespace CANguru.Views
             public int Last = -1;
         }
         private readonly Dictionary<int, TypeCounter> counters = new();
+
+        // button grid on the Lok-Ctrl tab
+        private const int LokColLeft = 10, LokColMiddle = 172, LokColRight = 334, LokRow0 = 115, LokRowStep = 34;
         private readonly FlowLayoutPanel countersPanel = new()
         {
             // six types of 46 pixels (label + box) fit without scrolling
@@ -226,6 +229,19 @@ namespace CANguru.Views
             label2.Visible = false;
             btnCANguruLoks.Text = "mfx-Lok suchen";
             btnDelete.Text = "Lok entfernen";
+            btnAddManualLok.Text = "Digital-Lok erfassen";
+
+            // buttons in three columns below the message field: left Motorola, middle mfx and
+            // programming (Lok entfernen set apart), right the list for WDP
+            var buttonSize = new Size(140, 23);
+            foreach (var b in new[] { btnAddManualLok, btnCANguruLoks, btnDelete, btnLokListe, showLokList })
+                b.Size = buttonSize;
+            btnAddManualLok.Location = new Point(LokColLeft, LokRow0);
+            btnCANguruLoks.Location = new Point(LokColMiddle, LokRow0);
+            // CV-Programmierung (built later) at LokColMiddle, LokRow0 + LokRowStep
+            btnDelete.Location = new Point(LokColMiddle, LokRow0 + 2 * LokRowStep + 20);
+            btnLokListe.Location = new Point(LokColRight, LokRow0);
+            showLokList.Location = new Point(LokColRight, LokRow0 + LokRowStep);
 
             STOPP_Timer.Enabled = false;
 
@@ -348,7 +364,7 @@ namespace CANguru.Views
                 ?.SetValue(listBoxDecoder, true);
 
             // CV programming of locomotive decoders (window, as in CANguru-Server 3.02)
-            var btnCv = new System.Windows.Forms.Button { Text = "CV-Programmierung …", Location = new Point(355, 171), Size = new Size(130, 23) };
+            var btnCv = new System.Windows.Forms.Button { Text = "CV-Programmierung …", Location = new Point(LokColMiddle, LokRow0 + LokRowStep), Size = new Size(140, 23) };
             btnCv.Click += (s, e) => OpenCvProgramming();
             tabPage2.Controls.Add(btnCv);
 
