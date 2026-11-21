@@ -79,11 +79,17 @@ namespace CANguru.Views
             Margin = new Padding(0)
         };
 
-        // OTA choice: single decoder plus one entry per decoder type that is registered
+        // OTA choice: "Einzeldecoder" (radioSingle) on its own, next to it a frame with one
+        // entry per registered decoder type for the group OTA
+        private readonly GroupBox otaGroup = new()
+        {
+            Text = "Sammel-OTA (alle Decoder eines Typs)",
+            Location = new Point(118, 248),
+            Size = new Size(252, 100)
+        };
         private readonly FlowLayoutPanel otaChoicePanel = new()
         {
-            Location = new Point(6, 250),
-            Size = new Size(366, 50),
+            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
             Margin = new Padding(0)
@@ -348,10 +354,22 @@ namespace CANguru.Views
 
             // counters per type and OTA choice are built from the registered decoders
             Controls.Add(countersPanel);
+            // "Einzeldecoder" on its own, the types for the group OTA in a frame next to it.
+            // The radio buttons sit in different containers, so they are kept exclusive by hand.
             radioSingle.Text = "Einzeldecoder";
-            radioSingle.Margin = new Padding(0, 2, 12, 2);
-            otaChoicePanel.Controls.Add(radioSingle);
-            tabPage1.Controls.Add(otaChoicePanel);
+            radioSingle.AutoSize = true;
+            radioSingle.Location = new Point(10, 262);
+            radioSingle.CheckedChanged += (s, e) =>
+            {
+                if (radioSingle.Checked)
+                    foreach (var r in otaChoicePanel.Controls.OfType<RadioButton>())
+                        r.Checked = false;
+            };
+            otaGroup.Controls.Add(otaChoicePanel);
+            tabPage1.Controls.Add(otaGroup);
+            btnOtaUpdate.Location = new Point(377, 280);
+            showDecoderList.Location = new Point(6, 360);
+            buttonSettings.Location = new Point(377, 360);
 
             // Rechtsklick auf einen Decoder: Einstellungen, umbenennen, Firmware, entfernen;
             // Doppelklick öffnet die Einstellungen
@@ -571,6 +589,11 @@ namespace CANguru.Views
                     AutoSize = true,
                     Margin = new Padding(0, 2, 12, 2),
                     Checked = t == selected
+                };
+                r.CheckedChanged += (s, e) =>
+                {
+                    if (((RadioButton)s!).Checked)
+                        radioSingle.Checked = false;
                 };
                 otaChoicePanel.Controls.Add(r);
             }
