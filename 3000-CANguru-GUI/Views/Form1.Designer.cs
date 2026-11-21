@@ -350,7 +350,7 @@
             listBoxCAN.Location = new Point(9, 6);
             listBoxCAN.Multiline = true;
             listBoxCAN.Name = "listBoxCAN";
-            listBoxCAN.Size = new Size(466, 351);
+            listBoxCAN.Size = new Size(466, 391);
             listBoxCAN.TabIndex = 0;
             // 
             // listBoxLoks
@@ -435,7 +435,7 @@
             // 
             // btnExit
             // 
-            btnExit.Location = new Point(513, 644);
+            btnExit.Location = new Point(513, 684);
             btnExit.Name = "btnExit";
             btnExit.Size = new Size(75, 23);
             btnExit.TabIndex = 5;
@@ -452,7 +452,7 @@
             tabControl1.Location = new Point(3, 288);
             tabControl1.Name = "tabControl1";
             tabControl1.SelectedIndex = 0;
-            tabControl1.Size = new Size(493, 388);
+            tabControl1.Size = new Size(493, 428);
             tabControl1.SizeMode = TabSizeMode.Fixed;
             tabControl1.TabIndex = 7;
             // 
@@ -516,7 +516,7 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(245, 245, 245);
-            ClientSize = new Size(604, 679);
+            ClientSize = new Size(604, 719);
             Controls.Add(panelCurrent1);
             Controls.Add(panelCurrent0);
             Controls.Add(headerPanel);

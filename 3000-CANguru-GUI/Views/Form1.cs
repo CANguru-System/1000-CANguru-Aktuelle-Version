@@ -70,8 +70,9 @@ namespace CANguru.Views
         private readonly Dictionary<int, TypeCounter> counters = new();
         private readonly FlowLayoutPanel countersPanel = new()
         {
+            // six types of 46 pixels (label + box) fit without scrolling
             Location = new Point(499, 267),
-            Size = new Size(105, 232),
+            Size = new Size(105, 286),
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoScroll = true,
@@ -147,11 +148,11 @@ namespace CANguru.Views
             dualBar.DividerColor = Color.Black;
             dualBar.TextColor = Color.Black;
 
-            // rechte Spalte unter dem Zähler "LED-Signale" (endet bei 493), über "Exit" (ab 644)
+            // rechte Spalte unter den Zählern (enden bei 553), über "Beenden" (ab 684)
             dualBar.Width = 100;
-            dualBar.Height = 132;
+            dualBar.Height = 116;
             dualBar.Left = 500;
-            dualBar.Top = 502;
+            dualBar.Top = 560;
 
             this.Controls.Add(dualBar);
         }
@@ -161,7 +162,7 @@ namespace CANguru.Views
             btnStopGo.Width = 75;
             btnStopGo.Height = 40;
             btnStopGo.Left = 513;
-            btnStopGo.Top = 560;
+            btnStopGo.Top = 620;   // below the counters (end at 553), above "Beenden" (684)
 
             // Aktionen verbinden
             btnStopGo.StopClicked += BtnStopGo_StopClicked;
