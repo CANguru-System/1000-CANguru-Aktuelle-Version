@@ -42,7 +42,8 @@ static const char *const MODE_CHOICES[] = {"Hausbeleuchtung", "Effekte", "Test"}
 static const Cg2ParamDef lightParams[P_COUNT] = {
     // Typ, min, max, Standard, Schritt, Einheit, Name, Auswahl, Anzahl, NVS-Schlüssel, Merkmale
     {CG2_TYPE_U8, 1, 255, 1, 1, "", "Adresse", nullptr, 0, "adr", CG2_PF_KEEP_ON_RESET},
-    // 16 bits (up to 256); own key, because the old byte value under "leds" can not be read as 16 bits
+    // 16 bits (room for a higher limit later); own key, because the old byte value under
+    // "leds" can not be read as 16 bits
     {CG2_TYPE_U16, 1, LightAccessory::MAX_LEDS, 24, 1, "", "Anzahl LEDs (Räume)", nullptr, 0, "leds16", CG2_PF_KEEP_ON_RESET},
     {CG2_TYPE_CHOICE, 0, 1, 0, 1, "", "Farbfolge des LED-Streifens", ORDER_CHOICES, 2, "order", CG2_PF_KEEP_ON_RESET},
     {CG2_TYPE_CHOICE, 0, 2, 0, 1, "", "Betriebsart", MODE_CHOICES, 3, "mode", 0},
