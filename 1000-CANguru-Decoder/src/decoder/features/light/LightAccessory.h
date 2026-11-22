@@ -5,7 +5,7 @@
 #include <Adafruit_NeoPixel.h>
 #include "AccessoryDecoder.h"
 
-// Gebäudebeleuchtung als CANguru-Decoder: ein WS2812-Streifen (bis zu 96 LEDs, je LED ein
+// Gebäudebeleuchtung als CANguru-Decoder: ein WS2812-Streifen (bis zu 256 LEDs, je LED ein
 // Raum) an GPIO 2 der Hausbeleuchtungsplatine mit ESP32-C3 SuperMini.
 //
 // Betriebsarten:
@@ -24,7 +24,8 @@
 class LightAccessory : public AccessoryDecoder
 {
 public:
-    static const uint8_t MAX_LEDS = 96;
+    // enough for the houses of a whole layout on one decoder (one show() takes about 8 ms)
+    static const uint16_t MAX_LEDS = 256;
 
     LightAccessory();
     void setup() override;
@@ -78,7 +79,7 @@ private:
 
     // Parameter (Kopie aus dem Speicher des Kerns)
     uint8_t address = 1;
-    uint8_t ledCount = 24;
+    uint16_t ledCount = 24;
     bool orderGrb = false;   // false = RGB (wie bisher), true = GRB
     Mode mode = HOUSE;
     uint8_t red = 32, green = 32, blue = 32;
@@ -94,7 +95,7 @@ private:
     unsigned long lastTick = 0;
 
     // Test: nächster Raum, Pause nach dem letzten
-    uint8_t testRoom = 0;
+    uint16_t testRoom = 0;
     uint8_t testPause = 0;
 
     // Effekte: Nummer, Bildzähler, Zeit des letzten Bildes

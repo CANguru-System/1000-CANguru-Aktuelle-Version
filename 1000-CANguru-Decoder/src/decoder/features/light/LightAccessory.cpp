@@ -42,7 +42,8 @@ static const char *const MODE_CHOICES[] = {"Hausbeleuchtung", "Effekte", "Test"}
 static const Cg2ParamDef lightParams[P_COUNT] = {
     // Typ, min, max, Standard, Schritt, Einheit, Name, Auswahl, Anzahl, NVS-Schlüssel, Merkmale
     {CG2_TYPE_U8, 1, 255, 1, 1, "", "Adresse", nullptr, 0, "adr", CG2_PF_KEEP_ON_RESET},
-    {CG2_TYPE_U8, 1, LightAccessory::MAX_LEDS, 24, 1, "", "Anzahl LEDs (Räume)", nullptr, 0, "leds", CG2_PF_KEEP_ON_RESET},
+    // 16 bits (up to 256); own key, because the old byte value under "leds" can not be read as 16 bits
+    {CG2_TYPE_U16, 1, LightAccessory::MAX_LEDS, 24, 1, "", "Anzahl LEDs (Räume)", nullptr, 0, "leds16", CG2_PF_KEEP_ON_RESET},
     {CG2_TYPE_CHOICE, 0, 1, 0, 1, "", "Farbfolge des LED-Streifens", ORDER_CHOICES, 2, "order", CG2_PF_KEEP_ON_RESET},
     {CG2_TYPE_CHOICE, 0, 2, 0, 1, "", "Betriebsart", MODE_CHOICES, 3, "mode", 0},
     {CG2_TYPE_U8, 1, 100, 100, 1, "%", "Helligkeit", nullptr, 0, "bright", 0},
@@ -128,7 +129,7 @@ uint8_t LightAccessory::getAliveValues(uint16_t *values, uint8_t maxValues)
     {
         uint16_t lit = 0;
         if (lightOn && mode == HOUSE)
-            for (uint8_t r = 0; r < ledCount; r++)
+            for (uint16_t r = 0; r < ledCount; r++)
                 lit += rooms[r].on ? 1 : 0;
         values[n++] = lit;
     }
@@ -143,7 +144,7 @@ void LightAccessory::onParamChanged(uint8_t n, uint16_t value)
         address = (uint8_t)value;
         return; // ändert nichts an der Anzeige
     case P_LEDS:
-        ledCount = (uint8_t)value;
+        ledCount = value;
         break;
     case P_ORDER:
         orderGrb = value != 0;
@@ -222,7 +223,7 @@ void LightAccessory::restart()
     unsigned long now = millis();
     lastTick = now;
     lastFrame = now;
-    for (uint8_t r = 0; r < MAX_LEDS; r++)
+    for (uint16_t r = 0; r < MAX_LEDS; r++)
     {
         rooms[r].on = false;
         // versetzt beginnen, damit nicht alle Räume zugleich angehen
@@ -277,7 +278,7 @@ void LightAccessory::tickHouse(unsigned long now)
         return;
     lastTick = now;
     uint32_t on = strip.Color(red, green, blue);
-    for (uint8_t r = 0; r < ledCount; r++)
+    for (uint16_t r = 0; r < ledCount; r++)
     {
         Room &room = rooms[r];
         if (room.remaining == 0)
