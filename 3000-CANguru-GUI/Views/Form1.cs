@@ -350,29 +350,8 @@ namespace CANguru.Views
         // Flat buttons: white face, thin grey border, light blue under the mouse, 28 pixels high
         // (they grow downwards from their position). Left out: the header buttons (own style)
         // and the STOP/GO button (draws itself).
-        private void StyleButtons(Control parent)
-        {
-            foreach (Control c in parent.Controls)
-            {
-                if (c == headerPanel || c is ToggleStopGoButton)
-                    continue;
-                if (c is System.Windows.Forms.Button b)
-                {
-                    b.FlatStyle = FlatStyle.Flat;
-                    b.FlatAppearance.BorderSize = 1;
-                    b.FlatAppearance.BorderColor = Color.FromArgb(173, 173, 173);
-                    b.FlatAppearance.MouseOverBackColor = Color.FromArgb(229, 241, 251);
-                    b.FlatAppearance.MouseDownBackColor = Color.FromArgb(204, 228, 247);
-                    b.BackColor = Color.White;
-                    b.UseVisualStyleBackColor = false;
-                    b.Cursor = Cursors.Hand;
-                    if (b.Height < 28)
-                        b.Height = 28;
-                }
-                else if (c.HasChildren)
-                    StyleButtons(c);
-            }
-        }
+        private void StyleButtons(Control parent) =>
+            CANguru.Controls.ButtonStyle.Apply(parent, 28, headerPanel);
 
         private void Form1_Load(object sender, EventArgs e)
         {

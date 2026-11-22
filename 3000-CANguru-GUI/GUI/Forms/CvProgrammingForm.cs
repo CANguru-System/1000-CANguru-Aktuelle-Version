@@ -72,6 +72,7 @@ namespace CANguru.GUI.Forms
             this.readFunctions = readFunctions;
             this.nameChanged = nameChanged;
             this.addressChanged = addressChanged;
+            Load += (s, e) => CANguru.Controls.ButtonStyle.Apply(this);
             Text = "CV-Programmierung";
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;

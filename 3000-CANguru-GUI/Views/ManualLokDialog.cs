@@ -36,6 +36,7 @@ namespace CANguru.Views
             new ToolTip().SetToolTip(buttonDetect,
                 "Lok allein auf das Programmiergleis stellen. Die Gleisbox sucht die Motorola-Adresse (dauert einige Sekunden).");
             Controls.Add(buttonDetect);
+            Load += (s, e) => CANguru.Controls.ButtonStyle.Apply(this);
         }
 
         private async Task DetectAddressAsync()

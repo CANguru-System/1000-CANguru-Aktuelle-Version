@@ -74,6 +74,7 @@ namespace CANguru.GUI.Forms
         public ParameterForm(CANguruDecoder decoder)
         {
             this.decoder = decoder;
+            Load += (s, e) => CANguru.Controls.ButtonStyle.Apply(this);
             Text = $"Einstellungen – {decoder.DisplayName} (ID {decoder.AssignedId}, Firmware {decoder.Firmware})";
             StartPosition = FormStartPosition.CenterParent;
             Size = new Size(660, 720);

@@ -16,6 +16,7 @@ namespace CANguru.GUI.Forms
         public LokListForm()
         {
             InitializeComponent();
+            CANguru.Controls.ButtonStyle.Apply(this);
             CancelButton = btnOk;
             // The window is created once and shown again and again: closing only hides it
             // (a closed window would be disposed and could not be shown a second time)

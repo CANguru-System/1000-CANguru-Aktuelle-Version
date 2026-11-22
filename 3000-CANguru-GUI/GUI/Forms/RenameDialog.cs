@@ -31,6 +31,7 @@ namespace CANguru.GUI.Forms
             form.AcceptButton = ok;
             form.CancelButton = cancel;
             box.SelectAll();
+            CANguru.Controls.ButtonStyle.Apply(form);
             return form.ShowDialog(owner) == DialogResult.OK ? box.Text.Trim() : null;
         }
     }

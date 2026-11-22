@@ -12,6 +12,7 @@ public partial class DecoderListForm : Form
     public DecoderListForm(DecoderRegistry storage)
     {
         InitializeComponent();
+        CANguru.Controls.ButtonStyle.Apply(this);
         this.storage = storage;
         // created once and shown again and again: closing only hides the window
         FormClosing += (s, e) =>
