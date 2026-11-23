@@ -2414,9 +2414,12 @@ void clearDisplay()
 // "Gleisbox: not found" before "OK") can not leave a remainder.
 void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal, int light)
 {
-  const int16_t top = 72;     // below the title lines (two lines of 16 px from y = 1, then one free line)
-  const int16_t lineH = 18;   // text size 2 (16 pixels high); 8 lines fit above the bottom edge
-  const int16_t lines = 8;
+  // IP address right below the two title lines (16 px each from y = 1), then one free
+  // line, then the counters
+  const int16_t ipTop = 33;
+  const int16_t top = ipTop + 16 + 16;
+  const int16_t lineH = 18;   // text size 2 (16 pixels high)
+  const int16_t lines = 7;
   const int16_t panelW = 240; // 20 characters of 12 pixels; the column from 241 keeps its kangaroos
   // On the first call redraw the background (removes the start messages) and the panel;
   // afterwards only overwrite the lines - backgroundDisplayLCD28() waits 1 s
@@ -2424,7 +2427,7 @@ void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal,
   if (!backgroundDrawn)
   {
     backgroundDisplayLCD28();
-    display9341.fillRect(0, top, panelW, lines * lineH, COLOR_BG);
+    display9341.fillRect(0, ipTop, panelW, top - ipTop + lines * lineH, COLOR_BG);
     backgroundDrawn = true;
   }
   display9341.setTextColor(COLOR_TEXT);
@@ -2444,7 +2447,10 @@ void drawAliveCounts(int power, int sw, int signal, int feedback, int ledsignal,
   line(4, "LED-Sig.: ", String(ledsignal));
   line(5, "Light:    ", String(light));
   line(6, "Gleisbox: ", GB_found ? String("OK") : String("not found"));
-  line(7, "IP: ", ETH.localIP().toString());
+  display9341.fillRect(0, ipTop, panelW, 16, COLOR_BG);
+  display9341.setCursor(x_pos, ipTop);
+  display9341.print("IP: ");
+  display9341.print(ETH.localIP().toString());
   // later messages start below the panel and do not overwrite it
   display9341.setCursor(x_pos, top + lines * lineH);
 }
