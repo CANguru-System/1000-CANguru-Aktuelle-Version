@@ -236,6 +236,13 @@ namespace CANguru.GUI.Forms
 
         private async Task ReadCv()
         {
+            if (lok != null && lok.IsManual)
+            {
+                // Motorola decoders do not answer on the programming track (MS2 recording BR 24:
+                // CV 29 without a value); only writing the address works
+                ShowResult(false, "Motorola-Decoder lassen sich nicht auslesen. Schreiben geht: CV 1 ändert die Adresse.");
+                return;
+            }
             int cv = SelectedCv();
             if (cv == 0)
                 return;
