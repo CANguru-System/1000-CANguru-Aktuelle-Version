@@ -125,23 +125,36 @@ namespace CANguru.GUI.Forms
                 Build(desc);
                 FitHeight();
 
+                // a value that cannot be read leaves only its own field gray;
+                // the other values are read anyway
+                // (two values in a row without any answer: the decoder is gone, stop)
+                var unreadable = new List<string>();
+                int silent = 0;
                 for (int i = 0; i < paramRows.Count; i++)
                 {
                     status.Text = $"Lese Werte {i + 1} von {paramRows.Count} ...";
                     var row = paramRows[i];
                     ushort? v = await ReadAsync(row.Desc.Number);
-                    if (v == null)
+                    if (v != null)
+                        SetLoaded(row, v.Value, overwrite: true);
+                    else
+                        unreadable.Add(row.Desc.Label);
+                    silent = lastReadAnswered ? 0 : silent + 1;
+                    if (silent >= 2)
                     {
-                        status.Text = $"Wert „{row.Desc.Name}“ nicht lesbar.";
+                        status.Text = "Der Decoder antwortet nicht mehr.";
                         return;
                     }
-                    SetLoaded(row, v.Value, overwrite: true);
-                    row.Control.Enabled = true;
                 }
 
-                status.Text = desc.Params.Count + desc.Actions.Count + desc.Values.Count == 0
-                    ? "Dieser Decoder beschreibt (noch) keine Parameter."
-                    : "";
+                status.Text = unreadable.Count switch
+                {
+                    0 when desc.Params.Count + desc.Actions.Count + desc.Values.Count == 0
+                        => "Dieser Decoder beschreibt (noch) keine Parameter.",
+                    0 => "",
+                    1 => $"Wert „{unreadable[0]}“ nicht lesbar (Feld grau). Fenster neu öffnen versucht es erneut.",
+                    _ => $"{unreadable.Count} Werte nicht lesbar (Felder grau), z. B. „{unreadable[0]}“. Fenster neu öffnen versucht es erneut."
+                };
                 loading = false;
                 if (view != null)
                     view.Enabled = true;
@@ -195,10 +208,18 @@ namespace CANguru.GUI.Forms
             return list;
         }
 
+        // One value; null = not readable. Without an answer the request is repeated once
+        // (an answer can get lost now and then); an error answer is final.
+        // lastReadAnswered = false: the decoder did not answer at all (not even an error).
+        private bool lastReadAnswered;
+
         private async Task<ushort?> ReadAsync(byte number)
         {
-            var r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_PARAM,
-                (byte)ProtocolConstants.CG2_PARAM_READ, DecoderId, new[] { number });
+            Cg2Reply? r = null;
+            for (int attempt = 0; attempt < 2 && r == null; attempt++)
+                r = await BridgeLink.Instance.RequestAsync((byte)ProtocolConstants.CG2_F_PARAM,
+                    (byte)ProtocolConstants.CG2_PARAM_READ, DecoderId, new[] { number });
+            lastReadAnswered = r != null;
             if (r == null || r.IsError || r.Payload.Length < 3)
                 return null;
             return new Cg2Reader(r.Payload[1..]).U16();
@@ -464,6 +485,7 @@ namespace CANguru.GUI.Forms
             bool keepInput = !overwrite && row.Dirty;
             row.Loaded = v;
             row.HasValue = true;
+            row.Control.Enabled = true;
             if (!keepInput)
                 SetControlValue(row.Control, v);
             MarkDirty(row);
