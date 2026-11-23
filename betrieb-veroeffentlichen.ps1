@@ -106,7 +106,7 @@ $stand = @(
     "  LED-Signaldecoder       $(Version 'LEDSIGNAL')   decoder-ledsignal",
     "  Stromdecoder            $(Version 'POWER')   decoder-power",
     "  Rückmelder              $(Version 'FEEDBACK')   decoder-feedback",
-    "  Gebäudebeleuchtung      $(Version 'LIGHT')   decoder-light",
+    "  Hausbeleuchtung         $(Version 'LIGHT')   decoder-light",
     "  Bridge                  $(Version 'BRIDGE')   bridge"
 )
 Set-Content (Join-Path $Ziel 'VERSIONEN.txt') $stand -Encoding UTF8

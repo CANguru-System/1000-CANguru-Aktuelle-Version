@@ -31,7 +31,7 @@ namespace CANguru.Models
             ProtocolConstants.DEVTYPE_POWER => "Stromdecoder",
             ProtocolConstants.DEVTYPE_RM => "Rückmelder",
             ProtocolConstants.DEVTYPE_LEDSIGNAL => "LED-Signal",
-            ProtocolConstants.DEVTYPE_LIGHT => "Gebäudebeleuchtung",
+            ProtocolConstants.DEVTYPE_LIGHT => "Hausbeleuchtung",
             _ => $"Decoder 0x{devType:X2}"
         };
 
@@ -42,7 +42,7 @@ namespace CANguru.Models
             ProtocolConstants.DEVTYPE_POWER => "Strom",
             ProtocolConstants.DEVTYPE_RM => "Rückmelder",
             ProtocolConstants.DEVTYPE_LEDSIGNAL => "LED-Signale",
-            ProtocolConstants.DEVTYPE_LIGHT => "Licht",
+            ProtocolConstants.DEVTYPE_LIGHT => "Hausbeleuchtung",
             _ => $"Typ 0x{devType:X2}"
         };
     }
@@ -214,7 +214,7 @@ namespace CANguru.Models
             Compact(Enumerable.Range(0, Signals).Where(k => Present[k]).Select(k => (int)Addresses[k]));
     }
 
-    // Gebäudebeleuchtung: Parameter 0 = Adresse (grün = Licht an), 1 = Anzahl LEDs
+    // Hausbeleuchtung: Parameter 0 = Adresse (grün = Licht an), 1 = Anzahl LEDs
     public class LightDecoder : CANguruDecoder
     {
         public byte Address { get; set; }
