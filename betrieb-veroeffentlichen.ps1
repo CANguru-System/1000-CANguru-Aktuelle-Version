@@ -58,9 +58,12 @@ Write-Host "Firmware: $($dateien.Count) Dateien"
 function Veroeffentliche([string]$projekt, [string]$name) {
     $ausgabe = Join-Path $Ziel "programme\$name"
     $tmp = Join-Path $env:TEMP "canguru-betrieb-$name"
-    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-    & dotnet publish (Join-Path $wurzel $projekt) -c Release -o $tmp -nologo -v quiet | Out-Null
+    $tmpBuild = "$tmp-build"
+    foreach ($o in $tmp, $tmpBuild) { if (Test-Path $o) { Remove-Item $o -Recurse -Force } }
+    # own build folder (OutDir): works even while the program runs from its usual bin folder
+    & dotnet publish (Join-Path $wurzel $projekt) -c Release -o $tmp "-p:OutDir=$tmpBuild\" -nologo -v quiet | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "$name konnte nicht gebaut werden." }
+    Remove-Item $tmpBuild -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item (Join-Path $tmp '*.pdb') -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force $ausgabe | Out-Null
     # remove old program files, but never the data files the GUI writes at the layout
