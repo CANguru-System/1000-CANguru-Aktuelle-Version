@@ -58,9 +58,8 @@ private:
     // Wie ein Signal angeschlossen ist (Parameter "Signal k: Anschluss")
     enum Wiring : uint8_t
     {
-        THREE_WIRE = 0,     // gemeinsamer Pol, rot, grün
-        MAERKLIN = 1,       // zwei Drähte: Ausgang 2k rot, 2k + 1 grün
-        MAERKLIN_SWAPPED = 2 // zwei Drähte, Farben vertauscht angeschlossen
+        THREE_WIRE = 0, // gemeinsamer Pol, rot, grün
+        MAERKLIN = 1    // zwei Drähte; Farben verkehrt: die beiden Drähte tauschen
     };
 
     struct Fade

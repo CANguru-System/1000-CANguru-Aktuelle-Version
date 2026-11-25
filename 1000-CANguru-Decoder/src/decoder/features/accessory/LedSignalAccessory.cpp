@@ -36,10 +36,10 @@ enum ParamNr : uint8_t
 };
 
 static const char *const WIRING_CHOICES[] = {"gemeinsame Anode", "gemeinsame Kathode"};
-static const char *const SIGNAL_TYPE_CHOICES[] = {"3 Drähte", "Märklin (2 Drähte)", "Märklin, Farben vertauscht"};
+static const char *const SIGNAL_TYPE_CHOICES[] = {"3 Drähte", "Märklin (2 Drähte)"};
 
 #define LED_SIGNAL_TYPE_PARAM(k) \
-    {CG2_TYPE_CHOICE, 0, 2, 0, 1, "", "Signal " #k ": Anschluss", SIGNAL_TYPE_CHOICES, 3, "type" #k, CG2_PF_KEEP_ON_RESET}
+    {CG2_TYPE_CHOICE, 0, 1, 0, 1, "", "Signal " #k ": Anschluss", SIGNAL_TYPE_CHOICES, 2, "type" #k, CG2_PF_KEEP_ON_RESET}
 
 #define LED_SIGNAL_PARAMS(k)                                                                                    \
     {CG2_TYPE_U8, 1, 255, k, 1, "", "Signal " #k ": Adresse", nullptr, 0, "adr" #k, CG2_PF_KEEP_ON_RESET},     \
@@ -140,7 +140,8 @@ void LedSignalAccessory::onParamChanged(uint8_t n, uint16_t value)
     if (n >= P_SIGNAL_TYPE && n < P_COUNT)
     {
         uint8_t ch = n - P_SIGNAL_TYPE;
-        wiring[ch] = value <= MAERKLIN_SWAPPED ? (Wiring)value : THREE_WIRE;
+        // 1.8 kannte noch "Märklin, Farben vertauscht" (2): gilt jetzt als Märklin
+        wiring[ch] = value == THREE_WIRE ? THREE_WIRE : MAERKLIN;
         if (ready && !fade[ch].active && testPhase == 0)
             renderShown(ch);
         return;
@@ -204,13 +205,7 @@ void LedSignalAccessory::render(uint8_t ch, float redLevel, float greenLevel)
     // Märklin, zwei Drähte mit Widerständen nach V+ (nur Open-Drain). "Aktiv" heißt hier:
     // der Ausgang zieht nach Masse. Strom fließt vom losgelassenen Ausgang durch das
     // Signal zum aktiven; die Farbe hängt von der Richtung ab.
-    uint8_t a = outRed(ch), b = outGreen(ch);
-    if (wiring[ch] == MAERKLIN_SWAPPED)
-    {
-        uint8_t t = a;
-        a = b;
-        b = t;
-    }
+    const uint8_t a = outRed(ch), b = outGreen(ch);
     if (!commonAnode)
     {
         // mit Totem-Pole-Ausgängen (gemeinsame Kathode) nicht möglich: dunkel lassen
