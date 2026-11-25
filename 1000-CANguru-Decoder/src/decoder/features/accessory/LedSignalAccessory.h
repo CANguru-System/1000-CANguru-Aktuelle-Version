@@ -10,6 +10,11 @@
 // Adresse 0x40). Signal k (1 ... 8): rot an Ausgang 2(k-1), grün an Ausgang 2(k-1)+1.
 // Standard: gemeinsame Anode, die LED leuchtet, wenn der Ausgang nach Masse schaltet.
 //
+// Märklin-Signale mit zwei Drähten (rote und grüne LED gegenläufig parallel) belegen
+// dieselben zwei Ausgänge; jeder Draht bekommt einen Widerstand nach V+. Rot: Ausgang B
+// fest nach Masse, Ausgang A getaktet; grün umgekehrt; dunkel: beide losgelassen.
+// Das geht nur im Open-Drain-Betrieb, also mit "gemeinsame Anode".
+//
 // Helligkeit je Farbe einstellbar (12 Bit PWM), Wechsel mit einstellbarem Überblenden wie
 // bei einer Glühlampe: erst das alte Licht aus, dann das neue an. Nach dem Einschalten und
 // bei STOPP zeigen alle Signale Rot; nach GO wieder die gespeicherte Stellung.
@@ -50,6 +55,14 @@ private:
         DARK = 2
     };
 
+    // Wie ein Signal angeschlossen ist (Parameter "Signal k: Anschluss")
+    enum Wiring : uint8_t
+    {
+        THREE_WIRE = 0,     // gemeinsamer Pol, rot, grün
+        MAERKLIN = 1,       // zwei Drähte: Ausgang 2k rot, 2k + 1 grün
+        MAERKLIN_SWAPPED = 2 // zwei Drähte, Farben vertauscht angeschlossen
+    };
+
     struct Fade
     {
         bool active = false;
@@ -71,6 +84,8 @@ private:
     // Parameter (Kopie aus dem Speicher des Kerns)
     uint8_t address[SIGNALS] = {1, 2, 3, 4, 5, 6, 7, 8};
     bool present[SIGNALS] = {true, true, true, true, true, true, true, true};
+    Wiring wiring[SIGNALS] = {THREE_WIRE, THREE_WIRE, THREE_WIRE, THREE_WIRE,
+                              THREE_WIRE, THREE_WIRE, THREE_WIRE, THREE_WIRE};
     uint8_t brightRed = 60;   // %
     uint8_t brightGreen = 60; // %
     uint16_t fadeMs = 1000;

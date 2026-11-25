@@ -5,7 +5,7 @@ public static class ProtocolConstants
     public const int FW_STEPPER_MAJOR = 2;
     public const int FW_STEPPER_MINOR = 5;
     public const int FW_LEDSIGNAL_MAJOR = 1;
-    public const int FW_LEDSIGNAL_MINOR = 7;
+    public const int FW_LEDSIGNAL_MINOR = 8;
     public const int FW_LIGHT_MAJOR = 1;
     public const int FW_LIGHT_MINOR = 2;
     public const int FW_POWER_MAJOR = 2;

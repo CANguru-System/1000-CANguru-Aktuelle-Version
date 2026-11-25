@@ -27,10 +27,10 @@ dict(name="FW_STEPPER_MAJOR",  value="2", arch="core"),
 dict(name="FW_STEPPER_MINOR",  value="5", arch="core"),
 # LED-Signal: 1.2 Überblendzeit bis 3000 ms   1.3 Klartext, Gruppen   1.4/1.5 GUI -> WDP/MS2
 #   1.6 OTA-WLAN mit WPA2-Passwort   1.7 Statusdaten Konfiguration für WDP 2025 (0 Konfigurationskanäle, Index > 0 korrekt beantwortet)
+#   1.8 Anschluss je Signal: 3 Drähte oder Märklin mit 2 Drähten (gegenläufige LEDs, Widerstände nach V+)
 dict(name="FW_LEDSIGNAL_MAJOR", value="1", arch="core"),
-dict(name="FW_LEDSIGNAL_MINOR", value="7", arch="core"),
-# Gebäudebeleuchtung (WS2812-Streifen, ESP32-C3): 1.0 als CANguru-Decoder, Bedienung über die GUI
-#   (vorher eigenständig mit WLAN und Browserseite, 1500-Gebäudebeleuchtung)
+dict(name="FW_LEDSIGNAL_MINOR", value="8", arch="core"),
+# Hausbeleuchtung (WS2812-Streifen, ESP32-C3): 1.0 als CANguru-Decoder, Bedienung über die GUI
 dict(name="FW_LIGHT_MAJOR",    value="1", arch="core"),
 #   1.1 Takt bis 100 s in Schritten von 0,5 s
 #   1.2 LED-Anzahl als 16-Bit-Wert (weiterhin höchstens 96)

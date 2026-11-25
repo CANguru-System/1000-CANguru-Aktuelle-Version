@@ -29,10 +29,17 @@ enum ParamNr : uint8_t
     P_BRIGHT_GREEN,
     P_FADE,
     P_WIRING,
-    P_COUNT
+    // je Signal k (0 ... 7): Anschluss = P_SIGNAL_TYPE + k (ab 1.8, hinten angehängt, damit
+    // die Nummern der älteren Parameter gleich bleiben)
+    P_SIGNAL_TYPE,
+    P_COUNT = P_SIGNAL_TYPE + LedSignalAccessory::SIGNALS
 };
 
 static const char *const WIRING_CHOICES[] = {"gemeinsame Anode", "gemeinsame Kathode"};
+static const char *const SIGNAL_TYPE_CHOICES[] = {"3 Drähte", "Märklin (2 Drähte)", "Märklin, Farben vertauscht"};
+
+#define LED_SIGNAL_TYPE_PARAM(k) \
+    {CG2_TYPE_CHOICE, 0, 2, 0, 1, "", "Signal " #k ": Anschluss", SIGNAL_TYPE_CHOICES, 3, "type" #k, CG2_PF_KEEP_ON_RESET}
 
 #define LED_SIGNAL_PARAMS(k)                                                                                    \
     {CG2_TYPE_U8, 1, 255, k, 1, "", "Signal " #k ": Adresse", nullptr, 0, "adr" #k, CG2_PF_KEEP_ON_RESET},     \
@@ -52,6 +59,14 @@ static const Cg2ParamDef ledParams[P_COUNT] = {
     {CG2_TYPE_U8, 1, 100, 60, 1, "%", "Helligkeit grün", nullptr, 0, "briG", 0},
     {CG2_TYPE_U16, 0, 3000, 1000, 50, "ms", "Überblendzeit (0 = hart)", nullptr, 0, "fadeMs", 0},
     {CG2_TYPE_CHOICE, 0, 1, 0, 1, "", "LED-Anschluss", WIRING_CHOICES, 2, "wiring", CG2_PF_KEEP_ON_RESET},
+    LED_SIGNAL_TYPE_PARAM(1),
+    LED_SIGNAL_TYPE_PARAM(2),
+    LED_SIGNAL_TYPE_PARAM(3),
+    LED_SIGNAL_TYPE_PARAM(4),
+    LED_SIGNAL_TYPE_PARAM(5),
+    LED_SIGNAL_TYPE_PARAM(6),
+    LED_SIGNAL_TYPE_PARAM(7),
+    LED_SIGNAL_TYPE_PARAM(8),
 };
 
 enum ActionNr : uint8_t
@@ -122,6 +137,14 @@ void LedSignalAccessory::onParamChanged(uint8_t n, uint16_t value)
         }
         return;
     }
+    if (n >= P_SIGNAL_TYPE && n < P_COUNT)
+    {
+        uint8_t ch = n - P_SIGNAL_TYPE;
+        wiring[ch] = value <= MAERKLIN_SWAPPED ? (Wiring)value : THREE_WIRE;
+        if (ready && !fade[ch].active && testPhase == 0)
+            renderShown(ch);
+        return;
+    }
     switch (n)
     {
     case P_BRIGHT_RED:
@@ -168,8 +191,49 @@ void LedSignalAccessory::render(uint8_t ch, float redLevel, float greenLevel)
 {
     float r = redLevel * brightRed / 100.0f;
     float g = greenLevel * brightGreen / 100.0f;
-    pwm.setLevel(outRed(ch), (uint16_t)(r * r * Pca9685::MAX));
-    pwm.setLevel(outGreen(ch), (uint16_t)(g * g * Pca9685::MAX));
+    uint16_t red = (uint16_t)(r * r * Pca9685::MAX);
+    uint16_t green = (uint16_t)(g * g * Pca9685::MAX);
+
+    if (wiring[ch] == THREE_WIRE)
+    {
+        pwm.setLevel(outRed(ch), red);
+        pwm.setLevel(outGreen(ch), green);
+        return;
+    }
+
+    // Märklin, zwei Drähte mit Widerständen nach V+ (nur Open-Drain). "Aktiv" heißt hier:
+    // der Ausgang zieht nach Masse. Strom fließt vom losgelassenen Ausgang durch das
+    // Signal zum aktiven; die Farbe hängt von der Richtung ab.
+    uint8_t a = outRed(ch), b = outGreen(ch);
+    if (wiring[ch] == MAERKLIN_SWAPPED)
+    {
+        uint8_t t = a;
+        a = b;
+        b = t;
+    }
+    if (!commonAnode)
+    {
+        // mit Totem-Pole-Ausgängen (gemeinsame Kathode) nicht möglich: dunkel lassen
+        pwm.setLevel(a, 0);
+        pwm.setLevel(b, 0);
+        return;
+    }
+    if (red > 0)
+    {
+        pwm.setLevel(b, Pca9685::MAX);       // B fest nach Masse
+        pwm.setLevel(a, Pca9685::MAX - red); // A losgelassen, solange rot leuchten soll
+    }
+    else if (green > 0)
+    {
+        pwm.setLevel(a, Pca9685::MAX);
+        pwm.setLevel(b, Pca9685::MAX - green);
+    }
+    else
+    {
+        // dunkel: beide loslassen, dann fließt auch durch die Widerstände kein Strom
+        pwm.setLevel(a, 0);
+        pwm.setLevel(b, 0);
+    }
 }
 
 void LedSignalAccessory::renderShown(uint8_t ch)
