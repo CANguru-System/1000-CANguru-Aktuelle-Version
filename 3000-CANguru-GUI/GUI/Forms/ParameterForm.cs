@@ -33,6 +33,8 @@ namespace CANguru.GUI.Forms
     {
         private const int WideLabel = 250, WideControl = 190, WideUnit = 70;  // sections across the window
         private const int TileLabel = 110, TileControl = 110, TileUnit = 40;  // group frames side by side
+        // control column of the group frames: at least TileControl, wider if a choice text needs it
+        private int tileControl = TileControl;
 
         private readonly CANguruDecoder decoder;
         private byte DecoderId => (byte)decoder.AssignedId;
@@ -278,6 +280,20 @@ namespace CANguru.GUI.Forms
 
             if (groups.Count > 0)
             {
+                // the longest choice text in the group frames must fit (e.g. "Märklin (2 Drähte)");
+                // all frames get the same width, so they line up
+                int widest = parameters.Where(d => d.Group != "" && d.Type == ProtocolConstants.CG2_TYPE_CHOICE)
+                    .SelectMany(d => d.Choices)
+                    .Select(c => TextRenderer.MeasureText(c, Font).Width)
+                    .DefaultIfEmpty(0).Max();
+                tileControl = Math.Max(TileControl, widest + SystemInformation.VerticalScrollBarWidth + 12);
+                // two frames side by side: widen the window if necessary
+                int tileWidth = TileLabel + tileControl + TileUnit + 8 + 12 + 8;
+                int needed = 2 * tileWidth + content.Padding.Horizontal + SystemInformation.VerticalScrollBarWidth + 8
+                             + (Width - ClientSize.Width);
+                if (Width < needed)
+                    Width = needed;
+
                 tilePanel = new FlowLayoutPanel
                 {
                     FlowDirection = FlowDirection.LeftToRight,
@@ -324,7 +340,7 @@ namespace CANguru.GUI.Forms
 
         private GroupBox MakeFrame(string title, List<Cg2Description> items, bool wide)
         {
-            int wl = wide ? WideLabel : TileLabel, wc = wide ? WideControl : TileControl, wu = wide ? WideUnit : TileUnit;
+            int wl = wide ? WideLabel : TileLabel, wc = wide ? WideControl : tileControl, wu = wide ? WideUnit : TileUnit;
             var table = new TableLayoutPanel
             {
                 ColumnCount = 3,
