@@ -79,7 +79,9 @@ namespace CANguru.GUI.Forms
             Load += (s, e) => CANguru.Controls.ButtonStyle.Apply(this);
             Text = $"Einstellungen – {decoder.DisplayName} (ID {decoder.AssignedId}, Firmware {decoder.Firmware})";
             StartPosition = FormStartPosition.CenterParent;
-            Size = new Size(660, 720);
+            // wide enough for two group frames with "Märklin (2 Drähte)", so the window
+            // usually does not have to grow once the description has arrived
+            Size = new Size(680, 720);
             MinimumSize = new Size(480, 320);
             CancelButton = btnClose;
 
@@ -314,6 +316,10 @@ namespace CANguru.GUI.Forms
 
             content.ResumeLayout();
             FitTilePanel();
+            // the window may have grown while it was already visible: draw everything again,
+            // otherwise parts of the old, narrower picture stay on the screen
+            Invalidate(true);
+            Update();
         }
 
         // Window only as high as its content (at most the screen), centred on the old position
