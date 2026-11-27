@@ -161,7 +161,7 @@ namespace CANguru.Controllers
             if (device >= ProtocolConstants.DEVTYPE_MS2 && device <= ProtocolConstants.DEVTYPE_MS2 + 3 && !Ms2Present)
             {
                 Ms2Present = true;
-                LogMessage?.Invoke("Mobile Station erkannt: Sie meldet mfx-Loks an, die GUI hört mit.");
+                LogMessage?.Invoke("Mobile Station erkannt: Sie vergibt die Adressen neuer mfx-Loks, die GUI übernimmt sie.");
             }
             if (device == ProtocolConstants.DEVTYPE_GB && !gleisboxFound)
             {
