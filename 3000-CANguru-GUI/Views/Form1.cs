@@ -322,10 +322,28 @@ namespace CANguru.Views
             }
         }
 
-        // Schließen-Button
+        // Schließen-Button: same as "Beenden" (the bridge must learn that the session ends)
         private void btnClose_Click(object sender, EventArgs e)
         {
-            this.Close();
+            close_GUI(askIfWdpRuns: true);
+        }
+
+        // Alt+F4, "Fenster schließen" in the taskbar, Windows shutdown: also end the session
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (!guiClosing)
+            {
+                if (e.CloseReason == CloseReason.UserClosing)
+                {
+                    // the user closes the window: same path as "Beenden", including the question
+                    e.Cancel = true;
+                    BeginInvoke(() => close_GUI(askIfWdpRuns: true));
+                    return;
+                }
+                // Windows shuts down or similar: tidy up without asking
+                EndSession();
+            }
+            base.OnFormClosing(e);
         }
 
         // Minimieren-Button
@@ -1534,7 +1552,53 @@ namespace CANguru.Views
             }
         }
 
-        private void close_GUI()
+        // Win-Digipet on this PC? Recognised by its window title (e.g. "Win-Digipet 2025.0c Small Edition").
+        private static bool WinDigipetRuns()
+        {
+            int own = Environment.ProcessId;
+            foreach (var p in Process.GetProcesses())
+            {
+                try
+                {
+                    if (p.Id == own)
+                        continue;
+                    if (p.MainWindowTitle.Contains("Win-Digipet", StringComparison.OrdinalIgnoreCase) ||
+                        p.ProcessName.Contains("Digipet", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                catch
+                {
+                    // process gone or not accessible
+                }
+                finally
+                {
+                    p.Dispose();
+                }
+            }
+            return false;
+        }
+
+        // End the program. askIfWdpRuns: warn first if Win-Digipet is still running, because
+        // without the GUI the track voltage goes off and Win-Digipet cannot switch it on again.
+        private void close_GUI(bool askIfWdpRuns)
+        {
+            if (guiClosing)
+                return;
+            if (askIfWdpRuns && WinDigipetRuns() &&
+                MessageBox.Show(this,
+                    "Win-Digipet läuft noch.\n\n" +
+                    "Beim Beenden der CANguru-GUI wird die Gleisspannung abgeschaltet, und die Bridge startet neu. " +
+                    "Win-Digipet kann ohne die GUI die Gleisspannung nicht wieder einschalten.\n\n" +
+                    "Bitte schließen Sie zuerst Win-Digipet.\n\nDie CANguru-GUI trotzdem jetzt beenden?",
+                    "CANguru-GUI beenden", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+            EndSession();
+            Application.Exit();
+        }
+
+        // Switch off the track voltage, save the settings, tell the bridge that the session ends
+        private void EndSession()
         {
             try
             {
@@ -1561,14 +1625,12 @@ namespace CANguru.Views
             {
                 // Ignorieren, beim Beenden nicht kritisch
             }
-
-            Application.Exit();
         }
 
         // Programm beenden
         private void btnExit_Click(object sender, EventArgs e)
         {
-            close_GUI();
+            close_GUI(askIfWdpRuns: true);
         }
 
         // UpDown: neuer Subscription-Counter
