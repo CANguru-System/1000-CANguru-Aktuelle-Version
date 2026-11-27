@@ -6,7 +6,7 @@ constants:
     value: '2'
     architecture: core
   FW_STEPPER_MINOR:
-    value: '5'
+    value: '6'
     architecture: core
   FW_LEDSIGNAL_MAJOR:
     value: '1'

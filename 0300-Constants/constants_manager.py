@@ -23,8 +23,9 @@ dict(name="INVALID_ASSIGNED_ID", value="0x00", arch="core"),
 #   2.2/2.3 Umschalten aus der GUI erreicht WDP und MS2
 #   2.4 OTA-WLAN mit WPA2-Passwort
 #   2.5 Statusdaten Konfiguration für WDP 2025 (0 Konfigurationskanäle, Index > 0 korrekt beantwortet)
+#   2.6 Formsignal: Nachwippen (aus/leicht/deutlich); Umkehr der Laufrichtung schrittgenau
 dict(name="FW_STEPPER_MAJOR",  value="2", arch="core"),
-dict(name="FW_STEPPER_MINOR",  value="5", arch="core"),
+dict(name="FW_STEPPER_MINOR",  value="6", arch="core"),
 # LED-Signal: 1.2 Überblendzeit bis 3000 ms   1.3 Klartext, Gruppen   1.4/1.5 GUI -> WDP/MS2
 #   1.6 OTA-WLAN mit WPA2-Passwort   1.7 Statusdaten Konfiguration für WDP 2025 (0 Konfigurationskanäle, Index > 0 korrekt beantwortet)
 #   1.8 Anschluss je Signal: 3 Drähte oder Märklin mit 2 Drähten (gegenläufige LEDs, Widerstände nach V+)

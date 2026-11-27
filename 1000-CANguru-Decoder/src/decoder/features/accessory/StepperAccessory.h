@@ -39,19 +39,29 @@ private:
     {
         Idle,     // steht
         SlowMove, // Kalibrierung: langsame Fahrt, bis "Hier Nullpunkt/Endpunkt" oder "Stopp"
-        Run       // Fahrt zwischen den Endlagen
+        Run,      // Fahrt zwischen den Endlagen
+        Bounce    // Formsignal: Nachwippen an der erreichten Endlage
     };
 
     void setPins();
     void doStep();
     void coilsOff();
     void stop();
+    bool startBounce();   // true: Nachwippen beginnt (nur Formsignal, wenn eingestellt)
+    void arrive();        // Endlage erreicht: Spulen aus, Stellung melden
 
     // Parameter (Kopie aus dem Speicher des Kerns)
     uint8_t address = 1;
     uint16_t stepDelay = step_delay_std; // Verzögerung je Schritt in 10 µs
     uint16_t travel = stepsToEnd_std;    // Schritte zwischen den Endlagen
     uint8_t reverse = 0;                 // Laufrichtung umgekehrt
+    uint8_t bounce = 1;                  // Formsignal: Nachwippen 0 = aus, 1 = leicht, 2 = deutlich
+
+    // Nachwippen: Wegpunkte (Lage in Schritten), die nacheinander angefahren werden
+    static const uint8_t MAX_WAYPOINTS = 6;
+    int waypoints[MAX_WAYPOINTS] = {0};
+    uint8_t waypointCount = 0, waypointIndex = 0;
+    uint8_t arrivedPos = 0;              // Stellung, die nach dem Wippen gemeldet wird
 
     // Fahrt
     Phase phase = Phase::Idle;

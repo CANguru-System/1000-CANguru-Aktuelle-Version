@@ -3,7 +3,7 @@ public static class ProtocolConstants
 {
     public const int INVALID_ASSIGNED_ID = 0x00;
     public const int FW_STEPPER_MAJOR = 2;
-    public const int FW_STEPPER_MINOR = 5;
+    public const int FW_STEPPER_MINOR = 6;
     public const int FW_LEDSIGNAL_MAJOR = 1;
     public const int FW_LEDSIGNAL_MINOR = 9;
     public const int FW_LIGHT_MAJOR = 1;
