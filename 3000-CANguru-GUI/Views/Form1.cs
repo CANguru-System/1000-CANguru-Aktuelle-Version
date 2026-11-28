@@ -779,10 +779,84 @@ namespace CANguru.Views
             PINGtimer?.Start();
         }
 
+        // ---- firmware type check before an OTA update ----
+        // Every decoder firmware carries the text "CANGURU-FW:<type>;" (1000-CANguru-Decoder,
+        // main.cpp). Older files without it are judged by their name ("decoder-<type>.bin").
+        private static readonly Dictionary<int, string> FirmwareTokens = new()
+        {
+            [ProtocolConstants.DEVTYPE_SWITCH] = "switch",
+            [ProtocolConstants.DEVTYPE_SIGNAL] = "signal",
+            [ProtocolConstants.DEVTYPE_LEDSIGNAL] = "ledsignal",
+            [ProtocolConstants.DEVTYPE_POWER] = "power",
+            [ProtocolConstants.DEVTYPE_RM] = "feedback",
+            [ProtocolConstants.DEVTYPE_LIGHT] = "light",
+        };
+
+        private static string? FirmwareMarker(byte[] firmware)
+        {
+            byte[] key = Encoding.ASCII.GetBytes("CANGURU-FW:");
+            int i = firmware.AsSpan().IndexOf(key);
+            if (i < 0)
+                return null;
+            int start = i + key.Length, end = start;
+            while (end < firmware.Length && end - start < 20 && firmware[end] != (byte)';')
+                end++;
+            return end < firmware.Length && firmware[end] == (byte)';'
+                ? Encoding.ASCII.GetString(firmware, start, end - start) : null;
+        }
+
+        private static string? FirmwareTokenFromFileName(string path)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(Path.GetFileNameWithoutExtension(path).ToLowerInvariant(),
+                                                                 @"decoder-([a-z]+)");
+            return m.Success && FirmwareTokens.ContainsValue(m.Groups[1].Value) ? m.Groups[1].Value : null;
+        }
+
+        // true: the file may be sent. target: e.g. "alle Formsignale" or "Decoder „Signal 3“".
+        private bool ConfirmFirmware(string path, byte[] firmware, int expectedType, string target)
+        {
+            string file = Path.GetFileName(path);
+            if (file.Contains("-komplett", StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(this,
+                    $"»{file}« ist ein Komplett-Abbild für das Aufspielen über USB mit dem Flasher.\n\n" +
+                    "Für Updates über Funk nehmen Sie bitte die Datei ohne »-komplett«, etwa »decoder-signal.bin«.",
+                    "Firmware-Update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+
+            string? token = FirmwareMarker(firmware) ?? FirmwareTokenFromFileName(path);
+            FirmwareTokens.TryGetValue(expectedType, out string? expected);
+            string expectedName = DecoderTypeNames.Singular(expectedType);
+
+            if (token == null)
+                return MessageBox.Show(this,
+                    $"Für welchen Decodertyp »{file}« gebaut ist, lässt sich nicht feststellen.\n\n" +
+                    $"Das Update ist für {target} ({expectedName}) bestimmt. Trotzdem aufspielen?",
+                    "Firmware-Update", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+
+            if (token != expected)
+            {
+                int otherType = FirmwareTokens.FirstOrDefault(kv => kv.Value == token).Key;
+                string otherName = otherType != 0 ? DecoderTypeNames.Singular(otherType) : token;
+                return MessageBox.Show(this,
+                    $"Achtung: »{file}« enthält die Firmware für »{otherName}«.\n" +
+                    $"Das Update ist aber für {target} ({expectedName}) bestimmt.\n\n" +
+                    $"Nach dem Update würden diese Decoder als »{otherName}« arbeiten.\n\n" +
+                    "Wollen Sie den Decodertyp wirklich bewusst wechseln?",
+                    "Falsche Firmware?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+            }
+            return true;
+        }
+
         private async void btnOtaUpdate_Click(object sender, EventArgs e)
         {
             // selection first: one decoder or all decoders of a type
             byte selector;
+            int expectedType;
+            string target;
             bool single = radioSingle.Checked;
             if (single)
             {
@@ -792,6 +866,8 @@ namespace CANguru.Views
                     return;
                 }
                 selector = (byte)decoder.AssignedId;
+                expectedType = (int)decoder.Type;
+                target = $"den Decoder »{decoder.DisplayName}«";
             }
             else
             {
@@ -802,6 +878,8 @@ namespace CANguru.Views
                     return;
                 }
                 selector = (byte)(int)choice.Tag!;
+                expectedType = (int)choice.Tag!;
+                target = $"alle Decoder vom Typ »{DecoderTypeNames.Plural(expectedType)}«";
             }
 
             Log("Over The Air-Prozess gestartet.");
@@ -813,6 +891,12 @@ namespace CANguru.Views
                 return;
 
             byte[] firmware = File.ReadAllBytes(ofd.FileName);
+            // passt die Datei zum Decodertyp? (switch.bin für Formsignale wäre ein Versehen)
+            if (!ConfirmFirmware(ofd.FileName, firmware, expectedType, target))
+            {
+                Log("Firmware-Update abgebrochen.");
+                return;
+            }
             Log($"Firmware-Datei wird geladen ({firmware.Length} Bytes).");
 
             // UI vorbereiten
